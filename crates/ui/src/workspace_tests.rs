@@ -2,7 +2,7 @@
 
 use crate::tabs::{Tab, Tabs};
 use crate::workspaces::{fresh_terminal, WorkspaceModel};
-use domain::{Axis, LayoutNode, Panel, PanelId, TabId, TerminalSessionId, WorkspaceId};
+use domain::{Axis, LayoutNode, MachineId, Panel, PanelId, TabId, TerminalSessionId, WorkspaceId};
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 use workspace_service::{PanelSnapshot, WorkspaceSnapshot, WorkspaceStore};
@@ -344,8 +344,8 @@ fn document_panels_are_not_spawned_as_terminals() {
     model.tabs_mut().active_mut().expect("tab").split_focused(Axis::Horizontal, editor).expect("split");
 
     assert_eq!(model.shown_terminals_to_spawn(|_| false), vec![terminal]);
-    assert_eq!(model.documents_to_restore(|_| false), vec![editor]);
-    assert!(model.documents_to_restore(|panel| panel == editor).is_empty());
+    assert_eq!(model.panels_to_restore(|_| false), vec![editor]);
+    assert!(model.panels_to_restore(|panel| panel == editor).is_empty());
 }
 
 #[test]
@@ -421,4 +421,148 @@ fn any_file_tree_in_active_tab_finds_a_tree_whatever_its_root() {
     model.tabs_mut().active_mut().expect("tab").split_focused(Axis::Horizontal, tree).expect("split");
 
     assert_eq!(model.any_file_tree_in_active_tab(), Some(tree));
+}
+
+#[test]
+fn machines_panes_are_restored_rather_than_spawned_as_terminals() {
+    let home = TempDir::new().expect("home");
+    let mut model = seeded_model(home.path());
+    let terminal = open_terminal_tab(&mut model, home.path());
+    let machines = PanelId::new();
+    model.add_panel(PanelSnapshot {
+        panel: Panel::new_machines(machines, "Machines".to_string()),
+        cwd: home.path().to_path_buf(),
+        name: None,
+        path: None,
+        documents: Vec::new(),
+    });
+    model.tabs_mut().active_mut().expect("tab").split_focused(Axis::Horizontal, machines).expect("split");
+
+    assert_eq!(model.shown_terminals_to_spawn(|_| false), vec![terminal]);
+    assert_eq!(model.panels_to_restore(|_| false), vec![machines]);
+    assert!(model.is_machines(machines));
+    assert!(!model.is_shell(machines));
+    assert_eq!(model.machines_pane(), Some(machines));
+}
+
+#[test]
+fn a_panel_reports_the_machine_it_runs_on() {
+    let home = TempDir::new().expect("home");
+    let mut model = seeded_model(home.path());
+    let local = open_terminal_tab(&mut model, home.path());
+    assert_eq!(model.panel_host(local), MachineId::local());
+
+    let remote = PanelId::new();
+    model.add_panel(PanelSnapshot {
+        panel: Panel::new_terminal_on(
+            remote,
+            "nas".to_string(),
+            TerminalSessionId::new(),
+            MachineId::from_alias("nas"),
+        ),
+        cwd: home.path().to_path_buf(),
+        name: None,
+        path: None,
+        documents: Vec::new(),
+    });
+    assert_eq!(model.panel_host(remote), MachineId::from_alias("nas"));
+    assert!(model.is_shell(remote));
+}
+
+#[test]
+fn a_machine_shell_is_only_reported_once_per_tab() {
+    let home = TempDir::new().expect("home");
+    let mut model = seeded_model(home.path());
+    open_terminal_tab(&mut model, home.path());
+    let machines = PanelId::new();
+    model.add_panel(PanelSnapshot {
+        panel: Panel::new_machines(machines, "Machines".to_string()),
+        cwd: home.path().to_path_buf(),
+        name: None,
+        path: None,
+        documents: Vec::new(),
+    });
+    model.tabs_mut().active_mut().expect("tab").split_focused(Axis::Horizontal, machines).expect("split");
+
+    assert_eq!(model.machines_pane(), Some(machines));
+    model.tabs_mut().open(PanelId::new());
+    assert_eq!(model.machines_pane(), None);
+}
+
+fn git_graph_record(panel: PanelId, cwd: &Path) -> PanelSnapshot {
+    PanelSnapshot {
+        panel: Panel::new_git_graph(panel, "Git graph".to_string()),
+        cwd: cwd.to_path_buf(),
+        name: None,
+        path: None,
+        documents: Vec::new(),
+    }
+}
+
+#[test]
+fn git_graph_panes_are_restored_rather_than_spawned_as_terminals() {
+    let home = TempDir::new().expect("home");
+    let mut model = seeded_model(home.path());
+    let terminal = open_terminal_tab(&mut model, home.path());
+    let graph = PanelId::new();
+    model.add_panel(git_graph_record(graph, home.path()));
+    model.tabs_mut().active_mut().expect("tab").attach_right_of(terminal, graph, 0.66).expect("attach");
+
+    assert_eq!(model.shown_terminals_to_spawn(|_| false), vec![terminal]);
+    assert_eq!(model.panels_to_restore(|_| false), vec![graph]);
+    assert!(model.is_git_graph(graph));
+    assert!(!model.is_shell(graph));
+    assert!(!model.is_document(graph));
+    assert!(model.is_local_terminal(terminal));
+    assert!(!model.is_local_terminal(graph));
+}
+
+#[test]
+fn attaching_a_graph_splits_right_at_the_given_ratio_and_keeps_focus() {
+    let (owner, graph) = (PanelId::new(), PanelId::new());
+    let mut tab = Tab::new(owner);
+    tab.attach_right_of(owner, graph, 0.66).expect("attach");
+    assert_eq!(tab.focused(), owner);
+    assert_eq!(tab.layout().leaves(), vec![owner, graph]);
+    let LayoutNode::Split { axis, ratio, .. } = tab.layout() else {
+        panic!("expected a split");
+    };
+    assert_eq!((*axis, *ratio), (Axis::Horizontal, 0.66));
+}
+
+#[test]
+fn a_remote_terminal_is_not_a_local_terminal() {
+    let home = TempDir::new().expect("home");
+    let mut model = seeded_model(home.path());
+    let remote = PanelId::new();
+    model.add_panel(PanelSnapshot {
+        panel: Panel::new_terminal_on(
+            remote,
+            "nas".to_string(),
+            TerminalSessionId::new(),
+            MachineId::from_alias("nas"),
+        ),
+        cwd: home.path().to_path_buf(),
+        name: None,
+        path: None,
+        documents: Vec::new(),
+    });
+    assert!(!model.is_local_terminal(remote));
+}
+
+#[test]
+fn a_saved_git_graph_leaf_stays_a_git_graph_when_the_model_is_rebuilt() {
+    let home = TempDir::new().expect("home");
+    let mut model = seeded_model(home.path());
+    let id = workspace_ids(&model)[0];
+    model.switch_to(id);
+    let terminal = open_terminal_tab(&mut model, home.path());
+    let graph = PanelId::new();
+    model.add_panel(git_graph_record(graph, home.path()));
+    model.tabs_mut().active_mut().expect("tab").attach_right_of(terminal, graph, 0.66).expect("attach");
+
+    let rebuilt = WorkspaceModel::from_snapshot(model.snapshot(), home.path());
+    assert!(rebuilt.is_git_graph(graph));
+    assert!(!rebuilt.is_shell(graph));
+    assert_eq!(rebuilt.tab_layout_of(graph).map(LayoutNode::leaves), Some(vec![terminal, graph]));
 }

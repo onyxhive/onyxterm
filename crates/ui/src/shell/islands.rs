@@ -139,6 +139,11 @@ pub(super) fn island_edge(theme: &Theme, look: IslandLook) -> Div {
 }
 
 impl Shell {
+    pub(super) fn pane_size(&self, panel: PanelId) -> Option<(f32, f32)> {
+        let island = self.stage.layout.islands.iter().find(|island| island.panel == panel)?;
+        Some((island.rect.width, island.rect.height))
+    }
+
     pub(super) fn render_tab_connection(&self, now: Instant, background: bool) -> impl IntoElement {
         let tabs = self.tab_bounds.clone();
         let active = self.model.tabs().active_index();

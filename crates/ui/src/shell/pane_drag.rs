@@ -156,6 +156,7 @@ impl Shell {
             return;
         };
         if self.apply_drop(panel, target) {
+            self.close_separated_git_graphs(cx);
             window.focus(&self.focus_handle);
             self.persist();
         }

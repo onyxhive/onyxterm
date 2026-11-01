@@ -1,4 +1,4 @@
-use domain::{LayoutNode, Panel, PanelId, Tab, TabId, TerminalSessionId, Workspace, WorkspaceId};
+use domain::{LayoutNode, MachineId, Panel, PanelId, PanelKind, Tab, TabId, TerminalSessionId, Workspace, WorkspaceId};
 use persistence::{PanelSnapshot, Repository, TabSnapshot, WorkspaceSnapshot};
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
@@ -115,4 +115,113 @@ fn editor_row_without_a_document_list_keeps_its_single_path() {
     let panel = &loaded.snapshot.tabs[0].panels[0];
     assert_eq!(panel.path, Some(PathBuf::from("/code/src/main.rs")));
     assert!(panel.documents.is_empty());
+}
+
+#[test]
+fn remote_panel_roundtrips_its_machine() {
+    let dir = TempDir::new().expect("tempdir");
+    let repo = Repository::open(&dir.path().join("snap.db")).expect("open");
+    let mut workspace = Workspace::new(WorkspaceId::new(), "Fleet".to_string());
+    let remote_id = PanelId::new();
+    let tab = Tab::new(TabId::new(), workspace.id, LayoutNode::leaf(remote_id));
+    workspace.tab_order = vec![tab.id];
+    workspace.active_tab = Some(tab.id);
+    let remote = PanelSnapshot {
+        panel: Panel::new_terminal_on(
+            remote_id,
+            "nas".into(),
+            TerminalSessionId::new(),
+            MachineId::from_alias("nas"),
+        ),
+        cwd: PathBuf::from("/srv/app"),
+        name: None,
+        path: None,
+        documents: Vec::new(),
+    };
+    let snapshot = WorkspaceSnapshot {
+        workspaces: vec![workspace.clone()],
+        tabs: vec![TabSnapshot { tab, panels: vec![remote.clone()] }],
+        agents: Vec::new(),
+        active_workspace: Some(workspace.id),
+    };
+    repo.write_snapshot(&snapshot).expect("write");
+
+    let loaded = repo.load_snapshot(Path::new("/default")).expect("load");
+    assert_eq!(loaded.snapshot.tabs[0].panels, vec![remote]);
+}
+
+#[test]
+fn panel_saved_before_machines_stays_on_this_computer() {
+    let dir = TempDir::new().expect("tempdir");
+    let repo = Repository::open(&dir.path().join("snap.db")).expect("open");
+    let (workspace, tab) = workspace_with_tab("Local", "/local");
+    let snapshot = WorkspaceSnapshot {
+        workspaces: vec![workspace.clone()],
+        tabs: vec![tab],
+        agents: Vec::new(),
+        active_workspace: Some(workspace.id),
+    };
+    repo.write_snapshot(&snapshot).expect("write");
+    repo.pool().with_conn(|conn| conn.execute("UPDATE panels SET host = NULL", [])).expect("clear host");
+
+    let loaded = repo.load_snapshot(Path::new("/default")).expect("load");
+    assert_eq!(loaded.snapshot.tabs[0].panels[0].panel.host, MachineId::local());
+}
+
+#[test]
+fn machines_panel_kind_roundtrips() {
+    let dir = TempDir::new().expect("tempdir");
+    let repo = Repository::open(&dir.path().join("snap.db")).expect("open");
+    let mut workspace = Workspace::new(WorkspaceId::new(), "Fleet".to_string());
+    let panel_id = PanelId::new();
+    let tab = Tab::new(TabId::new(), workspace.id, LayoutNode::leaf(panel_id));
+    workspace.tab_order = vec![tab.id];
+    workspace.active_tab = Some(tab.id);
+    let machines = PanelSnapshot {
+        panel: Panel::new_machines(panel_id, "Machines".into()),
+        cwd: PathBuf::from("/default"),
+        name: None,
+        path: None,
+        documents: Vec::new(),
+    };
+    let snapshot = WorkspaceSnapshot {
+        workspaces: vec![workspace.clone()],
+        tabs: vec![TabSnapshot { tab, panels: vec![machines.clone()] }],
+        agents: Vec::new(),
+        active_workspace: Some(workspace.id),
+    };
+    repo.write_snapshot(&snapshot).expect("write");
+
+    let loaded = repo.load_snapshot(Path::new("/default")).expect("load");
+    assert_eq!(loaded.snapshot.tabs[0].panels, vec![machines]);
+    assert_eq!(loaded.snapshot.tabs[0].panels[0].panel.kind, PanelKind::Machines);
+}
+
+#[test]
+fn git_graph_panel_kind_roundtrips() {
+    let dir = TempDir::new().expect("tempdir");
+    let repo = Repository::open(&dir.path().join("snap.db")).expect("open");
+    let mut workspace = Workspace::new(WorkspaceId::new(), "Graphs".to_string());
+    let panel_id = PanelId::new();
+    let tab = Tab::new(TabId::new(), workspace.id, LayoutNode::leaf(panel_id));
+    workspace.tab_order = vec![tab.id];
+    workspace.active_tab = Some(tab.id);
+    let graph = PanelSnapshot {
+        panel: Panel::new_git_graph(panel_id, "Git graph".into()),
+        cwd: PathBuf::from("/default"),
+        name: None,
+        path: None,
+        documents: Vec::new(),
+    };
+    let snapshot = WorkspaceSnapshot {
+        workspaces: vec![workspace.clone()],
+        tabs: vec![TabSnapshot { tab, panels: vec![graph.clone()] }],
+        agents: Vec::new(),
+        active_workspace: Some(workspace.id),
+    };
+    repo.write_snapshot(&snapshot).expect("write");
+
+    let loaded = repo.load_snapshot(Path::new("/default")).expect("load");
+    assert_eq!(loaded.snapshot.tabs[0].panels, vec![graph]);
+    assert_eq!(loaded.snapshot.tabs[0].panels[0].panel.kind, PanelKind::GitGraph);
 }

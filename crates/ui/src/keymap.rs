@@ -364,8 +364,10 @@ fn bind_application(map: &mut Keymap) {
     map.bind(Combo::new(Modifiers::command_shift(), "p"), OpenPalette);
     map.bind(Combo::new(Modifiers::command_shift(), "o"), OpenFolder);
     map.bind(Combo::new(cmd, "e"), OpenEditorHere);
+    map.bind(Combo::new(cmd, "g"), ToggleGitGraph);
     map.bind(Combo::new(Modifiers::command_shift(), "b"), ToggleFileTree);
     map.bind(Combo::new(Modifiers::command_shift(), "y"), ToggleEditorBundle);
+    map.bind(Combo::new(Modifiers::command_shift(), "m"), OpenMachines);
     map.bind(Combo::new(cmd, "s"), Save);
     map.bind(Combo::new(cmd, "f"), Find);
     map.bind(Combo::new(cmd, "p"), QuickOpen);
@@ -409,6 +411,7 @@ fn bind_tabs(map: &mut Keymap) {
     let cmd = Modifiers::command();
     map.bind(Combo::new(cmd, "t"), NewTab);
     map.bind(Combo::new(Modifiers::command_shift(), "w"), CloseTab);
+    map.bind(Combo::new(cmd, "r"), RenameTab);
     map.bind(Combo::new(cmd, "}"), NextTab);
     map.bind(Combo::new(cmd, "{"), PrevTab);
     map.bind(Combo::new(Modifiers::command_shift(), "left"), MoveTabLeft);
@@ -471,6 +474,22 @@ mod tests {
         for (combo, command) in Keymap::default().iter() {
             assert!(registry.get(*command).is_some(), "{} is bound to unregistered {command:?}", combo.binding_text());
         }
+    }
+
+    #[test]
+    fn rename_tab_has_a_default_shortcut_distinct_from_rename_workspace() {
+        let map = Keymap::default();
+        assert_eq!(map.resolve(&cmd("r")), Some(CommandId::RenameTab));
+        let rename_workspace = Combo::new(Modifiers::command_shift(), "r");
+        assert_eq!(map.resolve(&rename_workspace), Some(CommandId::RenameWorkspace));
+        assert!(map.conflicts().is_empty());
+    }
+
+    #[test]
+    fn machines_has_a_default_shortcut_that_frees_up_nothing_else() {
+        let map = Keymap::default();
+        assert_eq!(map.resolve(&Combo::new(Modifiers::command_shift(), "m")), Some(CommandId::OpenMachines));
+        assert!(map.conflicts().is_empty());
     }
 
     #[test]

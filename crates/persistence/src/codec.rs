@@ -44,6 +44,8 @@ pub fn panel_kind_to_str(kind: PanelKind) -> &'static str {
         PanelKind::Agent => "Agent",
         PanelKind::Editor => "Editor",
         PanelKind::FileTree => "FileTree",
+        PanelKind::Machines => "Machines",
+        PanelKind::GitGraph => "GitGraph",
     }
 }
 
@@ -53,6 +55,8 @@ pub fn panel_kind_from_str(value: &str) -> Result<PanelKind, PersistenceError> {
         "Agent" => Ok(PanelKind::Agent),
         "Editor" => Ok(PanelKind::Editor),
         "FileTree" => Ok(PanelKind::FileTree),
+        "Machines" => Ok(PanelKind::Machines),
+        "GitGraph" => Ok(PanelKind::GitGraph),
         other => Err(PersistenceError::MigrationFailed(format!(
             "unknown panel kind {other}"
         ))),

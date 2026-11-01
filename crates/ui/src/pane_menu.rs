@@ -48,6 +48,7 @@ pub fn pane_menu_entries(state: PaneMenuState, keymap: &Keymap) -> Vec<PaneMenuE
         item(CommandId::RenamePane, "Rename Pane\u{2026}"),
         item(CommandId::MoveToNewTab, "Move to New Tab"),
         item(CommandId::OpenEditorHere, "Open Editor Here"),
+        item(CommandId::ToggleGitGraph, "Git Graph"),
         PaneMenuEntry::Divider,
         item(CommandId::ClosePane, "Close Pane"),
     ]

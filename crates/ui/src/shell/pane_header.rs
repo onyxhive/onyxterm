@@ -1,3 +1,4 @@
+use super::git_graph::GIT_GRAPH_TITLE;
 use super::Shell;
 use crate::command::CommandId;
 use crate::document::DocumentPane;
@@ -20,6 +21,10 @@ const PILL_PADDING_X_PX: f32 = 7.0;
 const PILL_PADDING_Y_PX: f32 = 2.0;
 const PILL_RADIUS_PX: f32 = 9.0;
 const PILL_LINE_HEIGHT_PX: f32 = 12.5;
+const GIT_PILL_MAX_WIDTH_PX: f32 = 200.0;
+const GIT_PILL_COUNTS_MIN_PANE_WIDTH_PX: f32 = 420.0;
+const SHOW_GIT_GRAPH_TOOLTIP: &str = "Show git graph";
+const HIDE_GIT_GRAPH_TOOLTIP: &str = "Hide git graph";
 
 struct PillPaint {
     fill: Hsla,
@@ -32,6 +37,8 @@ impl Shell {
         let theme = &self.state.theme;
         let header = theme.pane_header;
         let scale = self.state.settings.ui_scale;
+        let is_graph = self.git_graph_panes.contains_key(&panel);
+        let is_status_shown = self.tree_pane(panel).is_none() && !is_graph;
         let drag_handle = div()
             .flex_1()
             .min_w(px(0.0))
@@ -51,8 +58,11 @@ impl Shell {
                     cx.notify();
                 }),
             )
-            .children(self.tree_pane(panel).is_none().then(|| self.status_dot(panel)))
-            .child(self.header_title_element(panel, is_focused));
+            .children(is_status_shown.then(|| self.status_dot(panel)))
+            .children(is_graph.then(|| Icon::GitBranch.sized(header.icon_px, theme.text.subtle)))
+            .child(self.header_title_element(panel, is_focused))
+            .children(self.machine_badge(panel))
+            .children(self.git_branch_pill(panel, cx));
         let is_tree = self.tree_pane(panel).is_some();
         let button_opacity = if is_focused || is_tree { 1.0 } else { UNFOCUSED_BUTTON_OPACITY };
         div()
@@ -70,10 +80,78 @@ impl Shell {
             .font_family(SharedString::from(theme.ui_font.family.clone()))
             .text_size(px(theme.ui_font.pane_title_px))
             .child(drag_handle)
+            .children(self.git_graph_header_status(panel))
             .when(self.is_pane_in_copy_mode(panel), |header| header.child(self.copy_mode_pill()))
             .when(self.is_pane_maximized(panel), |header| header.child(self.maximized_pill()))
             .when(!is_tree, |header| header.child(self.more_button(panel, cx).opacity(button_opacity)))
             .child(self.close_button(panel, cx).opacity(button_opacity))
+    }
+
+    /// Remote panes say which machine they're on, right in the header.
+    fn machine_badge(&self, panel: PanelId) -> Option<impl IntoElement> {
+        let host = self.pane_host(panel);
+        if host.is_local() {
+            return None;
+        }
+        let theme = &self.state.theme;
+        let name = self.machines.machine(&host)?.name;
+        let scale = self.state.settings.ui_scale;
+        Some(
+            div()
+                .flex_none()
+                .px(px(PILL_PADDING_X_PX * scale))
+                .py(px(PILL_PADDING_Y_PX * scale))
+                .rounded(px(PILL_RADIUS_PX * scale))
+                .bg(theme.chrome.control_fill)
+                .text_color(theme.text.muted)
+                .text_size(px(theme.ui_font.pill_px))
+                .line_height(px(PILL_LINE_HEIGHT_PX * scale))
+                .child(name),
+        )
+    }
+
+    fn git_branch_pill(&self, panel: PanelId, cx: &mut Context<Self>) -> Option<impl IntoElement> {
+        let summary = self.panes.get(&panel).filter(|pane| pane.host.is_local())?.git.as_ref()?;
+        let theme = &self.state.theme;
+        let scale = self.state.settings.ui_scale;
+        let is_narrow = self
+            .pane_size(panel)
+            .is_some_and(|(width, _)| width < GIT_PILL_COUNTS_MIN_PANE_WIDTH_PX * scale);
+        let label = if is_narrow { summary.branch.clone() } else { summary.full_label() };
+        let is_open = self.git_graph_of(panel).is_some();
+        let tooltip = if is_open { HIDE_GIT_GRAPH_TOOLTIP } else { SHOW_GIT_GRAPH_TOOLTIP };
+        let paint = match is_open {
+            true => PillPaint { fill: theme.accent.selection, text: theme.accent.primary, weight: FontWeight::NORMAL },
+            false => PillPaint { fill: theme.chrome.control_fill, text: theme.text.muted, weight: FontWeight::NORMAL },
+        };
+        Some(
+            div()
+                .id(SharedString::from(format!("pane-git-{panel}")))
+                .flex_none()
+                .max_w(px(GIT_PILL_MAX_WIDTH_PX * scale))
+                .truncate()
+                .px(px(PILL_PADDING_X_PX * scale))
+                .py(px(PILL_PADDING_Y_PX * scale))
+                .rounded(px(PILL_RADIUS_PX * scale))
+                .cursor_pointer()
+                .bg(paint.fill)
+                .text_color(paint.text)
+                .text_size(px(theme.ui_font.pill_px))
+                .line_height(px(PILL_LINE_HEIGHT_PX * scale))
+                .font_weight(paint.weight)
+                .tooltip(self.tooltip_builder(tooltip.into()))
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(move |shell, _event, window, cx| {
+                        cx.stop_propagation();
+                        shell.focus_pane(panel);
+                        window.focus(&shell.focus_handle);
+                        shell.toggle_git_graph_of(panel, cx);
+                        cx.notify();
+                    }),
+                )
+                .child(label),
+        )
     }
 
     fn is_pane_maximized(&self, panel: PanelId) -> bool {
@@ -118,6 +196,10 @@ impl Shell {
     }
 
     fn header_title_element(&self, panel: PanelId, is_focused: bool) -> Stateful<gpui::Div> {
+        let is_renaming = self.pane_field.as_ref().is_some_and(|field| field.panel == panel);
+        if self.git_graph_panes.contains_key(&panel) && !is_renaming {
+            return self.git_graph_title_element(panel, is_focused);
+        }
         match self.tree_pane(panel) {
             Some(tree) => self.tree_title_element(panel, tree.branch().map(str::to_string)),
             None => self.pane_title_element(panel, is_focused),
@@ -129,6 +211,19 @@ impl Shell {
         let workspace = self.model.workspace_name(self.model.active_id()).unwrap_or_default().to_string();
         let title = div().flex_none().text_color(theme.text.default).font_weight(FontWeight::SEMIBOLD).child(workspace);
         self.title_row(panel).child(title).children(branch.map(|branch| self.header_subtitle(branch)))
+    }
+
+    fn git_graph_title_element(&self, panel: PanelId, is_focused: bool) -> Stateful<gpui::Div> {
+        let theme = &self.state.theme;
+        let title_color = if is_focused { theme.text.default } else { theme.text.muted };
+        let name = self.model.panel(panel).and_then(|record| record.name.clone());
+        let repo = self.git_graph_panes.get(&panel).and_then(|pane| pane.repo.as_ref()).map(|repo| repo.repo_name());
+        let title = div()
+            .flex_none()
+            .text_color(title_color)
+            .font_weight(FontWeight::SEMIBOLD)
+            .child(name.unwrap_or_else(|| GIT_GRAPH_TITLE.to_string()));
+        self.title_row(panel).child(title).children(repo.map(|repo| self.header_subtitle(repo)))
     }
 
     fn header_subtitle(&self, text: String) -> gpui::Div {

@@ -3,7 +3,7 @@ use crate::error::PersistenceError;
 use crate::repository::Repository;
 use crate::restore::RestoreWarning;
 use crate::workspace_repo::write_workspace_row;
-use domain::{Agent, Panel, PanelId, Tab, Workspace, WorkspaceId};
+use domain::{Agent, MachineId, Panel, PanelId, Tab, Workspace, WorkspaceId};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -58,14 +58,15 @@ impl Repository {
                 for panel in &tab.panels {
                     let (resource_kind, resource_id) = resource_ref_columns(panel.panel.resource);
                     tx.execute(
-                        "INSERT INTO panels (id, tab_id, kind, title, resource_kind, resource_id, cwd, name, path, documents) \
-                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10) \
+                        "INSERT INTO panels (id, tab_id, kind, title, resource_kind, resource_id, cwd, name, path, documents, host) \
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11) \
                          ON CONFLICT(id) DO UPDATE SET tab_id=excluded.tab_id, kind=excluded.kind, title=excluded.title, \
                          resource_kind=excluded.resource_kind, resource_id=excluded.resource_id, cwd=excluded.cwd, name=excluded.name, \
-                         path=excluded.path, documents=excluded.documents",
+                         path=excluded.path, documents=excluded.documents, host=excluded.host",
                         rusqlite::params![panel.panel.id.to_string(), tab.tab.id.to_string(), panel_kind_to_str(panel.panel.kind),
                             panel.panel.title, resource_kind, resource_id, path_to_string_lossy(&panel.cwd), panel.name,
-                            panel.path.as_deref().map(path_to_string_lossy), encode_documents(&panel.documents)?],
+                            panel.path.as_deref().map(path_to_string_lossy), encode_documents(&panel.documents)?,
+                            panel.panel.host.as_str()],
                     )?;
                 }
             }
@@ -95,8 +96,19 @@ impl Repository {
         let mut names = self.panel_names()?;
         let mut paths = self.panel_paths()?;
         let mut documents = self.panel_documents()?;
-        let panels_by_id: HashMap<PanelId, Panel> =
-            restored.panels.into_iter().map(|p| (p.id, p)).collect();
+        let hosts = self.panel_hosts()?;
+        let panels_by_id: HashMap<PanelId, Panel> = restored
+            .panels
+            .into_iter()
+            .map(|mut panel| {
+                // A panel saved before machines existed has no host column, so
+                // it stays on this computer.
+                if let Some(host) = hosts.get(&panel.id) {
+                    panel.host = host.clone();
+                }
+                (panel.id, panel)
+            })
+            .collect();
         let tabs = restored
             .tabs
             .into_iter()
@@ -183,6 +195,21 @@ impl Repository {
             for row in rows {
                 let (id, cwd) = row?;
                 out.insert(parse_uuid_id(&id)?, PathBuf::from(cwd));
+            }
+            Ok(out)
+        })
+    }
+
+    fn panel_hosts(&self) -> Result<HashMap<PanelId, MachineId>, PersistenceError> {
+        self.pool.with_conn(|conn| {
+            let mut stmt = conn.prepare("SELECT id, host FROM panels WHERE host IS NOT NULL")?;
+            let rows = stmt.query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })?;
+            let mut out = HashMap::new();
+            for row in rows {
+                let (id, host) = row?;
+                out.insert(parse_uuid_id(&id)?, MachineId::from_alias(&host));
             }
             Ok(out)
         })

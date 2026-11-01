@@ -12,6 +12,7 @@ members = [
     "crates/observability",
     "crates/editor-core",
     "crates/fs-service",
+    "crates/machine-service",
 ]
 
 [workspace.package]

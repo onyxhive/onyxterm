@@ -105,6 +105,12 @@ impl Tab {
         Ok(())
     }
 
+    pub fn attach_right_of(&mut self, target: PanelId, panel: PanelId, target_ratio: f32) -> Result<(), DomainError> {
+        self.layout.split_with(target, Axis::Horizontal, target_ratio, panel)?;
+        self.is_maximized = false;
+        Ok(())
+    }
+
     pub fn set_split_ratio(&mut self, path: &[SplitSide], new_ratio: f32) {
         if let Some(LayoutNode::Split { ratio, .. }) = split_at_mut(&mut self.layout, path) {
             *ratio = new_ratio;

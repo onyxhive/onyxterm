@@ -4,7 +4,7 @@ use crate::codec::{
 };
 use crate::error::PersistenceError;
 use crate::sqlite::SqlitePool;
-use domain::{Panel, PanelId, Tab, TabId, WorkspaceId};
+use domain::{MachineId, Panel, PanelId, Tab, TabId, WorkspaceId};
 
 pub trait TabRepo {
     fn list_for(&self, workspace: WorkspaceId) -> Result<Vec<Tab>, PersistenceError>;
@@ -81,7 +81,7 @@ impl<'a> TabRepo for SqliteTabRepo<'a> {
     ) -> Result<Vec<Panel>, PersistenceError> {
         self.pool.with_conn(|conn| {
             let mut stmt = conn.prepare(
-                "SELECT id, kind, title, resource_kind, resource_id \
+                "SELECT id, kind, title, resource_kind, resource_id, host \
                  FROM panels WHERE tab_id = ?1",
             )?;
             let rows = stmt.query_map([tab.to_string()], row_to_panel)?;
@@ -130,8 +130,8 @@ impl<'a> TabRepo for SqliteTabRepo<'a> {
             for panel in panels {
                 let (resource_kind, resource_id) = resource_ref_columns(panel.resource);
                 tx.execute(
-                    "INSERT INTO panels (id, tab_id, kind, title, resource_kind, resource_id) \
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                    "INSERT INTO panels (id, tab_id, kind, title, resource_kind, resource_id, host) \
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
                     rusqlite::params![
                         panel.id.to_string(),
                         tab.id.to_string(),
@@ -139,6 +139,7 @@ impl<'a> TabRepo for SqliteTabRepo<'a> {
                         panel.title,
                         resource_kind,
                         resource_id,
+                        panel.host.as_str(),
                     ],
                 )?;
             }
@@ -186,15 +187,15 @@ fn row_to_panel(row: &rusqlite::Row<'_>) -> Result<Panel, rusqlite::Error> {
     let title: String = row.get(2)?;
     let resource_kind: String = row.get(3)?;
     let resource_id: String = row.get(4)?;
+    let host_raw: Option<String> = row.get(5)?;
     let id: PanelId = parse_uuid_id(&id_raw).map_err(rusqlite::Error::from)?;
     let kind = panel_kind_from_str(&kind_raw).map_err(rusqlite::Error::from)?;
     let resource = resource_ref_from(&resource_kind, &resource_id).map_err(rusqlite::Error::from)?;
-    Ok(Panel {
-        id,
-        kind,
-        title,
-        resource,
-    })
+    // Rows written before machines existed carry no host.
+    let host = host_raw
+        .map(|value| MachineId::from_alias(&value))
+        .unwrap_or_else(MachineId::local);
+    Ok(Panel { id, kind, title, resource, host })
 }
 
 fn read_layout(

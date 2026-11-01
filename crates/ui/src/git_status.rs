@@ -3,7 +3,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Output};
 
 const GIT_PROGRAM: &str = "git";
 const BRANCH_HEADER: &str = "## ";
@@ -11,6 +11,10 @@ const UPSTREAM_SEPARATOR: &str = "...";
 const NO_COMMITS_PREFIX: &str = "No commits yet on ";
 const DETACHED_HEAD: &str = "HEAD (no branch)";
 const DETACHED_LABEL: &str = "HEAD";
+const AHEAD_MARK: char = '\u{2191}';
+const BEHIND_MARK: char = '\u{2193}';
+const CHANGED_MARK: char = '~';
+const UNTRUSTED_REPO_FLAGS: [&str; 3] = ["--no-optional-locks", "-c", "core.fsmonitor=false"];
 const UNMERGED_PAIRS: [&str; 7] = ["DD", "AU", "UD", "UA", "DU", "AA", "UU"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -73,6 +77,8 @@ impl GitMark {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Porcelain {
     pub branch: Option<String>,
+    pub ahead: u32,
+    pub behind: u32,
     pub marks: Vec<(String, GitMark)>,
 }
 
@@ -82,6 +88,7 @@ pub fn parse_porcelain(output: &str) -> Porcelain {
     while let Some(record) = records.next() {
         if let Some(header) = record.strip_prefix(BRANCH_HEADER) {
             porcelain.branch = branch_name(header);
+            (porcelain.ahead, porcelain.behind) = upstream_counts(header);
             continue;
         }
         let (Some(pair), Some(path)) = (record.get(..2), record.get(3..)) else {
@@ -104,6 +111,55 @@ fn branch_name(header: &str) -> Option<String> {
     let local = header.strip_prefix(NO_COMMITS_PREFIX).unwrap_or(header);
     let name = local.split(UPSTREAM_SEPARATOR).next()?.split(' ').next()?;
     (!name.is_empty()).then(|| name.to_string())
+}
+
+fn upstream_counts(header: &str) -> (u32, u32) {
+    let Some(counts) = header.rsplit_once('[').and_then(|(_, rest)| rest.strip_suffix(']')) else {
+        return (0, 0);
+    };
+    counts.split(", ").fold((0, 0), |(ahead, behind), part| match part.split_once(' ') {
+        Some(("ahead", count)) => (count.parse().unwrap_or(0), behind),
+        Some(("behind", count)) => (ahead, count.parse().unwrap_or(0)),
+        _ => (ahead, behind),
+    })
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GitSummary {
+    pub branch: String,
+    pub ahead: u32,
+    pub behind: u32,
+    pub changed: usize,
+}
+
+impl GitSummary {
+    pub fn from_porcelain(porcelain: &Porcelain) -> Option<Self> {
+        Some(Self {
+            branch: porcelain.branch.clone()?,
+            ahead: porcelain.ahead,
+            behind: porcelain.behind,
+            changed: porcelain.marks.len(),
+        })
+    }
+
+    pub fn sync_label(&self) -> String {
+        let mut label = self.branch.clone();
+        if self.ahead > 0 {
+            label.push_str(&format!(" {AHEAD_MARK}{}", self.ahead));
+        }
+        if self.behind > 0 {
+            label.push_str(&format!(" {BEHIND_MARK}{}", self.behind));
+        }
+        label
+    }
+
+    pub fn full_label(&self) -> String {
+        let mut label = self.sync_label();
+        if self.changed > 0 {
+            label.push_str(&format!(" {CHANGED_MARK}{}", self.changed));
+        }
+        label
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -153,10 +209,25 @@ fn root_as_spelled(dir: &Path, canonical_root: &Path) -> PathBuf {
     }
 }
 
+pub fn read_git_summary(dir: &Path) -> Option<GitSummary> {
+    let args = ["status", "--porcelain=v1", "-z", "--branch", "--untracked-files=all"];
+    let status = untrusted_repo_output(dir, &args)?;
+    GitSummary::from_porcelain(&parse_porcelain(&status))
+}
+
 fn git_output(dir: &Path, args: &[&str]) -> Option<String> {
     let output = Command::new(GIT_PROGRAM).arg("-C").arg(dir).args(args).output();
+    String::from_utf8(successful_stdout(output)?).ok()
+}
+
+pub(crate) fn untrusted_repo_output(dir: &Path, args: &[&str]) -> Option<String> {
+    let output = Command::new(GIT_PROGRAM).args(UNTRUSTED_REPO_FLAGS).arg("-C").arg(dir).args(args).output();
+    Some(String::from_utf8_lossy(&successful_stdout(output)?).into_owned())
+}
+
+fn successful_stdout(output: std::io::Result<Output>) -> Option<Vec<u8>> {
     match output {
-        Ok(output) if output.status.success() => String::from_utf8(output.stdout).ok(),
+        Ok(output) if output.status.success() => Some(output.stdout),
         Ok(_) => None,
         Err(err) => {
             tracing::debug!(%err, "git unavailable");
@@ -168,6 +239,7 @@ fn git_output(dir: &Path, args: &[&str]) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::unix::fs::PermissionsExt;
 
     #[test]
     fn porcelain_reads_branch_and_file_marks() {
@@ -204,6 +276,66 @@ mod tests {
         assert_eq!(parse_porcelain("## No commits yet on trunk\0").branch.as_deref(), Some("trunk"));
         assert_eq!(parse_porcelain("## HEAD (no branch)\0").branch.as_deref(), Some("HEAD"));
         assert_eq!(parse_porcelain("## dev...origin/dev\0").branch.as_deref(), Some("dev"));
+    }
+
+    #[test]
+    fn branch_header_reads_ahead_and_behind_counts() {
+        let counts = |header: &str| {
+            let parsed = parse_porcelain(header);
+            (parsed.ahead, parsed.behind)
+        };
+        assert_eq!(counts("## main...origin/main [ahead 2, behind 1]\0"), (2, 1));
+        assert_eq!(counts("## main...origin/main [ahead 3]\0"), (3, 0));
+        assert_eq!(counts("## main...origin/main [behind 4]\0"), (0, 4));
+        assert_eq!(counts("## main...origin/main [gone]\0"), (0, 0));
+        assert_eq!(counts("## main...origin/main\0"), (0, 0));
+        assert_eq!(counts("## main\0"), (0, 0));
+        assert_eq!(counts("## HEAD (no branch)\0"), (0, 0));
+        assert_eq!(counts("## main...origin/main [ahead x, behind 1]\0"), (0, 1));
+    }
+
+    #[test]
+    fn summary_labels_omit_zero_counts() {
+        let summary = |output: &str| GitSummary::from_porcelain(&parse_porcelain(output)).expect("branch");
+        let busy = summary("## main...origin/main [ahead 2, behind 1]\0 M a.rs\0?? b.rs\0?? c.rs\0");
+        assert_eq!(busy.full_label(), "main \u{2191}2 \u{2193}1 ~3");
+        assert_eq!(busy.sync_label(), "main \u{2191}2 \u{2193}1");
+        assert_eq!(summary("## main\0").full_label(), "main");
+        assert_eq!(summary("## main...o/main [behind 1]\0").full_label(), "main \u{2193}1");
+        assert_eq!(summary("## main\0 M a.rs\0").full_label(), "main ~1");
+        assert_eq!(GitSummary::from_porcelain(&parse_porcelain(" M a.rs\0")), None);
+    }
+
+    #[test]
+    fn a_repository_config_cannot_run_a_program_through_the_summary_read() {
+        let dir = tempfile::tempdir().unwrap();
+        let repo = dir.path();
+        let git = |args: &[&str]| {
+            assert!(Command::new(GIT_PROGRAM).arg("-C").arg(repo).args(args).status().unwrap().success());
+        };
+        git(&["init", "-b", "main"]);
+        let marker = repo.join("fsmonitor-ran");
+        let script = repo.join("monitor.sh");
+        std::fs::write(&script, format!("#!/bin/sh\ntouch '{}'\n", marker.display())).unwrap();
+        git(&["config", "core.fsmonitor", &script.display().to_string()]);
+        git(&["config", "core.hooksPath", &repo.join("hooks").display().to_string()]);
+        std::fs::create_dir_all(repo.join("hooks")).unwrap();
+        let hook = repo.join("hooks/post-index-change");
+        std::fs::write(&hook, format!("#!/bin/sh\ntouch '{}'\n", marker.display())).unwrap();
+        for program in [&script, &hook] {
+            std::fs::set_permissions(program, PermissionsExt::from_mode(0o755)).unwrap();
+        }
+
+        let summary = read_git_summary(repo).expect("repository summary");
+        assert_eq!(summary.branch, "main");
+        assert_eq!(summary.changed, 2);
+        assert!(!marker.exists(), "a repository's config must not run a program on a status read");
+    }
+
+    #[test]
+    fn a_directory_outside_any_repository_has_no_summary() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(read_git_summary(dir.path()), None);
     }
 
     #[test]

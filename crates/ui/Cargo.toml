@@ -9,6 +9,7 @@ publish = false
 domain = { path = "../domain" }
 editor-core = { path = "../editor-core" }
 fs-service = { path = "../fs-service" }
+machine-service = { path = "../machine-service" }
 observability = { path = "../observability" }
 terminal-core = { path = "../terminal-core" }
 workspace-service = { path = "../workspace-service" }

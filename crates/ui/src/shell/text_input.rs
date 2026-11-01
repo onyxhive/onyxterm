@@ -3,6 +3,7 @@ use crate::command::CommandId;
 use crate::input::is_composed_text;
 use crate::terminal_view::cursor_bounds;
 use crate::text_field::{Clipboard, TextField};
+use domain::PanelId;
 use editor_core::EditorAction;
 use gpui::{
     App, Bounds, ClipboardItem, Context, EntityInputHandler, Keystroke, Pixels, Point, ScrollStrategy, UTF16Selection,
@@ -23,6 +24,9 @@ pub(super) enum FieldTarget {
     SettingsQuery,
     Find,
     QuickOpenQuery,
+    MachineQuery,
+    MachineAlias,
+    GitGraphQuery,
 }
 
 struct AppClipboard<'a>(&'a mut App);
@@ -38,6 +42,15 @@ impl Clipboard for AppClipboard<'_> {
 }
 
 impl Shell {
+    fn machine_query(&self) -> Option<&TextField> {
+        self.focused_machines_pane().and_then(|panel| self.machine_panes.get(&panel)).map(|state| &state.query)
+    }
+
+    fn machine_query_mut(&mut self) -> Option<&mut TextField> {
+        let panel = self.focused_machines_pane()?;
+        self.machine_panes.get_mut(&panel).map(|state| &mut state.query)
+    }
+
     fn marked_len_utf16(&self) -> usize {
         self.marked_text.as_deref().map_or(0, |text| text.encode_utf16().count())
     }
@@ -71,7 +84,16 @@ impl Shell {
         if self.quick_open.is_some() {
             return Some(FieldTarget::QuickOpenQuery);
         }
-        self.is_find_focused().then_some(FieldTarget::Find)
+        if self.machine_dialog.is_some() {
+            return Some(FieldTarget::MachineAlias);
+        }
+        if let Some(panel) = self.focused_machines_pane() {
+            return self.machine_panes.get(&panel).map(|_| FieldTarget::MachineQuery);
+        }
+        if self.is_find_focused() {
+            return Some(FieldTarget::Find);
+        }
+        self.is_git_graph_filter_active().then_some(FieldTarget::GitGraphQuery)
     }
 
     pub(super) fn field(&self, target: FieldTarget) -> Option<&TextField> {
@@ -87,6 +109,9 @@ impl Shell {
             FieldTarget::SettingsQuery => Some(&self.state.settings_query),
             FieldTarget::Find => self.find.as_ref().map(|find| &find.input),
             FieldTarget::QuickOpenQuery => self.quick_open.as_ref().map(|quick_open| &quick_open.query),
+            FieldTarget::MachineQuery => self.machine_query(),
+            FieldTarget::MachineAlias => self.machine_dialog.as_ref(),
+            FieldTarget::GitGraphQuery => self.focused_git_graph_filter(),
         }
     }
 
@@ -103,6 +128,9 @@ impl Shell {
             FieldTarget::SettingsQuery => Some(&mut self.state.settings_query),
             FieldTarget::Find => self.find.as_mut().map(|find| &mut find.input),
             FieldTarget::QuickOpenQuery => self.quick_open.as_mut().map(|quick_open| &mut quick_open.query),
+            FieldTarget::MachineQuery => self.machine_query_mut(),
+            FieldTarget::MachineAlias => self.machine_dialog.as_mut(),
+            FieldTarget::GitGraphQuery => self.focused_git_graph_filter_mut(),
         }
     }
 
@@ -150,8 +178,10 @@ impl Shell {
             FieldTarget::SettingsQuery => self.state.settings_result_selection = 0,
             FieldTarget::Find => self.on_find_query_edited(cx),
             FieldTarget::QuickOpenQuery => self.rank_quick_open(cx),
+            FieldTarget::MachineQuery => self.on_machine_query_edited(self.focused_machines_pane().unwrap_or_else(PanelId::new)),
+            FieldTarget::GitGraphQuery => self.on_git_graph_query_edited(cx),
             FieldTarget::MenuName | FieldTarget::MenuSearch | FieldTarget::PaneName | FieldTarget::TabName
-            | FieldTarget::ShortcutFilter => {}
+            | FieldTarget::ShortcutFilter | FieldTarget::MachineAlias => {}
         }
     }
 

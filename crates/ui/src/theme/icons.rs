@@ -22,14 +22,15 @@ pub enum Icon {
     ChevronUp,
     CloseFind,
     File,
+    GitBranch,
 }
 
 impl Icon {
-    pub const ALL: [Self; 18] = [
+    pub const ALL: [Self; 19] = [
         Self::Gear, Self::Close, Self::Chevron, Self::Magnifier, Self::Trash,
         Self::Appearance, Self::Terminal, Self::Editor, Self::Keyboard,
         Self::Logo, Self::LogoPrompt, Self::Plus, Self::More, Self::CloseBold, Self::MagnifierBold,
-        Self::ChevronUp, Self::CloseFind, Self::File,
+        Self::ChevronUp, Self::CloseFind, Self::File, Self::GitBranch,
     ];
 
     fn asset_path(self) -> &'static str {
@@ -52,6 +53,7 @@ impl Icon {
             Icon::ChevronUp => "icons/ui/chevron-up.svg",
             Icon::CloseFind => "icons/ui/close-find.svg",
             Icon::File => "icons/ui/file.svg",
+            Icon::GitBranch => "icons/ui/git-branch.svg",
         }
     }
 
@@ -75,6 +77,7 @@ impl Icon {
             Icon::ChevronUp => include_bytes!("../../../../assets/icons/ui/chevron-up.svg"),
             Icon::CloseFind => include_bytes!("../../../../assets/icons/ui/close-find.svg"),
             Icon::File => include_bytes!("../../../../assets/icons/ui/file.svg"),
+            Icon::GitBranch => include_bytes!("../../../../assets/icons/ui/git-branch.svg"),
         }
     }
 

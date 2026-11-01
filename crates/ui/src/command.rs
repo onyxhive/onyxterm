@@ -63,9 +63,12 @@ pub enum CommandId {
     Find,
     QuickOpen,
     ToggleLineComment,
+    OpenMachines,
+    AddMachine,
+    ToggleGitGraph,
 }
 
-const COMMAND_KEYS: [(CommandId, &str); 76] = [
+const COMMAND_KEYS: [(CommandId, &str); 79] = [
     (CommandId::NewTab, "new_tab"), (CommandId::CloseActive, "close"), (CommandId::MoveTabLeft, "move_tab_left"),
     (CommandId::MoveTabRight, "move_tab_right"), (CommandId::ClosePane, "close_pane"),
     (CommandId::OpenPalette, "open_palette"), (CommandId::OpenSettings, "open_settings"),
@@ -107,6 +110,9 @@ const COMMAND_KEYS: [(CommandId, &str); 76] = [
     (CommandId::ClearTerminal, "clear_terminal"), (CommandId::InterruptProcess, "interrupt_process"),
     (CommandId::Find, "find"), (CommandId::QuickOpen, "quick_open"),
     (CommandId::ToggleLineComment, "toggle_line_comment"),
+    (CommandId::OpenMachines, "open_machines"),
+    (CommandId::AddMachine, "add_machine"),
+    (CommandId::ToggleGitGraph, "toggle_git_graph"),
 ];
 
 const SELECT_TAB_TITLES: [&str; 9] = [
@@ -142,7 +148,7 @@ impl CommandId {
             self,
             NewTab | NextTab | PrevTab | SelectTab(_) | SplitRight | SplitDown | FocusAdjacent | FocusPane(_)
                 | SwapPane(_) | ResizePane(_) | GridLayout | EqualizePanes | CloseActive | ClosePane | CloseTab | MoveToNewTab
-                | NextDocument | PrevDocument | CloseDocument
+                | NextDocument | PrevDocument | CloseDocument | ToggleGitGraph
         )
     }
 }
@@ -285,9 +291,12 @@ pub fn default_commands() -> Vec<Command> {
         Command::builder(NextDocument, "Next Document", "Files", no_op).build(),
         Command::builder(ClearTerminal, "Clear Terminal", "Terminal", no_op).build(),
         Command::builder(InterruptProcess, "Interrupt Process", "Terminal", no_op).build(),
+        Command::builder(OpenMachines, "Open Machines", "Machines", no_op).build(),
+        Command::builder(AddMachine, "Add Machine\u{2026}", "Machines", no_op).build(),
         Command::builder(MaximizePane, "Maximize Pane", "Panes", no_op).build(),
         Command::builder(GridLayout, "Arrange Panes in Grid", "Panes", no_op).build(),
         Command::builder(EqualizePanes, "Equalize Panes", "Panes", no_op).build(),
+        Command::builder(ToggleGitGraph, "Git Graph", "Panes", no_op).build(),
         Command::builder(RenamePane, "Rename Pane\u{2026}", "Panes", no_op).build(),
         Command::builder(MoveToNewTab, "Move Pane to New Tab", "Panes", no_op).build(),
         Command::builder(ClosePane, "Close Pane", "Panes", no_op).build(),

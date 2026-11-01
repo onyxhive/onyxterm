@@ -53,6 +53,9 @@ pub(super) fn poll_pane_statuses(cx: &mut Context<Shell>) -> Task<()> {
 
 impl Shell {
     pub(super) fn pane_display_title(&self, panel: PanelId) -> String {
+        if let Some(title) = self.git_graph_title(panel) {
+            return title;
+        }
         let source = self.title_source(panel);
         match self.panes.get(&panel) {
             Some(pane) => terminal_title(&source, &pane.shell_name),
@@ -167,9 +170,13 @@ impl Shell {
             return;
         };
         pane.is_refreshing = false;
+        let moved_to = status.cwd.clone().filter(|cwd| pane.status.cwd.as_ref() != Some(cwd));
         pane.status = status;
         if (self.pane_display_title(panel), self.pane_title_tooltip(panel)) != shown_before {
             cx.notify();
+        }
+        if let Some(dir) = moved_to {
+            self.on_pane_cwd_changed(panel, dir, cx);
         }
     }
 }

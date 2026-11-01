@@ -2,7 +2,9 @@
 #![forbid(unsafe_code)]
 
 use crate::tabs::{Tab, Tabs};
-use domain::{DomainError, Panel, PanelId, PanelKind, TabId, TerminalSessionId, Workspace, WorkspaceId};
+use domain::{
+    DomainError, LayoutNode, MachineId, Panel, PanelId, PanelKind, TabId, TerminalSessionId, Workspace, WorkspaceId,
+};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use workspace_service::{PanelSnapshot, TabSnapshot, WorkspaceSnapshot, DEFAULT_PANEL_TITLE};
@@ -120,11 +122,12 @@ impl WorkspaceModel {
 
     pub fn shown_terminals_to_spawn(&self, is_live: impl Fn(PanelId) -> bool) -> Vec<PanelId> {
         let shown = self.tabs().active().map(|tab| tab.layout().leaves()).unwrap_or_default();
-        shown.into_iter().filter(|panel| !is_live(*panel) && !self.is_document(*panel)).collect()
+        shown.into_iter().filter(|panel| !is_live(*panel) && self.is_shell(*panel)).collect()
     }
 
-    pub fn documents_to_restore(&self, is_live: impl Fn(PanelId) -> bool) -> Vec<PanelId> {
-        self.panels_to_spawn(is_live).into_iter().filter(|panel| self.is_document(*panel)).collect()
+    /// Panes that aren't shells: editors, file trees, machines.
+    pub fn panels_to_restore(&self, is_live: impl Fn(PanelId) -> bool) -> Vec<PanelId> {
+        self.panels_to_spawn(is_live).into_iter().filter(|panel| !self.is_shell(*panel)).collect()
     }
 
     pub fn panel(&self, id: PanelId) -> Option<&PanelSnapshot> {
@@ -133,6 +136,35 @@ impl WorkspaceModel {
 
     pub fn is_document(&self, id: PanelId) -> bool {
         self.panels.get(&id).is_some_and(|record| record.panel.is_document())
+    }
+
+    pub fn is_machines(&self, id: PanelId) -> bool {
+        self.panels.get(&id).is_some_and(|record| record.panel.kind == PanelKind::Machines)
+    }
+
+    pub fn is_git_graph(&self, id: PanelId) -> bool {
+        self.panels.get(&id).is_some_and(|record| record.panel.kind == PanelKind::GitGraph)
+    }
+
+    pub fn is_local_terminal(&self, id: PanelId) -> bool {
+        self.panels
+            .get(&id)
+            .is_some_and(|record| record.panel.kind == PanelKind::Terminal && record.panel.host.is_local())
+    }
+
+    /// Panes that own a PTY, on this computer or a remote one.
+    pub fn is_shell(&self, id: PanelId) -> bool {
+        self.panels.get(&id).is_some_and(|record| record.panel.is_terminal_like())
+    }
+
+    /// The machine a pane runs on.
+    pub fn panel_host(&self, id: PanelId) -> MachineId {
+        self.panels.get(&id).map(|record| record.panel.host.clone()).unwrap_or_else(MachineId::local)
+    }
+
+    pub fn machines_pane(&self) -> Option<PanelId> {
+        let shown = self.tabs().active().map(|tab| tab.layout().leaves()).unwrap_or_default();
+        shown.into_iter().find(|panel| self.is_machines(*panel))
     }
 
     pub fn focused_document(&self) -> Option<PanelId> {
@@ -155,6 +187,10 @@ impl WorkspaceModel {
             .values()
             .find(|record| matches(record) && tab.contains(record.panel.id))
             .map(|record| record.panel.id)
+    }
+
+    pub fn tab_layout_of(&self, panel: PanelId) -> Option<&LayoutNode> {
+        self.tabs().iter().find(|tab| tab.contains(panel)).map(Tab::layout)
     }
 
     pub fn panel_mut(&mut self, id: PanelId) -> Option<&mut PanelSnapshot> {

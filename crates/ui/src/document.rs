@@ -40,7 +40,7 @@ impl DocumentPane {
                 EditorPane::restored(paths, Some(&path)).map(Self::Editor)
             }
             PanelKind::FileTree => Some(Self::FileTree(FileTreePane::new(path))),
-            PanelKind::Terminal | PanelKind::Agent => None,
+            PanelKind::Terminal | PanelKind::Agent | PanelKind::Machines | PanelKind::GitGraph => None,
         }
     }
 

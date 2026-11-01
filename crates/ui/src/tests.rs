@@ -416,6 +416,18 @@ fn keymap_binds_tabs_and_workspaces_by_index_and_order() {
 }
 
 #[test]
+fn git_graph_is_a_structural_pane_command_on_cmd_g() {
+    let map = Keymap::default();
+    assert_eq!(map.resolve(&Combo::new(Modifiers::command(), "g")), Some(CommandId::ToggleGitGraph));
+    assert_eq!(map.resolve(&Combo::new(Modifiers::command_shift(), "g")), Some(CommandId::GridLayout));
+    assert!(CommandId::ToggleGitGraph.is_structural());
+    let registry = CommandRegistry::with_defaults();
+    let commands = registry.list();
+    let command = commands.iter().find(|command| command.id == CommandId::ToggleGitGraph).expect("registered");
+    assert_eq!((command.title, command.category), ("Git Graph", "Panes"));
+}
+
+#[test]
 fn default_keymap_has_no_conflicts() {
     assert!(Keymap::default().conflicts().is_empty());
 }
@@ -945,6 +957,7 @@ fn pane_menu_lists_items_with_shortcuts_and_a_divider_before_close() {
         ("Rename Pane\u{2026}", None),
         ("Move to New Tab", None),
         ("Open Editor Here", Some("\u{2318}E")),
+        ("Git Graph", Some("\u{2318}G")),
         ("-", None),
         ("Close Pane", Some("\u{2318}W")),
     ];
@@ -955,7 +968,7 @@ fn pane_menu_lists_items_with_shortcuts_and_a_divider_before_close() {
     assert!(matches!(&restore[3], PaneMenuEntry::Item(item) if item.title == "Restore Pane"));
     assert!(matches!(&restore[6], PaneMenuEntry::Item(item) if item.title == "Exit Copy Mode"));
     let commands = selectable_commands(&entries);
-    assert_eq!(commands.len(), 10);
+    assert_eq!(commands.len(), 11);
     assert_eq!(commands.last(), Some(&CommandId::ClosePane));
     let destructive: Vec<&str> = entries
         .iter()
@@ -1363,7 +1376,9 @@ fn palette_rows_carry_category_and_bound_shortcut() {
     assert_eq!(row("New Tab").shortcut.as_deref(), Some("\u{2318}T"));
     assert_eq!(row("New Workspace").category, "Workspaces");
     assert_eq!(row("New Workspace").shortcut.as_deref(), Some("\u{21e7}\u{2318}N"));
-    assert_eq!(row("Rename Tab").shortcut, None);
+    assert_eq!(row("Rename Tab").category, "Tabs");
+    assert_eq!(row("Rename Tab").shortcut.as_deref(), Some("\u{2318}R"));
+    assert_eq!(row("Rename Workspace\u{2026}").shortcut.as_deref(), Some("\u{21e7}\u{2318}R"));
 }
 
 #[test]
@@ -1633,8 +1648,8 @@ fn shortcut_groups_follow_registry_category_order_and_list_unbound_commands() {
     map.bind(Combo::new(Modifiers::command_shift(), "left"), CommandId::MoveTabLeft);
     let groups = shortcut_groups(&registry, &map, "");
     let categories: Vec<&str> = groups.iter().map(|group| group.category).collect();
-    assert_eq!(categories, ["Files", "Edit", "Tabs", "Panes", "Terminal", "Workspaces", "Application", "Palette",
-        "Window"]);
+    assert_eq!(categories, ["Files", "Edit", "Tabs", "Panes", "Terminal", "Machines", "Workspaces", "Application",
+        "Palette", "Window"]);
     let listed: usize = groups.iter().map(|group| group.shortcuts.len()).sum();
     assert_eq!(listed, registry.list().len() - 1);
     assert!(groups.iter().flat_map(|group| &group.shortcuts).all(|shortcut| shortcut.command != CommandId::ClosePalette));
@@ -1647,6 +1662,9 @@ fn shortcut_groups_follow_registry_category_order_and_list_unbound_commands() {
     assert_eq!(groups[2].shortcuts[3].combo, Some(Combo::new(Modifiers::command_shift(), "left")));
     let save = groups[0].shortcuts.iter().find(|shortcut| shortcut.command == CommandId::Save).unwrap();
     assert_eq!(save.combo, Some(Combo::new(Modifiers::command(), "s")));
+    let machines: Vec<&str> =
+        groups[5].shortcuts.iter().map(|shortcut| shortcut.title).collect();
+    assert_eq!(machines, ["Open Machines", "Add Machine\u{2026}"]);
 }
 
 #[test]

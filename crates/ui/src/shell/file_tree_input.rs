@@ -44,7 +44,7 @@ pub(super) fn tree_key(keystroke: &Keystroke) -> Option<TreeKey> {
     }
 }
 
-fn reveal_strategy(delta: isize) -> ScrollStrategy {
+pub(super) fn reveal_strategy(delta: isize) -> ScrollStrategy {
     if delta < 0 {
         return ScrollStrategy::Top;
     }
@@ -80,6 +80,7 @@ impl Shell {
         for panel in trees {
             self.schedule_git_refresh(panel, cx);
         }
+        self.refresh_shown_pane_git(cx);
     }
 
     pub(super) fn schedule_git_refresh(&mut self, panel: PanelId, cx: &mut Context<Self>) {

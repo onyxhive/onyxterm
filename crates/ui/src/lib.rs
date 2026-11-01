@@ -16,6 +16,7 @@ pub mod file_links;
 pub mod find_bar;
 pub mod file_tree;
 pub mod file_tree_view;
+pub mod git_graph;
 pub mod git_status;
 pub mod input;
 pub mod island_look;

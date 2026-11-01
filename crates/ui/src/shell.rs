@@ -24,8 +24,10 @@ use crate::terminal_view::{
 };
 use crate::text_field::TextField;
 use crate::workspace_menu::MenuField;
+use crate::shell::machines::build_machine_service;
+use machine_service::MachineService;
 use crate::workspaces::WorkspaceModel;
-use domain::{Axis, Direction, LayoutNode, Panel, PanelId, PanelKind, TabId, TerminalSessionId, WorkspaceId};
+use domain::{Axis, Direction, LayoutNode, MachineId, Panel, PanelId, PanelKind, TabId, TerminalSessionId, WorkspaceId};
 use editor_core::syntax::Language;
 use gpui::{
     canvas, div, point, prelude::*, px, AnyElement, ClipboardItem, Context, ElementInputHandler, ExternalPaths,
@@ -65,6 +67,9 @@ mod text_input;
 mod toast;
 mod file_link_open;
 mod find;
+mod git_graph;
+mod git_graph_view;
+mod machines;
 mod quick_open;
 
 use tab_strip::TabDrag;
@@ -88,6 +93,7 @@ const CLEAR_SCREEN_AND_SCROLLBACK: &[u8] = b"\x1b[H\x1b[2J\x1b[3J";
 const REDRAW_PROMPT: &[u8] = b"\x0c";
 const INTERRUPT: &[u8] = b"\x03";
 const SSH_PROGRAM: &str = "ssh";
+const MACHINE_REPAINT_INTERVAL: Duration = Duration::from_secs(2);
 const PANES_EQUALIZED: &str = "Panes equalized";
 
 static FIRST_FRAME: Milestone = Milestone::new("first frame");
@@ -100,8 +106,11 @@ struct Pane {
     terminal: TerminalPane,
     osc: Option<OscTitle>,
     shell_name: String,
+    host: MachineId,
     status: pane_status::PaneStatus,
     is_refreshing: bool,
+    git: Option<crate::git_status::GitSummary>,
+    git_refresh: Option<Task<()>>,
     _events: Task<()>,
 }
 
@@ -183,8 +192,17 @@ pub struct Shell {
     find_search: Option<find::FindSearch>,
     quick_open: Option<crate::quick_open::QuickOpen>,
     quick_open_jobs: quick_open::QuickOpenJobs,
+    home: PathBuf,
+    machines: Arc<MachineService>,
+    machine_panes: HashMap<PanelId, machines::MachinePane>,
+    machine_dialog: Option<TextField>,
+    git_graph_panes: HashMap<PanelId, git_graph::GitGraphPane>,
+    git_focus: Option<PanelId>,
+    is_window_active: bool,
     _quit_hook: Subscription,
     _status_poll: Task<()>,
+    _machine_poll: Task<()>,
+    _git_graph_poll: Task<()>,
 }
 
 impl Shell {
@@ -239,14 +257,47 @@ impl Shell {
             find_search: None,
             quick_open: None,
             quick_open_jobs: quick_open::QuickOpenJobs::default(),
+            home,
+            machines: build_machine_service(&restored.settings),
+            machine_panes: HashMap::new(),
+            machine_dialog: None,
+            git_graph_panes: HashMap::new(),
+            git_focus: None,
+            is_window_active: true,
             _quit_hook: cx.on_app_quit(|shell, _cx| {
                 shell.flush();
                 async {}
             }),
             _status_poll: pane_status::poll_pane_statuses(cx),
+            _machine_poll: Task::ready(()),
+            _git_graph_poll: git_graph::poll_git_graphs(cx),
         };
+        shell.start_machine_polling(cx);
         observability::timed("workspace restore", || shell.show_active_workspace(cx));
         shell
+    }
+
+    /// Keeps machine statuses warm in the background and repaints whenever new
+    /// numbers land, so a machines pane doesn't go stale.
+    fn start_machine_polling(&mut self, cx: &mut Context<Self>) {
+        const POLL_INTERVAL: Duration = Duration::from_secs(10);
+        self.machines.start_polling(POLL_INTERVAL);
+        let machines = self.machines.clone();
+        self._machine_poll = cx.spawn(async move |shell, cx| {
+            let mut seen = machines.refresh_count();
+            loop {
+                cx.background_executor().timer(MACHINE_REPAINT_INTERVAL).await;
+                let current = machines.refresh_count();
+                if current == seen {
+                    continue;
+                }
+                seen = current;
+                if shell.update(cx, |_shell, cx| cx.notify()).is_err() {
+                    tracing::debug!("shell dropped before the next machine repaint");
+                    return;
+                }
+            }
+        });
     }
 
     fn persist(&mut self) {
@@ -276,9 +327,14 @@ impl Shell {
         if self.model.tabs().is_empty() {
             self.open_tab(cx);
         }
-        let is_live = |panel: PanelId| self.panes.contains_key(&panel) || self.documents.contains_key(&panel);
-        let documents = self.model.documents_to_restore(is_live);
-        for panel in documents {
+        let is_live = |panel: PanelId| {
+            self.panes.contains_key(&panel)
+                || self.documents.contains_key(&panel)
+                || self.git_graph_panes.contains_key(&panel)
+        };
+        let mut restorable = self.model.panels_to_restore(is_live);
+        restorable.sort_by_key(|panel| self.model.is_git_graph(*panel));
+        for panel in restorable {
             self.restore_document(panel, cx);
         }
         self.spawn_shown_terminals(cx);
@@ -304,6 +360,14 @@ impl Shell {
         let Some(record) = self.model.panel(panel).cloned() else {
             return;
         };
+        if record.panel.kind == PanelKind::Machines {
+            self.restore_machines_pane(panel, cx);
+            return;
+        }
+        if record.panel.kind == PanelKind::GitGraph {
+            self.restore_git_graph_pane(panel, cx);
+            return;
+        }
         let Some(document) = DocumentPane::from_snapshot(&record) else {
             return;
         };
@@ -443,7 +507,28 @@ impl Shell {
         let Some(record) = self.model.panel(panel).cloned() else {
             return;
         };
-        let command = login_shell_command(record.cwd.clone());
+        if record.panel.kind == PanelKind::Machines {
+            self.restore_machines_pane(panel, cx);
+            return;
+        }
+        if record.panel.kind == PanelKind::GitGraph {
+            self.restore_git_graph_pane(panel, cx);
+            return;
+        }
+        let host = record.panel.host.clone();
+        let Some(command) = self.pane_command(&host, record.cwd.clone()) else {
+            // The machine isn't in the list any more, so this pane has
+            // nothing to connect to. Say so and close it rather than
+            // leaving an empty box behind.
+            tracing::warn!(?host, "machine went away before its pane could start");
+            self.show_toast(
+                format!("{} is no longer in your machines", record.panel.title),
+                toast::ToastTone::Failure,
+                cx,
+            );
+            self.close_pane(panel, cx);
+            return;
+        };
         if let Some(session) = self.spawn_session(panel, command, cx) {
             self.set_panel_session(panel, session);
         }
@@ -508,6 +593,8 @@ impl Shell {
             CommandId::NextWorkspace => self.select_neighbor_workspace(1, cx),
             CommandId::PrevWorkspace => self.select_neighbor_workspace(-1, cx),
             CommandId::OpenWorkspaceMenu => self.open_workspace_menu(cx),
+            CommandId::OpenMachines => self.open_machines_pane(cx),
+            CommandId::AddMachine => self.start_add_machine(cx),
             CommandId::SplitRight => self.split_focused(Axis::Horizontal, cx),
             CommandId::SplitDown => self.split_focused(Axis::Vertical, cx),
             CommandId::FocusAdjacent => self.focus_next_pane(),
@@ -560,13 +647,17 @@ impl Shell {
                     self.start_rename_pane(panel);
                 }
             }
-            CommandId::MoveToNewTab => self.move_focused_to_new_tab(),
+            CommandId::MoveToNewTab => {
+                self.move_focused_to_new_tab();
+                self.close_separated_git_graphs(cx);
+            }
             CommandId::ToggleCopyMode => self.toggle_copy_mode(),
             CommandId::ClearTerminal => self.clear_terminal(),
             CommandId::InterruptProcess => self.interrupt_process(),
             CommandId::OpenFile => self.prompt_open(false, cx),
             CommandId::OpenFolder => self.prompt_open(true, cx),
             CommandId::OpenEditorHere => self.open_editor_here(cx),
+            CommandId::ToggleGitGraph => self.toggle_focused_git_graph(cx),
             CommandId::ToggleFileTree => self.toggle_file_tree(cx),
             CommandId::ToggleEditorBundle => self.toggle_editor_bundle(cx),
             CommandId::Find => self.open_find(cx),
@@ -605,6 +696,9 @@ impl Shell {
             cx.notify();
             return is_consumed;
         }
+        if self.machine_dialog.is_some() {
+            return self.handle_add_machine_key(keystroke, cx);
+        }
         if self.is_workspace_menu_open {
             return self.handle_menu_key(keystroke, cx);
         }
@@ -638,6 +732,12 @@ impl Shell {
         }
         if self.send_key_to_tree(event, cx) {
             return true;
+        }
+        if let Some(panel) = self.focused_machines_pane() {
+            return self.handle_machine_key(panel, keystroke, cx);
+        }
+        if let Some(panel) = self.focused_git_graph() {
+            return self.handle_git_graph_key(panel, keystroke, cx);
         }
         if self.model.focused_document().is_some() {
             return self.send_key_to_document(event, cx);
@@ -783,11 +883,21 @@ impl Shell {
         cx.notify();
     }
 
+    /// Opens a tab whose shell pane runs on that machine, instead of typing
+    /// `ssh` into a local shell.
     fn connect_ssh_host(&mut self, alias: &SharedString, cx: &mut Context<Self>) {
         self.close_workspace_menu(cx);
+        let id = MachineId::from_alias(alias);
+        if self.machines.machine(&id).is_none() {
+            self.show_toast(format!("No machine called {alias}"), toast::ToastTone::Failure, cx);
+            return;
+        }
         self.open_tab(cx);
-        if let Some(handle) = self.focused_handle() {
-            write_to(handle, ssh_command_line(alias).as_bytes());
+        let cwd = self.model.active_root();
+        if let Some(panel) = self.spawn_shell_panel_on(id, cwd, cx) {
+            if let Some(tab) = self.model.tabs_mut().active_mut() {
+                let _ = tab.split_focused(Axis::Horizontal, panel);
+            }
         }
         if let Some(tab) = self.model.tabs_mut().active_mut() {
             tab.rename(Some(alias.to_string()));
@@ -929,7 +1039,9 @@ impl Shell {
             return;
         };
         for panel in panels {
-            self.close_pane(panel, cx);
+            if self.model.panel(panel).is_some() {
+                self.close_pane(panel, cx);
+            }
         }
     }
 
@@ -1082,7 +1194,8 @@ impl Shell {
             return;
         };
         let cwd = self.panel_cwd(focused);
-        let Some(panel) = self.spawn_shell_panel(cwd, cx) else {
+        let host = self.pane_host(focused);
+        let Some(panel) = self.spawn_shell_panel_on(host, cwd, cx) else {
             return;
         };
         let Some(tab) = self.model.tabs_mut().active_mut() else {
@@ -1160,6 +1273,13 @@ impl Shell {
         self.persist();
     }
 
+    fn reveal_pane(&mut self, panel: PanelId) {
+        if let Some((_, tab_index)) = self.model.locate(panel) {
+            self.model.tabs_mut().activate(tab_index);
+        }
+        self.focus_pane(panel);
+    }
+
     fn remember_focused_editor(&mut self) {
         let is_editor = |panel: &PanelId| matches!(self.documents.get(panel), Some(DocumentPane::Editor(_)));
         if let Some(panel) = self.model.focused_document().filter(is_editor) {
@@ -1177,16 +1297,30 @@ impl Shell {
             self.pending = None;
         }
         self.tab_field = None;
+        let owner_to_focus = self
+            .git_graph_panes
+            .get(&panel)
+            .filter(|_| self.focused_panel() == Some(panel))
+            .map(|graph| graph.owner);
+        let owned_graph = self.git_graph_of(panel);
         if let Err(err) = self.model.remove_panel(panel) {
             tracing::warn!(?err, "close pane failed");
         }
         self.discard_pane(panel, cx);
+        if let Some(graph) = owned_graph {
+            self.close_pane(graph, cx);
+        }
+        if let Some(owner) = owner_to_focus {
+            self.reveal_pane(owner);
+        }
         self.show_active_workspace(cx);
         self.persist();
     }
 
     fn discard_pane(&mut self, panel: PanelId, cx: &mut Context<Self>) {
         self.documents.remove(&panel);
+        self.machine_panes.remove(&panel);
+        self.git_graph_panes.remove(&panel);
         self.recent_editors.forget(panel);
         let Some(pane) = self.panes.remove(&panel) else {
             return;
@@ -1202,13 +1336,45 @@ impl Shell {
     }
 
     fn spawn_shell_panel(&mut self, cwd: PathBuf, cx: &mut Context<Self>) -> Option<PanelId> {
-        let command = login_shell_command(cwd.clone());
-        let title = shell_title(&command);
+        self.spawn_shell_panel_on(MachineId::local(), cwd, cx)
+    }
+
+    /// Spawns a shell pane on a machine: a login shell here, an ssh session
+    /// there. Both own a real PTY, so panes behave the same either way.
+    fn spawn_shell_panel_on(&mut self, host: MachineId, cwd: PathBuf, cx: &mut Context<Self>) -> Option<PanelId> {
+        let command = self.pane_command(&host, cwd.clone())?;
+        let title = self.pane_title(&host, &command);
         let panel = PanelId::new();
         let session = self.spawn_session(panel, command, cx)?;
-        let record = Panel::new_terminal(panel, title, session);
+        let record = Panel::new_terminal_on(panel, title, session, host);
         self.model.add_panel(PanelSnapshot { panel: record, cwd, name: None, path: None, documents: Vec::new() });
         Some(panel)
+    }
+
+    /// The command a pane on `host` runs, or None when that machine is gone.
+    fn pane_command(&self, host: &MachineId, cwd: PathBuf) -> Option<ShellCommand> {
+        if host.is_local() {
+            return Some(login_shell_command(cwd));
+        }
+        let machine = self.machines.machine(host)?;
+        let args = machine.ssh_argv(Some(&cwd));
+        Some(ShellCommand { program: self.machines.ssh_program(), args, cwd: self.home.clone() })
+    }
+
+    /// Remote panes are titled with the machine; local ones with the shell.
+    fn pane_title(&self, host: &MachineId, command: &ShellCommand) -> String {
+        if host.is_local() {
+            return shell_title(command);
+        }
+        self.machines.machine(host).map(|machine| machine.name).unwrap_or_else(|| SSH_PROGRAM.to_string())
+    }
+
+    /// The machine a pane runs on, so splits and restores land in the same place.
+    fn pane_host(&self, panel: PanelId) -> MachineId {
+        if let Some(pane) = self.panes.get(&panel) {
+            return pane.host.clone();
+        }
+        self.model.panel_host(panel)
     }
 
     fn spawn_session(
@@ -1218,6 +1384,7 @@ impl Shell {
         cx: &mut Context<Self>,
     ) -> Option<TerminalSessionId> {
         let shell_name = shell_title(&command);
+        let host = self.pane_host(panel);
         let session = match self.terminals.spawn_command(command, INITIAL_GRID) {
             Ok(session) => session,
             Err(err) => {
@@ -1235,8 +1402,11 @@ impl Shell {
             terminal: TerminalPane::new(handle, self.link_opener(panel, cx)),
             osc: None,
             shell_name,
+            host,
             status: pane_status::PaneStatus::default(),
             is_refreshing: false,
+            git: None,
+            git_refresh: None,
             _events: events,
         });
         Some(session)
@@ -1260,8 +1430,12 @@ impl Shell {
             self.close_pane(panel, cx);
         }
         self.refresh_status(panel, cx);
-        let has_command_change = batch.has_command_started || !batch.finished.is_empty();
+        let has_finished_command = !batch.finished.is_empty();
+        let has_command_change = batch.has_command_started || has_finished_command;
         self.announce_finished_commands(panel, batch.finished, cx);
+        if has_finished_command {
+            self.refresh_pane_git(panel, cx);
+        }
         if has_title || batch.exited || has_command_change {
             cx.notify();
         }
@@ -1388,7 +1562,11 @@ impl Shell {
 
     fn render_pane(&self, panel: PanelId, cx: &mut Context<Self>) -> AnyElement {
         let is_focused = self.model.tabs().active().is_some_and(|tab| tab.focused() == panel);
-        let content = if let Some(document) = self.documents.get(&panel) {
+        let content = if self.machine_panes.contains_key(&panel) {
+            self.render_machines_pane(panel, cx).into_any_element()
+        } else if self.git_graph_panes.contains_key(&panel) {
+            self.render_git_graph_pane(panel, cx).into_any_element()
+        } else if let Some(document) = self.documents.get(&panel) {
             self.render_document_pane(panel, document, is_focused, cx)
         } else if let Some(pane) = self.panes.get(&panel) {
             let mut terminal = pane.terminal.clone();
@@ -1438,6 +1616,7 @@ impl Render for Shell {
         }
         self.spawn_terminals_on_tab_change(cx);
         self.sync_find(cx);
+        self.sync_git_focus(cx);
         let now = Instant::now();
         self.sync_tab_activity(now, cx);
         let pane_area = self.render_pane_area(window, now, cx);
@@ -1460,6 +1639,7 @@ impl Render for Shell {
         let pane_ghost = self.render_pane_ghost(now);
         let tab_ghost = self.render_tab_ghost();
         let close_prompt = self.pending.map(|pending| self.render_confirmation(self.confirmation_copy(pending), cx));
+        let add_machine = self.machine_dialog.as_ref().map(|_| self.render_add_machine_dialog(cx));
         let settings_overlay = self.state.settings_visible.then(|| self.render_settings(window, cx));
         let field_input = self.active_field().map(|_| self.field_input_probe(cx));
         let tab_strip = self.render_tab_strip(window.is_fullscreen(), cx);
@@ -1502,6 +1682,7 @@ impl Render for Shell {
             .children(tab_ghost)
             .children(pane_menu)
             .children(close_prompt.map(|prompt| fade_in(prompt, "confirmation", animation_ms)))
+            .children(add_machine.map(|dialog| fade_in(dialog, "add-machine", animation_ms)))
             .children(toast.map(|toast| fade_in(toast, "toast", animation_ms)))
             .children(settings_overlay)
             .children(field_input)
@@ -1553,11 +1734,6 @@ fn write_to(handle: &TerminalHandle, bytes: &[u8]) {
     }
 }
 
-fn ssh_command_line(alias: &str) -> String {
-    let quoted = alias.replace('\'', "'\\''");
-    format!("{SSH_PROGRAM} '{quoted}'\n")
-}
-
 fn login_shell_command(cwd: PathBuf) -> ShellCommand {
     let program = std::env::var_os("SHELL").map(PathBuf::from).unwrap_or_else(|| PathBuf::from(DEFAULT_SHELL));
     let cwd = if Path::new(&cwd).is_dir() { cwd } else { PathBuf::from("/") };
@@ -1593,6 +1769,7 @@ pub fn open_shell_window(
         let shell = cx.new(|cx| {
             cx.observe_window_bounds(window, |_shell, _window, cx| cx.notify()).detach();
             cx.observe_window_activation(window, |shell: &mut Shell, window, cx| {
+                shell.is_window_active = window.is_window_active();
                 if !window.is_window_active() {
                     shell.report_focus(shell.focused_panel(), FOCUS_OUT_REPORT);
                     return;
