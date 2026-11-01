@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.0](https://github.com/onyxterminal/onyxterm/compare/v0.4.0...v0.5.0) (2026-11-01)
+
+
+### Features
+
+* **git-graph:** add a per-terminal commit graph with a branch pill and cmd+g toggle ([4338f63](https://github.com/onyxterminal/onyxterm/commit/4338f635c112836dc8f830996155e8ae89f1efb7))
+* **machines:** add a machines pane and ssh-backed remote terminals ([4338f63](https://github.com/onyxterminal/onyxterm/commit/4338f635c112836dc8f830996155e8ae89f1efb7))
+
 ## [0.4.0](https://github.com/onyxterminal/onyxterm/compare/v0.3.0...v0.4.0) (2026-10-17)
 
 
