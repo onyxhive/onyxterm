@@ -1,6 +1,6 @@
 import { useState, type KeyboardEvent } from "react";
 import { Check, ChevronDown, Search, Star, Zap } from "lucide-react";
-import { CLAUDE_COMMANDS } from "../agentOptions";
+import { CLAUDE_COMMANDS, DEFAULT_MODEL } from "../agentOptions";
 import { isFullAccess, PERMISSION_MODE_INFO, type PermissionMode } from "../permissionModes";
 import {
   CONTROL_CLASS,
@@ -41,6 +41,7 @@ const FAVORITES_TAB = "favorites";
 const CLAUDE_PROVIDER = "Claude Code";
 const MAX_JUMP_SHORTCUTS = 9;
 const ULTRACODE_LABEL = "Ultracode";
+const RESOLVED_NAME_SEPARATOR = " · ";
 const EFFORT_LABELS: Record<string, string> = {
   low: "Low",
   medium: "Medium",
@@ -60,6 +61,12 @@ const PICKER_ROW = cn(
 
 function commandNameOf(command: string): string {
   return command.replace(/^claude-?/, "") || "claude";
+}
+
+function resolvedNameOf(model: ModelChoice | undefined, fallback: string): string {
+  if (!model) return fallback;
+  if (model.value !== DEFAULT_MODEL) return model.label;
+  return model.description.split(RESOLVED_NAME_SEPARATOR)[0]?.trim() || model.label;
 }
 
 function effortLabelOf(effort: string): string {
@@ -264,7 +271,7 @@ function PickerPanel(props: PickerPanelProps) {
       : models.map((model) => ({ command: choice.command, model: model.value, label: model.label }));
   const rows = tabRows.filter((row) => row.label.toLowerCase().includes(query.trim().toLowerCase()));
   const active = Math.min(activeIndex, rows.length - 1);
-  const modelLabel = models.find((model) => model.value === choice.model)?.label ?? choice.model;
+  const resolvedModelName = resolvedNameOf(models.find((model) => model.value === choice.model), choice.model);
 
   function pick(row: FavoriteModel | undefined) {
     if (!row) return;
@@ -344,7 +351,7 @@ function PickerPanel(props: PickerPanelProps) {
           </ul>
         </div>
         <ReasoningColumn
-          modelLabel={modelLabel}
+          modelLabel={resolvedModelName}
           efforts={efforts}
           effort={choice.effort}
           ultracode={ultracode}

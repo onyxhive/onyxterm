@@ -1,13 +1,13 @@
-import { ChevronUp, Shield, ShieldCheck, ShieldEllipsis, ShieldHalf, ShieldOff, type LucideIcon } from "lucide-react";
+import { ChevronDown, ListChecks, Lock, Pencil, ShieldOff, Sparkles, type LucideIcon } from "lucide-react";
 import { isFullAccess, PERMISSION_MODE_INFO, PERMISSION_MODES, type PermissionMode } from "../permissionModes";
 import { cn, MENU_POPUP } from "./ui";
 import { usePopup } from "./usePopup";
 
 const MODE_ICONS: Record<PermissionMode, LucideIcon> = {
-  default: Shield,
-  acceptEdits: ShieldCheck,
-  auto: ShieldHalf,
-  plan: ShieldEllipsis,
+  default: Lock,
+  acceptEdits: Pencil,
+  auto: Sparkles,
+  plan: ListChecks,
   bypassPermissions: ShieldOff,
 };
 
@@ -33,7 +33,7 @@ function ModeSegments({ mode, onPick }: PermissionModeMenuProps) {
               "flex h-7 flex-1 cursor-pointer items-center justify-center rounded-md text-muted-foreground",
               "transition-colors hover:text-foreground aria-checked:bg-card aria-checked:text-foreground",
               "aria-checked:shadow-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-              isFullAccess(candidate) && "aria-checked:text-warning-foreground",
+              isFullAccess(candidate) && "text-warning-foreground",
             )}
             onClick={() => onPick(candidate)}
           >
@@ -67,13 +67,13 @@ export function PermissionModeMenu({ mode, onPick }: PermissionModeMenuProps) {
       >
         <Icon className="size-3.5" />
         {info.shortLabel}
-        <ChevronUp className="size-3" />
+        <ChevronDown className="size-3" />
       </button>
       {popup.isOpen && (
         <div
           role="dialog"
           aria-label="Permissions"
-          className={cn(MENU_POPUP, "absolute right-0 bottom-full mb-1.5 w-64 p-2")}
+          className={cn(MENU_POPUP, "absolute top-full right-0 mt-2 w-64 p-2")}
         >
           <ModeSegments mode={mode} onPick={onPick} />
           <p className={cn("px-0.5 pt-2 text-sm font-medium", isFullAccess(mode) && "text-warning-foreground")}>
