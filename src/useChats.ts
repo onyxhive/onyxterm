@@ -127,9 +127,12 @@ export function useChats(input: ChatsInput) {
     }
   }
 
-  async function changeOptions(chatId: string, options: ChatOptions) {
+  async function changeOptions(chatId: string, update: Partial<ChatOptions>) {
+    const chat = chatsRef.current.find((candidate) => candidate.id === chatId);
+    if (!chat) return;
+    const { command, model, effort, permissionMode } = chat;
     try {
-      upsertChat(await api.updateChatOptions(chatId, options));
+      upsertChat(await api.updateChatOptions(chatId, { command, model, effort, permissionMode, ...update }));
     } catch (error) {
       report(error);
     }

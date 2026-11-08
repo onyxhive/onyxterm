@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { AgentEvent, Capabilities } from "./agentEvents";
 import type { PermissionDecision } from "./components/ApprovalRow";
 import type { GitTarget } from "./gitApi";
+import type { PermissionMode } from "./permissionModes";
 import type { Chat, Project, Provider, TaskStatus, Workspace } from "./types";
 
 export interface ChatDraft {
@@ -10,6 +11,7 @@ export interface ChatDraft {
   command: string;
   model: string;
   effort: string;
+  permissionMode: PermissionMode;
   title: string;
 }
 
@@ -17,6 +19,7 @@ export interface ChatOptions {
   command: string;
   model: string;
   effort: string;
+  permissionMode: PermissionMode;
 }
 
 export type Settings = Record<string, string>;

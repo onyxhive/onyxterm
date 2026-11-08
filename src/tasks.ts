@@ -74,6 +74,7 @@ export function toTask(chat: Chat, feed: ChatFeed, now: number): Task {
     command: chat.command,
     model: chat.model,
     effort: chat.effort,
+    permissionMode: chat.permissionMode,
     elapsed: elapsedSince(chat.updatedAt, now),
     workingSince: feed.turnStartedAt ?? chat.updatedAt,
     feed: feed.items,

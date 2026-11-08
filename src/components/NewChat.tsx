@@ -2,22 +2,26 @@ import { useMemo, useState } from "react";
 import { Check, ChevronDown, Folder, FolderGit2, FolderOpen, FolderPlus, TriangleAlert } from "lucide-react";
 import { effortOptionsFor, modelChoices, pickOption } from "../agentChoices";
 import { CODEX_COMMAND, DEFAULT_EFFORT, DEFAULT_MODEL } from "../agentOptions";
+import type { PermissionMode } from "../permissionModes";
 import type { Project, Workspace } from "../types";
 import { suggestionSources, useCapabilities } from "../useCapabilities";
 import { useProjectFiles } from "../useProjectFiles";
 import { Composer, COMPOSER_PLACEHOLDER } from "./Composer";
 import { CONTROL_CLASS, EffortPicker, ModelPicker, type AgentChoice } from "./ComposerControls";
+import { PermissionModePicker } from "./PermissionModePicker";
 import { cn, MENU_ITEM, MENU_POPUP, MenuLabel, MenuSeparator, OUTLINE_BUTTON } from "./ui";
 import { usePopup } from "./usePopup";
 
 export interface ChatStart extends AgentChoice {
   text: string;
   projectId: string;
+  permissionMode: PermissionMode;
 }
 
 interface NewChatProps {
   workspace: Workspace;
   initialChoice: AgentChoice;
+  initialPermissionMode: PermissionMode;
   projectId: string | null;
   isWorktreeMode: boolean;
   onStart: (start: ChatStart) => void;
@@ -94,6 +98,7 @@ function ProjectPicker({ project, projects, onPick, onAddProject }: ProjectPicke
 export function NewChat(props: NewChatProps) {
   const { workspace, initialChoice, projectId, isWorktreeMode, onStart, onPickProject, onAddProject } = props;
   const [choice, setChoice] = useState<AgentChoice>(initialChoice);
+  const [permissionMode, setPermissionMode] = useState<PermissionMode>(props.initialPermissionMode);
 
   const project = workspace.projects.find((candidate) => candidate.id === projectId) ?? workspace.projects[0];
   const isCodex = choice.provider === "Codex";
@@ -114,7 +119,7 @@ export function NewChat(props: NewChatProps) {
 
   function start(text: string) {
     if (!project) return;
-    onStart({ ...resolvedChoice, text, projectId: project.id });
+    onStart({ ...resolvedChoice, text, projectId: project.id, permissionMode });
   }
 
   function sendBlockedReason(): string | undefined {
@@ -145,6 +150,7 @@ export function NewChat(props: NewChatProps) {
           onChange={(next) => setChoice({ ...choice, effort: next })}
         />
       )}
+      <PermissionModePicker mode={permissionMode} onChange={setPermissionMode} />
     </>
   );
 

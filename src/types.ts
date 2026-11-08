@@ -1,3 +1,5 @@
+import type { PermissionMode } from "./permissionModes";
+
 export type TaskStatus = "permission" | "question" | "review" | "running" | "failed" | "done";
 
 export type Provider = "Claude Code" | "Codex";
@@ -24,6 +26,7 @@ export interface Chat {
   command: string;
   model: string;
   effort: string;
+  permissionMode: PermissionMode;
   sessionId: string;
   title: string;
   state: TaskStatus;
@@ -101,6 +104,7 @@ export interface Task {
   command: string;
   model: string;
   effort: string;
+  permissionMode: PermissionMode;
   elapsed: string;
   workingSince: number;
   feed: FeedItem[];

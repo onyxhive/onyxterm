@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { effortOptionsFor, modelChoices } from "../agentChoices";
 import { CODEX_COMMAND } from "../agentOptions";
+import type { PermissionMode } from "../permissionModes";
 import type { FeedItem, Subagent, Task, TaskStatus } from "../types";
 import { suggestionSources, useCapabilities } from "../useCapabilities";
 import { useSubagents } from "../useGit";
@@ -9,6 +10,7 @@ import { ChangedFilesCard } from "./ChangesPanel";
 import { Composer, COMPOSER_PLACEHOLDER, QUESTION_PLACEHOLDER } from "./Composer";
 import { ChatWorkspaceControls, EffortPicker, ModelPicker, type AgentChoice } from "./ComposerControls";
 import { FeedItemView, type FeedActions } from "./FeedItemView";
+import { PERMISSION_MODE_LOCKED, PermissionModePicker } from "./PermissionModePicker";
 import { QuestionDrawer, useQuestionAnswers, type QuestionRequest } from "./QuestionDrawer";
 import { useDockHeight } from "./useDockHeight";
 import { WorkingRow } from "./WorkingRow";
@@ -19,6 +21,7 @@ export interface ChatActions extends FeedActions {
   onStop: () => void;
   onOpenChanges: () => void;
   onChangeChoice: (choice: AgentChoice) => void;
+  onChangePermissionMode: (mode: PermissionMode) => void;
 }
 
 const ACTIVE_TURN_STATUSES: TaskStatus[] = ["running", "permission", "question"];
@@ -116,6 +119,12 @@ export function ChatView({ task, actions }: ChatViewProps) {
           onChange={(effort) => actions.onChangeChoice({ ...choice, effort })}
         />
       )}
+      <PermissionModePicker
+        mode={task.permissionMode}
+        side="top"
+        disabledReason={choiceLockReason && PERMISSION_MODE_LOCKED}
+        onChange={actions.onChangePermissionMode}
+      />
       <ChatWorkspaceControls worktreePath={task.worktreePath} branch={task.branch} />
     </>
   );

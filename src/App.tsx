@@ -11,6 +11,7 @@ import { prAuthorFilterFrom, PullRequestsPage } from "./components/PullRequestsP
 import { SettingsPage } from "./components/SettingsPage";
 import { Sidebar, type SidebarActions } from "./components/Sidebar";
 import { TerminalDrawer } from "./components/TerminalDrawer";
+import { defaultPermissionModeOf } from "./permissionModes";
 import { openTerminal } from "./terminalSessions";
 import { SidebarToggle, TopBar, TopBarHeading, type View } from "./components/TitleBar";
 import { ThreadDetails, type ThreadDetailsActions } from "./components/ThreadDetails";
@@ -212,6 +213,8 @@ export default function App() {
     onStop: () => withSelectedChat(chatState.stop),
     onChangeChoice: ({ command, model, effort }) =>
       withSelectedChat((chatId) => chatState.changeOptions(chatId, { command, model, effort })),
+    onChangePermissionMode: (permissionMode) =>
+      withSelectedChat((chatId) => chatState.changeOptions(chatId, { permissionMode })),
     onOpenChanges: () => {
       setDiffScope(LATEST_TURN_SCOPE);
       closeFilesPanel();
@@ -323,6 +326,7 @@ export default function App() {
           key={workspace.id}
           workspace={workspace}
           initialChoice={rememberedChoice(settings[CHOICE_SETTING])}
+          initialPermissionMode={defaultPermissionModeOf(settings)}
           projectId={lastProjectId ?? null}
           isWorktreeMode={settings[WORK_IN_WORKTREES_SETTING] === "true"}
           onStart={start}

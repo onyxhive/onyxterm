@@ -75,7 +75,7 @@ export function EffortGlyph({ levels, current }: { levels: string[]; current: st
 
 export type PopupSide = "top" | "bottom";
 
-const POPUP_SIDE_CLASS: Record<PopupSide, string> = {
+export const POPUP_SIDE_CLASS: Record<PopupSide, string> = {
   top: "bottom-full mb-2",
   bottom: "top-full mt-2",
 };
