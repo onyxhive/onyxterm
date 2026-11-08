@@ -1,56 +1,96 @@
-import { CheckCheck, PanelRight, RotateCcw, SquareTerminal } from "lucide-react";
-import type { Task } from "../types";
-import { TitleBarHeading } from "./TitleBar";
+import { CheckCheck, Folder, PanelRight, RotateCcw, SquareTerminal } from "lucide-react";
+import type { Project, Task } from "../types";
+import { StatusLabel } from "./StatusBadge";
+import { cn, ICON_BUTTON } from "./ui";
 
 const RAW_TERMINAL_COMING = "Raw terminal coming later";
+const HIDDEN_HEADER_STATUSES = new Set(["done"]);
 
 export interface ChatHeaderActions {
   onMarkDone: () => void;
   onReopen: () => void;
-  onToggleWorkPanel: () => void;
+  onToggleChangesPanel: () => void;
+  onNewChatInProject: () => void;
 }
 
 interface ChatHeaderProps {
   task: Task;
-  isWorkPanelOpen: boolean;
+  project: Project | undefined;
+  isChangesPanelOpen: boolean;
   actions: ChatHeaderActions;
 }
 
-function DoneToggle({ task, actions }: Omit<ChatHeaderProps, "isWorkPanelOpen">) {
+function DoneToggle({ task, actions }: Pick<ChatHeaderProps, "task" | "actions">) {
   if (task.status === "done") {
     return (
-      <button type="button" className="icon-button" aria-label="Reopen" title="Reopen" onClick={actions.onReopen}>
-        <RotateCcw size={17} strokeWidth={1.75} />
+      <button type="button" className={ICON_BUTTON} aria-label="Reopen" title="Reopen" onClick={actions.onReopen}>
+        <RotateCcw />
       </button>
     );
   }
   return (
-    <button type="button" className="icon-button" aria-label="Mark done" title="Mark done" onClick={actions.onMarkDone}>
-      <CheckCheck size={18} strokeWidth={1.75} />
+    <button
+      type="button"
+      className={ICON_BUTTON}
+      aria-label="Mark done"
+      title="Mark done"
+      onClick={actions.onMarkDone}
+    >
+      <CheckCheck />
     </button>
   );
 }
 
-export function ChatHeader({ task, isWorkPanelOpen, actions }: ChatHeaderProps) {
+export function ChatHeader({ task, project, isChangesPanelOpen, actions }: ChatHeaderProps) {
   return (
     <>
-      <TitleBarHeading title={task.title} meta={task.model} />
-      <div className="titlebar__actions">
+      <nav aria-label="Chat breadcrumb" data-tauri-drag-region className="min-w-0 flex-1">
+        <ol className="m-0 flex min-w-0 list-none items-center gap-3 p-0 text-sm font-medium">
+          {project && (
+            <>
+              <li className="flex shrink-0 items-center">
+                <button
+                  type="button"
+                  title={`New chat in ${project.name}`}
+                  onClick={actions.onNewChatInProject}
+                  className={cn(
+                    "inline-flex max-w-40 min-w-0 cursor-pointer items-center gap-1.5 rounded-sm text-muted-foreground",
+                    "transition-colors hover:text-foreground",
+                  )}
+                >
+                  <Folder className="size-3.5 shrink-0" />
+                  <span className="truncate">{project.name}</span>
+                </button>
+              </li>
+              <li aria-hidden="true" className="shrink-0 text-icon-muted">
+                /
+              </li>
+            </>
+          )}
+          <li aria-current="page" className="flex min-w-0 items-center gap-3 text-foreground">
+            <h2 className="truncate" title={task.title}>
+              {task.title}
+            </h2>
+            {!HIDDEN_HEADER_STATUSES.has(task.status) && <StatusLabel status={task.status} />}
+          </li>
+        </ol>
+      </nav>
+      <div className="flex shrink-0 items-center gap-0.5">
         <DoneToggle task={task} actions={actions} />
         <span title={RAW_TERMINAL_COMING}>
-          <button type="button" className="icon-button" aria-label="Open raw terminal" disabled>
-            <SquareTerminal size={18} strokeWidth={1.75} />
+          <button type="button" className={ICON_BUTTON} aria-label="Open raw terminal" disabled>
+            <SquareTerminal />
           </button>
         </span>
         <button
           type="button"
-          className="icon-button"
-          aria-label="Toggle work panel"
-          title="Work panel"
-          aria-pressed={isWorkPanelOpen}
-          onClick={actions.onToggleWorkPanel}
+          className={ICON_BUTTON}
+          aria-label="Toggle changed files"
+          title="Changed files (⌘D)"
+          aria-pressed={isChangesPanelOpen}
+          onClick={actions.onToggleChangesPanel}
         >
-          <PanelRight size={18} strokeWidth={1.75} />
+          <PanelRight />
         </button>
       </div>
     </>
