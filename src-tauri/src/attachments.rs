@@ -7,6 +7,7 @@ use crate::error::{AppError, AppResult};
 
 const MAX_IMAGE_BYTES: usize = 5 * 1024 * 1024;
 const MAX_IMAGES_PER_MESSAGE: usize = 10;
+const MAX_MESSAGE_IMAGE_BYTES: usize = 20 * 1024 * 1024;
 const MAX_NAME_LENGTH: usize = 255;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -57,7 +58,7 @@ fn decoded_size(data_base64: &str) -> AppResult<usize> {
         .map_err(|_| AppError::Invalid("an attached image is not valid base64".into()))
 }
 
-fn validated_attachment(attachment: &Attachment) -> AppResult<()> {
+fn validated_size(attachment: &Attachment) -> AppResult<usize> {
     if attachment.name.as_ref().is_some_and(|name| name.chars().count() > MAX_NAME_LENGTH) {
         return Err(AppError::Invalid(format!("image names may hold at most {MAX_NAME_LENGTH} characters")));
     }
@@ -65,14 +66,18 @@ fn validated_attachment(attachment: &Attachment) -> AppResult<()> {
     if size == 0 || size > MAX_IMAGE_BYTES {
         return Err(AppError::Invalid("each attached image must be between 1 byte and 5 MB".into()));
     }
-    Ok(())
+    Ok(size)
 }
 
 pub fn validated(attachments: &[Attachment]) -> AppResult<()> {
     if attachments.len() > MAX_IMAGES_PER_MESSAGE {
         return Err(AppError::Invalid(format!("attach at most {MAX_IMAGES_PER_MESSAGE} images per message")));
     }
-    attachments.iter().try_for_each(validated_attachment)
+    let total = attachments.iter().map(validated_size).sum::<AppResult<usize>>()?;
+    if total > MAX_MESSAGE_IMAGE_BYTES {
+        return Err(AppError::Invalid("the images in one message may total at most 20 MB".into()));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -108,6 +113,13 @@ mod tests {
         assert!(validated(&vec![png("aGk="); MAX_IMAGES_PER_MESSAGE + 1]).is_err());
         let long_name = Attachment { name: Some("a".repeat(MAX_NAME_LENGTH + 1)), ..png("aGk=") };
         assert!(validated(&[long_name]).is_err());
+    }
+
+    #[test]
+    fn caps_the_decoded_total_of_one_message_at_twenty_megabytes() {
+        let full = png(&STANDARD.encode(vec![0u8; MAX_IMAGE_BYTES]));
+        assert!(validated(&vec![full.clone(); 4]).is_ok());
+        assert!(validated(&[vec![full; 4], vec![png("aGk=")]].concat()).is_err());
     }
 
     #[test]
