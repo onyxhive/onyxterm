@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::branches::ProjectBranches;
-use crate::chats::{self, AgentCommand, Chat, ChatState, Provider};
+use crate::chats::{self, AgentCommand, Chat, ChatOptions, ChatState, Provider};
 use crate::checkpoints;
 use crate::db::{Db, new_id};
 use crate::error::{AppError, AppResult};
@@ -33,6 +33,24 @@ const MAX_MESSAGE_LENGTH: usize = 200_000;
 const MAX_TITLE_DESCRIPTION_LENGTH: usize = 2_000;
 const DENY_MESSAGE: &str = "The user denied this tool use.";
 const CODEX_UNSUPPORTED: &str = "Codex support coming next";
+const TURN_IS_RUNNING: &str = "the agent is working; wait for this turn to finish or stop it before changing settings";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LiveChange {
+    Unchanged,
+    SwitchModel,
+    Respawn,
+}
+
+fn live_change(chat: &Chat, options: &ChatOptions) -> LiveChange {
+    if chat.command != options.command || chat.effort != options.effort {
+        return LiveChange::Respawn;
+    }
+    if chat.model != options.model {
+        return LiveChange::SwitchModel;
+    }
+    LiveChange::Unchanged
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -411,6 +429,53 @@ pub async fn send_message(
     Ok(())
 }
 
+async fn apply_live_change(app: &AppHandle, before: &Chat, updated: &Chat) -> AppResult<()> {
+    let runtime = app.state::<AgentRuntime>();
+    let Some(process) = runtime.process(&updated.id) else { return Ok(()) };
+    let options =
+        ChatOptions { command: updated.command, model: updated.model.clone(), effort: updated.effort.clone() };
+    match live_change(before, &options) {
+        LiveChange::Unchanged => Ok(()),
+        LiveChange::SwitchModel => process.write_line(&protocol::set_model_request(&new_id(), &updated.model)),
+        LiveChange::Respawn => {
+            runtime.forget(&updated.id, &process);
+            in_background(move || {
+                close_processes(vec![process]);
+                Ok(())
+            })
+            .await?;
+            let cwd = chats::chat_root(&app.state::<Db>().connection(), updated)?;
+            app.state::<AgentRuntime>().process_for(app, updated, &cwd)?;
+            Ok(())
+        }
+    }
+}
+
+fn is_turn_running(runtime: &AgentRuntime, chat: &Chat) -> bool {
+    let is_live_turn = runtime.process(&chat.id).is_some_and(|process| locked(&process.activity).is_turn_active);
+    chat.state.is_turn_active() || is_live_turn
+}
+
+#[tauri::command]
+pub async fn update_chat_options(
+    app: AppHandle,
+    db: State<'_, Db>,
+    runtime: State<'_, AgentRuntime>,
+    chat_id: String,
+    options: ChatOptions,
+) -> AppResult<Chat> {
+    crate::git::validated_id(&chat_id, "chat")?;
+    let before = chats::chat(&db.connection(), &chat_id)?;
+    if is_turn_running(&runtime, &before) {
+        return Err(AppError::Invalid(TURN_IS_RUNNING.into()));
+    }
+    chats::update_options(&db.connection(), &chat_id, &options)?;
+    let updated = chats::chat(&db.connection(), &chat_id)?;
+    apply_live_change(&app, &before, &updated).await?;
+    let _ = app.emit(CHAT_UPDATED, &updated);
+    Ok(updated)
+}
+
 #[tauri::command]
 pub fn interrupt_chat(runtime: State<'_, AgentRuntime>, chat_id: String) -> AppResult<()> {
     let process = runtime.running_process(&chat_id)?;
@@ -476,6 +541,55 @@ pub async fn discover_capabilities(
         locked(&runtime.capabilities).insert(key, capabilities.clone());
     }
     Ok(capabilities)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn chat_with(command: AgentCommand, model: &str, effort: &str) -> Chat {
+        Chat {
+            id: "c1".into(),
+            workspace_id: "w1".into(),
+            project_id: "p1".into(),
+            provider: Provider::Claude,
+            command,
+            model: model.into(),
+            effort: effort.into(),
+            session_id: "s1".into(),
+            title: "t".into(),
+            state: ChatState::Review,
+            created_at: 0,
+            updated_at: 0,
+            branch: None,
+            worktree_path: None,
+            is_worktree_removed: false,
+        }
+    }
+
+    fn options(command: AgentCommand, model: &str, effort: &str) -> ChatOptions {
+        ChatOptions { command, model: model.into(), effort: effort.into() }
+    }
+
+    #[test]
+    fn switches_models_live_but_respawns_for_effort_or_command_changes() {
+        let chat = chat_with(AgentCommand::Claude, "sonnet", "high");
+        assert_eq!(live_change(&chat, &options(AgentCommand::Claude, "sonnet", "high")), LiveChange::Unchanged);
+        assert_eq!(live_change(&chat, &options(AgentCommand::Claude, "opus", "high")), LiveChange::SwitchModel);
+        assert_eq!(live_change(&chat, &options(AgentCommand::Claude, "opus", "max")), LiveChange::Respawn);
+        assert_eq!(live_change(&chat, &options(AgentCommand::ClaudeLyxa, "sonnet", "high")), LiveChange::Respawn);
+    }
+
+    #[test]
+    fn treats_any_waiting_state_as_a_running_turn() {
+        let runtime = AgentRuntime::default();
+        let mut chat = chat_with(AgentCommand::Claude, "sonnet", "high");
+        assert!(!is_turn_running(&runtime, &chat));
+        for state in [ChatState::Running, ChatState::Permission, ChatState::Question] {
+            chat.state = state;
+            assert!(is_turn_running(&runtime, &chat));
+        }
+    }
 }
 
 #[cfg(test)]

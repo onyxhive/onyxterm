@@ -29,7 +29,7 @@ pub enum ChatState {
 }
 
 impl ChatState {
-    fn is_turn_active(self) -> bool {
+    pub fn is_turn_active(self) -> bool {
         matches!(self, ChatState::Running | ChatState::Permission | ChatState::Question)
     }
 
@@ -162,6 +162,14 @@ pub struct NewChat {
     pub title: String,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ChatOptions {
+    pub command: AgentCommand,
+    pub model: String,
+    pub effort: String,
+}
+
 const CHAT_COLUMNS: &str = "id, workspace_id, project_id, provider, command, model, effort, session_id, title, \
     state, created_at, updated_at, branch, worktree_path";
 
@@ -268,6 +276,23 @@ pub fn insert_chat(connection: &Connection, draft: NewChat, checkout: ChatChecko
         ],
     )?;
     Ok(created)
+}
+
+pub fn update_options(connection: &Connection, chat_id: &str, options: &ChatOptions) -> AppResult<()> {
+    if !is_option_value(&options.model) || !is_option_value(&options.effort) {
+        return Err(AppError::Invalid("model and effort may only hold letters, digits and -_.[]".into()));
+    }
+    if options.command == AgentCommand::Codex {
+        return Err(AppError::Invalid("a Claude Code chat cannot switch to codex".into()));
+    }
+    let changed = connection.execute(
+        "UPDATE chats SET command = ?2, model = ?3, effort = ?4 WHERE id = ?1",
+        params![chat_id, options.command.as_str(), options.model, options.effort],
+    )?;
+    if changed == 0 {
+        return Err(AppError::NotFound("chat"));
+    }
+    Ok(())
 }
 
 pub fn update_state(connection: &Connection, chat_id: &str, state: ChatState) -> AppResult<()> {
@@ -450,6 +475,22 @@ mod tests {
         let long = "a".repeat(MAX_TITLE_LENGTH + 50);
         update_title(&connection, &created.id, &long).unwrap();
         assert_eq!(chat(&connection, &created.id).unwrap().title.chars().count(), MAX_TITLE_LENGTH);
+    }
+
+    #[test]
+    fn changes_the_command_model_and_effort_of_a_chat() {
+        let db = Db::open_in_memory().unwrap();
+        let connection = db.connection();
+        let created = insert_chat(&connection, draft(project_id(&connection)), ChatCheckout::default()).unwrap();
+        let options = ChatOptions { command: AgentCommand::Claude, model: "opus".into(), effort: "max".into() };
+        update_options(&connection, &created.id, &options).unwrap();
+        let loaded = chat(&connection, &created.id).unwrap();
+        let saved = (loaded.command, loaded.model.as_str(), loaded.effort.as_str());
+        assert_eq!(saved, (AgentCommand::Claude, "opus", "max"));
+        let shell = ChatOptions { model: "opus; rm -rf /".into(), ..options.clone() };
+        assert!(update_options(&connection, &created.id, &shell).is_err());
+        let codex = ChatOptions { command: AgentCommand::Codex, ..options };
+        assert!(update_options(&connection, &created.id, &codex).is_err());
     }
 
     #[test]

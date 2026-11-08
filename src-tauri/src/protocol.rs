@@ -717,6 +717,11 @@ pub fn title_request(request_id: &str, description: &str) -> String {
     .to_string()
 }
 
+pub fn set_model_request(request_id: &str, model: &str) -> String {
+    json!({"type": "control_request", "request_id": request_id, "request": {"subtype": "set_model", "model": model}})
+        .to_string()
+}
+
 pub fn interrupt_request(request_id: &str) -> String {
     json!({"type": "control_request", "request_id": request_id, "request": {"subtype": "interrupt"}}).to_string()
 }
@@ -944,6 +949,14 @@ mod tests {
             })
             .collect();
         assert_eq!(titles, vec!["Nearby stores sorting in src/order.ts", "Store sort walkthrough"]);
+    }
+
+    #[test]
+    fn asks_the_live_session_to_switch_models() {
+        let request: Value = serde_json::from_str(&set_model_request("m1", "opus")).unwrap();
+        assert_eq!(request["type"], "control_request");
+        assert_eq!(request["request_id"], "m1");
+        assert_eq!(request["request"], json!({"subtype": "set_model", "model": "opus"}));
     }
 
     #[test]

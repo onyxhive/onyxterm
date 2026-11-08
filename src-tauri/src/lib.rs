@@ -68,6 +68,7 @@ pub fn run() {
             settings::set_setting,
             runtime::send_message,
             runtime::interrupt_chat,
+            runtime::update_chat_options,
             runtime::answer_permission,
             runtime::answer_question,
             runtime::discover_capabilities,
