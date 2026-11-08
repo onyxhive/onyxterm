@@ -7,6 +7,7 @@ import type { ImageAttachment, Project, Workspace } from "../types";
 import { suggestionSources, useCapabilities, useUltracodeAvailability } from "../useCapabilities";
 import { useProjectFiles } from "../useProjectFiles";
 import { Composer, COMPOSER_PLACEHOLDER } from "./Composer";
+import { OnyxMark } from "./OnyxMark";
 import { AgentPicker } from "./AgentPicker";
 import { CONTROL_CLASS, type AgentChoice } from "./ComposerControls";
 import { cn, MENU_ITEM, MENU_POPUP, MenuLabel, MenuSeparator, OUTLINE_BUTTON } from "./ui";
@@ -202,6 +203,7 @@ export function NewChat(props: NewChatProps) {
             </h1>
           ) : (
             <div className="flex flex-col items-center gap-4">
+              <OnyxMark className="size-12" />
               <h1 className="text-center text-3xl font-normal tracking-tight text-foreground">
                 Add a project to start
               </h1>

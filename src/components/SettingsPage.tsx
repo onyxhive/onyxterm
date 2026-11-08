@@ -39,6 +39,7 @@ import { useLoaded } from "../useLoaded";
 import { MERGE_METHOD_LABELS, MERGE_METHODS, useMergeMethod } from "../useMergeMethod";
 import { useEditors } from "../useProjectTools";
 import { EffortPicker, ModelPicker, type AgentChoice } from "./ComposerControls";
+import { OnyxMark } from "./OnyxMark";
 import { Segmented } from "./Segmented";
 import { type SelectOption, SettingsRow, SettingsSection, SettingsSelect, Switch } from "./settingsControls";
 import { cn, Kbd, TEXT_INPUT } from "./ui";
@@ -242,7 +243,8 @@ function VersionRow() {
   return (
     <SettingsRow
       title={
-        <span className="inline-flex items-baseline gap-2">
+        <span className="inline-flex items-center gap-2">
+          <OnyxMark className="size-4" />
           <span>Version</span>
           <code className="text-2xs font-medium text-muted-foreground">{version.data ?? "unknown"}</code>
         </span>
