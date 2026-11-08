@@ -70,7 +70,7 @@ export function suggestionSources(capabilities: Capabilities | null, files: stri
   const agents: Suggestion[] = (capabilities?.agents ?? []).map((agent) => ({
     kind: "agent",
     value: `@agent-${agent.name}`,
-    hint: "agent",
+    hint: "",
     description: agent.description,
   }));
   return { commands, mentions: [...agents, ...files.map(fileSuggestion)] };

@@ -91,12 +91,7 @@ function SuggestionsEmpty({ isMention }: { isMention: boolean }) {
 
 function AttachedDrawer({ children }: { children: ReactNode }) {
   return (
-    <div
-      className={cn(
-        "glass relative z-0 mx-[1.375rem] -mb-4 rounded-t-2xl border border-b-0 border-(--composer-outline) pb-4",
-        "shadow-composer",
-      )}
-    >
+    <div className="relative z-0 -mb-4 rounded-t-2xl border border-b-0 border-(--composer-outline) bg-popover pb-4">
       {children}
     </div>
   );
@@ -227,6 +222,7 @@ export function Composer(props: ComposerProps) {
     <SuggestionList
       id={listId}
       suggestions={suggestions}
+      query={trigger?.query ?? ""}
       activeIndex={highlighted}
       onPick={pick}
       onHighlight={setActiveIndex}

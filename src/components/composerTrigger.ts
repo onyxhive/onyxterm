@@ -13,6 +13,9 @@ export interface Trigger {
 }
 
 export const FOLDER_SUFFIX = "/";
+export const UNGROUPED_COMMANDS = "Commands";
+
+const NAMESPACE_SEPARATOR = ":";
 
 const WHITESPACE = /\s/;
 const MENTION_LIMIT = 8;
@@ -68,6 +71,25 @@ function byRank(left: RankedSuggestion, right: RankedSuggestion): number {
   return left.cost - right.cost;
 }
 
+export function commandGroupOf(suggestion: Suggestion): string {
+  const separator = suggestion.value.indexOf(NAMESPACE_SEPARATOR);
+  return separator === -1 ? UNGROUPED_COMMANDS : suggestion.value.slice(1, separator);
+}
+
+export function displayNameOf(suggestion: Suggestion): string {
+  if (suggestion.kind !== "command") return suggestion.value.slice(1);
+  return suggestion.value.slice(suggestion.value.indexOf(NAMESPACE_SEPARATOR) + 1).replace(/^\//, "");
+}
+
+function groupedByFirstAppearance(suggestions: Suggestion[]): Suggestion[] {
+  const groups = new Map<string, Suggestion[]>();
+  for (const suggestion of suggestions) {
+    const group = commandGroupOf(suggestion);
+    groups.set(group, [...(groups.get(group) ?? []), suggestion]);
+  }
+  return [...groups.values()].flat();
+}
+
 export function matchSuggestions(trigger: Trigger): Suggestion[] {
   const query = trigger.query.toLowerCase();
   const ranked: RankedSuggestion[] = [];
@@ -77,8 +99,36 @@ export function matchSuggestions(trigger: Trigger): Suggestion[] {
     const cost = matchCost(text, query);
     if (cost !== null) ranked.push({ suggestion, cost });
   }
-  return ranked
+  const matched = ranked
     .sort(byRank)
     .slice(0, trigger.limit)
     .map((entry) => entry.suggestion);
+  return matched[0]?.kind === "command" ? groupedByFirstAppearance(matched) : matched;
+}
+
+export function matchedCharacters(text: string, query: string): Set<number> {
+  const lowered = text.toLowerCase();
+  const needle = query.toLowerCase();
+  const position = lowered.indexOf(needle);
+  if (position !== -1) return new Set(Array.from(needle, (_, offset) => position + offset));
+  const matched = new Set<number>();
+  let next = 0;
+  for (const character of needle) {
+    const found = lowered.indexOf(character, next);
+    if (found === -1) return new Set();
+    matched.add(found);
+    next = found + 1;
+  }
+  return matched;
+}
+
+export function withoutLeadingParenthetical(text: string): string {
+  if (!text.startsWith("(")) return text;
+  let depth = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    if (text[index] === "(") depth += 1;
+    if (text[index] === ")") depth -= 1;
+    if (depth === 0) return text.slice(index + 1).trim();
+  }
+  return text;
 }
