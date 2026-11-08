@@ -13,9 +13,11 @@ function totalLines(work: Work, key: "added" | "removed"): number {
 export function WorkPanel({ work, project }: WorkPanelProps) {
   return (
     <aside className="work-panel" aria-label="Work">
-      <section className="work-panel__section">
-        <h2 className="work-panel__heading">{work.phase}</h2>
-      </section>
+      <header className="work-panel__header" title={project?.path}>
+        <FolderGit2 size={14} />
+        <span className="work-panel__project">{project?.name ?? "removed project"}</span>
+        <span className="work-panel__path">{project?.path}</span>
+      </header>
       <section className="work-panel__section">
         <h2 className="work-panel__heading">Running now</h2>
         {work.runningNow ? (
@@ -48,14 +50,6 @@ export function WorkPanel({ work, project }: WorkPanelProps) {
             </li>
           ))}
         </ul>
-      </section>
-      <section className="work-panel__section">
-        <h2 className="work-panel__heading">Project</h2>
-        <div className="branch">
-          <FolderGit2 size={13} />
-          <code title={project?.path}>{project?.name ?? "removed"}</code>
-        </div>
-        <p className="work-panel__empty">{project?.path}</p>
       </section>
     </aside>
   );

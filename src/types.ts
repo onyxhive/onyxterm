@@ -75,7 +75,6 @@ export interface ChangedFile {
 }
 
 export interface Work {
-  phase: string;
   runningNow: string;
   files: ChangedFile[];
 }

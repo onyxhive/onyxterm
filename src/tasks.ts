@@ -1,6 +1,5 @@
 import type { ChatFeed } from "./feed";
 import { runningActivity } from "./feed";
-import { STATUS_LABEL } from "./status";
 import type { Chat, Task } from "./types";
 
 const TITLE_LENGTH = 60;
@@ -40,6 +39,6 @@ export function toTask(chat: Chat, feed: ChatFeed, now: number): Task {
     elapsed: elapsedSince(chat.updatedAt, now),
     workingSince: feed.turnStartedAt ?? chat.updatedAt,
     feed: feed.items,
-    work: { phase: STATUS_LABEL[chat.state], runningNow: runningActivity(feed), files: Object.values(feed.files) },
+    work: { runningNow: runningActivity(feed), files: Object.values(feed.files) },
   };
 }
