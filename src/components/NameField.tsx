@@ -1,4 +1,5 @@
 import { useState, type KeyboardEvent } from "react";
+import { cn } from "./ui";
 
 interface NameFieldProps {
   initialValue: string;
@@ -26,7 +27,10 @@ export function NameField({ initialValue, label, onCommit, onCancel }: NameField
 
   return (
     <input
-      className="name-field"
+      className={cn(
+        "min-w-0 flex-1 rounded-sm bg-transparent text-sm font-medium text-foreground outline-none",
+        "ring-1 ring-ring/50 ring-inset focus:ring-ring",
+      )}
       autoFocus
       value={value}
       placeholder={label}
