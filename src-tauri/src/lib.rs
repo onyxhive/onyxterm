@@ -1,5 +1,6 @@
 mod branches;
 mod chats;
+mod checkpoints;
 mod db;
 mod error;
 mod git;
@@ -68,6 +69,8 @@ pub fn run() {
             git::git_diff,
             git::git_commit,
             git::git_push,
+            checkpoints::git_turn_diff,
+            checkpoints::git_checkpoint_turns,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

@@ -45,6 +45,12 @@ impl Git {
         Git { root: root.into(), environment: Vec::new() }
     }
 
+    pub fn with_env(&self, name: &'static str, value: impl Into<String>) -> Self {
+        let mut environment = self.environment.clone();
+        environment.push((name, value.into()));
+        Git { root: self.root.clone(), environment }
+    }
+
     fn command(&self, arguments: &[&str]) -> Command {
         let mut command = Command::new("git");
         command.arg("-C").arg(&self.root).args(["-c", "core.quotepath=false"]).args(arguments);
@@ -373,6 +379,10 @@ pub fn branches(git: &Git) -> AppResult<Branches> {
     Ok(parse_branches(&listing))
 }
 
+pub fn is_repository(git: &Git) -> bool {
+    git.succeeds(&["rev-parse", "--is-inside-work-tree"]).unwrap_or(false)
+}
+
 pub fn has_head(git: &Git) -> AppResult<bool> {
     git.succeeds(&["rev-parse", "--verify", "--quiet", "HEAD^{commit}"])
 }
@@ -596,14 +606,10 @@ pub mod testing {
     }
 
     pub fn identified(git: &Git) -> Git {
-        let mut identified = git.clone();
-        identified.environment.extend([
-            ("GIT_AUTHOR_NAME", "onyx".to_string()),
-            ("GIT_AUTHOR_EMAIL", "onyx@example.com".to_string()),
-            ("GIT_COMMITTER_NAME", "onyx".to_string()),
-            ("GIT_COMMITTER_EMAIL", "onyx@example.com".to_string()),
-        ]);
-        identified
+        git.with_env("GIT_AUTHOR_NAME", "onyx")
+            .with_env("GIT_AUTHOR_EMAIL", "onyx@example.com")
+            .with_env("GIT_COMMITTER_NAME", "onyx")
+            .with_env("GIT_COMMITTER_EMAIL", "onyx@example.com")
     }
 
     pub fn write(root: &Path, path: &str, text: &str) {
