@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Bot, Cpu, FolderGit2, FolderPlus, Gauge, TerminalSquare } from "lucide-react";
+import { FolderGit2, FolderPlus } from "lucide-react";
 import {
   CLAUDE_COMMANDS,
   CODEX_COMMAND,
@@ -88,14 +88,14 @@ export function NewChat({ workspace, initialChoice, initialProjectId, onStart, o
   const projectPicker = project ? (
     <PillSelect
       label="Project"
-      icon={<FolderGit2 size={13} />}
+      icon={<FolderGit2 size={15} strokeWidth={1.75} />}
       value={project.name}
       options={[...workspace.projects.map((candidate) => candidate.name), ADD_PROJECT]}
       onChange={chooseProject}
     />
   ) : (
     <button type="button" className="pill-select pill-select--action" onClick={onAddProject}>
-      <FolderPlus size={13} />
+      <FolderPlus size={15} strokeWidth={1.75} />
       {ADD_PROJECT}
     </button>
   );
@@ -105,21 +105,18 @@ export function NewChat({ workspace, initialChoice, initialProjectId, onStart, o
       {projectPicker}
       <PillSelect
         label="Provider"
-        icon={<Bot size={13} />}
         value={choice.provider}
         options={PROVIDERS}
         onChange={(value) => choose({ provider: value as Provider })}
       />
       <PillSelect
         label="Command"
-        icon={<TerminalSquare size={13} />}
         value={command}
         options={isCodex ? [CODEX_COMMAND] : CLAUDE_COMMANDS}
         onChange={(value) => choose({ command: value })}
       />
       <PillSelect
         label="Model"
-        icon={<Cpu size={13} />}
         value={model}
         options={modelOptions}
         onChange={(value) => choose({ model: value })}
@@ -127,7 +124,6 @@ export function NewChat({ workspace, initialChoice, initialProjectId, onStart, o
       {effortOptions.length > 0 && (
         <PillSelect
           label="Effort"
-          icon={<Gauge size={13} />}
           value={effort}
           options={effortOptions}
           onChange={(value) => choose({ effort: value })}
@@ -145,21 +141,18 @@ export function NewChat({ workspace, initialChoice, initialProjectId, onStart, o
   return (
     <div className="new-chat">
       <div className="new-chat__column">
-        <h1 className="new-chat__title">What should the agent work on?</h1>
-        <p className="new-chat__subtitle">
-          {project
-            ? `It runs in ${project.path}. You can follow it here or on the board.`
-            : "Add a project folder to start a chat in it."}
-        </p>
+        <h1 className="new-chat__title">What should we build?</h1>
+        {!project && <p className="new-chat__subtitle">Add a project folder to start a chat in it.</p>}
         {problem && <p className="new-chat__problem">{problem}</p>}
         <Composer
           variant="hero"
-          placeholder="Describe the change for the agent"
+          placeholder="Describe the change. Type / for commands, @ for files"
           suggestionSources={sources}
           onSubmit={start}
           toolbar={toolbar}
           sendBlockedReason={sendBlockedReason()}
         />
+        {project && <p className="new-chat__where">Runs in {project.path}</p>}
       </div>
     </div>
   );
