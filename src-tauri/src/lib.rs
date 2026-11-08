@@ -2,6 +2,8 @@ mod branches;
 mod chats;
 mod checkpoints;
 mod db;
+mod desktop;
+mod editors;
 mod error;
 mod git;
 mod process;
@@ -81,6 +83,10 @@ pub fn run() {
             prs::pr_create,
             prs::pr_merge,
             subagents::list_subagents,
+            desktop::machine_name,
+            desktop::reveal_project,
+            editors::list_editors,
+            editors::open_in_editor,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

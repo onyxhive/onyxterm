@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use rusqlite::params;
+use rusqlite::{Connection, params};
 use tauri::State;
 
 use crate::db::Db;
@@ -18,14 +18,18 @@ pub fn get_settings(db: State<'_, Db>) -> AppResult<HashMap<String, String>> {
     Ok(settings)
 }
 
-#[tauri::command]
-pub fn set_setting(db: State<'_, Db>, key: String, value: String) -> AppResult<()> {
+pub fn store_setting(connection: &Connection, key: &str, value: &str) -> AppResult<()> {
     if key.is_empty() || key.len() > MAX_KEY_LENGTH || value.len() > MAX_VALUE_LENGTH {
         return Err(AppError::Invalid("setting key or value is too long".into()));
     }
-    db.connection().execute(
+    connection.execute(
         "INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
         params![key, value],
     )?;
     Ok(())
+}
+
+#[tauri::command]
+pub fn set_setting(db: State<'_, Db>, key: String, value: String) -> AppResult<()> {
+    store_setting(&db.connection(), &key, &value)
 }
