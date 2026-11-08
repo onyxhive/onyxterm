@@ -8,9 +8,40 @@ const SECONDS_PER_MINUTE = 60;
 const MINUTES_PER_HOUR = 60;
 const HOURS_PER_DAY = 24;
 
-export function titleFrom(text: string): string {
-  const firstLine = text.split("\n")[0].trim();
-  return firstLine.length > TITLE_LENGTH ? `${firstLine.slice(0, TITLE_LENGTH)}…` : firstLine;
+const SENTENCE_END = /(?<=[.!?])\s/;
+const WHITESPACE = /\s+/;
+
+function wordsOf(text: string): string[] {
+  return text.split(WHITESPACE).filter(Boolean);
+}
+
+function isReference(word: string): boolean {
+  return word.startsWith("@") || word.includes("/");
+}
+
+function capitalized(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function capped(text: string): string {
+  if (text.length <= TITLE_LENGTH) return text;
+  const cut = text.slice(0, TITLE_LENGTH);
+  const lastSpace = cut.lastIndexOf(" ");
+  return `${(lastSpace > 0 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`;
+}
+
+export function titleFrom(prompt: string): string {
+  const words = wordsOf(prompt);
+  const plain = words.filter((word) => !isReference(word)).join(" ");
+  const sentence = plain.split(SENTENCE_END)[0].trim();
+  return capped(sentence ? capitalized(sentence) : words.join(" "));
+}
+
+export function displayTitle(title: string): string {
+  const words = wordsOf(title);
+  const start = words.findIndex((word) => !isReference(word));
+  if (start <= 0) return title;
+  return capitalized(words.slice(start).join(" "));
 }
 
 export function clockTime(at: Date = new Date()): string {
@@ -29,7 +60,7 @@ export function elapsedSince(timestamp: number, now: number): string {
 export function toTask(chat: Chat, feed: ChatFeed, now: number): Task {
   return {
     id: chat.id,
-    title: chat.title,
+    title: displayTitle(chat.title),
     status: chat.state,
     projectId: chat.projectId,
     provider: chat.provider,
