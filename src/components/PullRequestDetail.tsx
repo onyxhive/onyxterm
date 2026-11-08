@@ -7,6 +7,7 @@ import {
   CircleDashed,
   CircleMinus,
   CircleX,
+  Copy,
   ExternalLink,
   TriangleAlert,
   type LucideIcon,
@@ -23,6 +24,7 @@ import { PR_STATE_PRESENTATION, prDisplayState, reviewDecisionLabel } from "./pr
 import { PullRequestChanges } from "./PullRequestChanges";
 import { Segmented } from "./Segmented";
 import { cn, GHOST_BUTTON, MENU_ITEM, MENU_POPUP, MenuLabel, OUTLINE_BUTTON, PRIMARY_BUTTON } from "./ui";
+import { useCopyToClipboard } from "./useCopyToClipboard";
 import { usePopup } from "./usePopup";
 
 type DetailTab = "overview" | "changes" | "checks";
@@ -270,6 +272,16 @@ function MergeControl({ detail, projectId, onMerged }: MergeControlProps) {
   );
 }
 
+function CopyLinkButton({ url }: { url: string }) {
+  const clipboard = useCopyToClipboard();
+  return (
+    <button type="button" className={cn(OUTLINE_BUTTON, "min-w-28")} onClick={() => clipboard.copy(url)}>
+      {clipboard.isCopied ? <Check /> : <Copy />}
+      <span aria-live="polite">{clipboard.isCopied ? "Copied" : "Copy link"}</span>
+    </button>
+  );
+}
+
 function DetailHeader({ detail, projectId, onMerged }: MergeControlProps) {
   const presentation = PR_STATE_PRESENTATION[prDisplayState(detail.state, detail.isDraft)];
   const review = reviewDecisionLabel(detail.reviewDecision);
@@ -281,6 +293,7 @@ function DetailHeader({ detail, projectId, onMerged }: MergeControlProps) {
           {detail.title} <span className="font-normal text-muted-foreground tabular-nums">#{detail.number}</span>
         </h2>
         <div className="flex shrink-0 items-start gap-2">
+          <CopyLinkButton url={detail.url} />
           <button type="button" className={OUTLINE_BUTTON} onClick={() => void openUrl(detail.url)}>
             <ExternalLink />
             Open on GitHub

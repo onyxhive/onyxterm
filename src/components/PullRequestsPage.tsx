@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { Check, ChevronDown, Folder, GitPullRequest } from "lucide-react";
+import { Check, ChevronDown, Copy, Folder, GitPullRequest } from "lucide-react";
 import { ghProblemOf, prApi, PRS_UPDATED } from "../gitApi";
 import { elapsedSince } from "../tasks";
 import type { Project, PullRequest } from "../types";
@@ -11,6 +11,7 @@ import { checksPresentation, PR_STATE_PRESENTATION, prDisplayState, reviewDecisi
 import { PullRequestDetail } from "./PullRequestDetail";
 import { Segmented } from "./Segmented";
 import { cn, FOCUS_RING, MENU_ITEM, MENU_POPUP, MenuSeparator } from "./ui";
+import { useCopyToClipboard } from "./useCopyToClipboard";
 import { usePopup } from "./usePopup";
 
 type ListState = "open" | "merged" | "closed";
@@ -22,6 +23,15 @@ const STATE_OPTIONS = [
   { value: "merged" as const, label: "Merged" },
   { value: "closed" as const, label: "Closed" },
 ];
+
+const ROW_COPY_BUTTON = cn(
+  "absolute top-2 right-2 inline-flex h-6 min-w-6 cursor-pointer items-center justify-center gap-1 rounded-md px-1",
+  "text-2xs font-medium text-muted-foreground opacity-0 transition-opacity hover:bg-foreground/[0.08]",
+  "hover:text-foreground focus-visible:opacity-100 group-hover/pr:opacity-100 [&_svg]:size-3.5",
+  FOCUS_RING,
+);
+
+const ROW_COPIED = "text-success-foreground opacity-100";
 
 const REVIEW_TONE: Record<string, string> = {
   APPROVED: "text-success-foreground",
@@ -135,25 +145,47 @@ interface PullRequestRowProps {
   onSelect: () => void;
 }
 
+function RowCopyLink({ isCopied, onCopy }: { isCopied: boolean; onCopy: () => void }) {
+  const label = isCopied ? "Copied" : "Copy link";
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      onClick={onCopy}
+      className={cn(ROW_COPY_BUTTON, isCopied && ROW_COPIED)}
+    >
+      {isCopied ? <Check aria-hidden /> : <Copy aria-hidden />}
+      {isCopied && <span>Copied</span>}
+    </button>
+  );
+}
+
 function PullRequestRow({ pr, projectName, isSelected, onSelect }: PullRequestRowProps) {
   const presentation = PR_STATE_PRESENTATION[prDisplayState(pr.state, pr.isDraft)];
   const checks = checksPresentation(pr.checks);
   const review = reviewDecisionLabel(pr.reviewDecision);
+  const clipboard = useCopyToClipboard();
   return (
-    <li>
+    <li className="group/pr relative">
       <button
         type="button"
         aria-current={isSelected || undefined}
         onClick={onSelect}
         className={cn(
           "flex w-full min-w-0 cursor-pointer items-start gap-2.5 rounded-md px-2.5 py-2 text-left transition-colors",
-          isSelected ? "bg-accent" : "hover:bg-accent/60",
+          isSelected ? "bg-accent" : "group-hover/pr:bg-accent/60",
           FOCUS_RING,
         )}
       >
         <presentation.Icon aria-label={presentation.label} className={cn("mt-0.5 size-4", presentation.toneClass)} />
         <span className="min-w-0 flex-1">
-          <span className="flex min-w-0 items-center gap-1.5">
+          <span
+            className={cn(
+              "flex min-w-0 items-center gap-1.5",
+              clipboard.isCopied ? "pe-18" : "group-hover/pr:pe-7 group-has-focus-visible/pr:pe-7",
+            )}
+          >
             <span className="shrink-0 font-mono text-xs text-muted-foreground tabular-nums">#{pr.number}</span>
             <span className="min-w-0 truncate text-sm text-foreground">{pr.title}</span>
           </span>
@@ -176,6 +208,7 @@ function PullRequestRow({ pr, projectName, isSelected, onSelect }: PullRequestRo
           </span>
         </span>
       </button>
+      <RowCopyLink isCopied={clipboard.isCopied} onCopy={() => clipboard.copy(pr.url)} />
     </li>
   );
 }
