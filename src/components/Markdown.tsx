@@ -1,8 +1,10 @@
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { MarkdownCodeBlock } from "./MarkdownCodeBlock";
 import { cn } from "./ui";
 
 const REMARK_PLUGINS = [remarkGfm];
+const COMPONENTS: Components = { pre: MarkdownCodeBlock };
 
 interface MarkdownProps {
   source: string;
@@ -19,7 +21,9 @@ export function Markdown({ source, isStreaming = false, className }: MarkdownPro
         className,
       )}
     >
-      <ReactMarkdown remarkPlugins={REMARK_PLUGINS}>{source}</ReactMarkdown>
+      <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={COMPONENTS}>
+        {source}
+      </ReactMarkdown>
     </div>
   );
 }

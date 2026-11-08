@@ -438,6 +438,21 @@
   padding: 0;
 }
 
+.chat-markdown .chat-markdown-codeblock-header {
+  color: color-mix(in srgb, var(--foreground) 72%, transparent);
+}
+
+.chat-markdown .chat-markdown-codeblock pre {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.chat-markdown-line-breaks p {
+  white-space: pre-wrap;
+}
+
 .chat-markdown table {
   width: 100%;
   border-collapse: collapse;
