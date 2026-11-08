@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
-import { Asterisk, Box, Check, ChevronDown, Folder, FolderGit2, Gauge, GitBranch, SquareTerminal } from "lucide-react";
-import { CLAUDE_COMMANDS } from "../agentOptions";
 import type { Provider } from "../types";
+import { Check, ChevronDown, Folder, FolderGit2, Gauge, GitBranch, SquareTerminal } from "lucide-react";
+import { CLAUDE_COMMANDS } from "../agentOptions";
+import { ProviderLogo } from "./ProviderLogo";
 import { cn, MENU_ITEM, MENU_POPUP, MenuLabel } from "./ui";
 import { usePopup } from "./usePopup";
 
@@ -36,10 +37,6 @@ const STATIC_CONTROL_CLASS = cn(
   "inline-flex h-7 shrink-0 items-center gap-1.5 px-2 text-xs whitespace-nowrap text-muted-foreground/80",
   "[&_svg]:size-3.5 [&_svg]:shrink-0",
 );
-
-export function ProviderIcon({ provider }: { provider: Provider }) {
-  return provider === "Codex" ? <Box /> : <Asterisk className="text-(--provider-claude)" />;
-}
 
 export function EffortGlyph({ levels, current }: { levels: string[]; current: string }) {
   const ordinary = levels.filter((level) => !SPECIAL_EFFORTS.has(level));
@@ -86,6 +83,20 @@ function OptionCheck({ isSelected }: { isSelected: boolean }) {
   return <Check className={cn("ms-auto size-3.5", !isSelected && "invisible")} />;
 }
 
+const MODEL_ROW = cn(
+  "flex w-full shrink-0 cursor-pointer items-start gap-2 rounded-sm px-2 py-1.5 text-left text-sm text-foreground",
+  "outline-none hover:bg-accent focus-visible:bg-accent aria-checked:bg-foreground/[0.06]",
+);
+
+function GroupLabel({ provider, children }: { provider: Provider; children: ReactNode }) {
+  return (
+    <div className="flex h-7 items-center gap-1.5 px-2 text-xs font-medium text-muted-foreground">
+      <ProviderLogo provider={provider} size={14} />
+      {children}
+    </div>
+  );
+}
+
 export function ModelPicker({ choice, models, onChange }: ModelPickerProps) {
   const popup = usePopup();
   const selectedModel = models.find((model) => model.value === choice.model);
@@ -106,7 +117,7 @@ export function ModelPicker({ choice, models, onChange }: ModelPickerProps) {
         className={CONTROL_CLASS}
         onClick={popup.toggle}
       >
-        <ProviderIcon provider={choice.provider} />
+        <ProviderLogo provider={choice.provider} size={15} />
         <span className="max-w-40 truncate">{selectedModel?.label ?? choice.model}</span>
         <span className="font-normal text-muted-foreground">{commandName}</span>
         <ChevronDown className="-me-1 size-3.5" />
@@ -115,10 +126,13 @@ export function ModelPicker({ choice, models, onChange }: ModelPickerProps) {
         <div
           role="dialog"
           aria-label="Choose the agent and model"
-          className={cn(MENU_POPUP, "absolute top-full left-0 mt-2 flex w-[30rem] overflow-hidden p-0")}
+          className={cn(
+            MENU_POPUP,
+            "absolute top-full left-0 mt-2 grid w-[32rem] grid-cols-[12rem_minmax(0,1fr)] overflow-hidden p-0",
+          )}
         >
-          <div className="flex w-48 shrink-0 flex-col border-r border-border/70 bg-muted/40 p-1">
-            <MenuLabel>Claude Code</MenuLabel>
+          <div className="flex flex-col gap-px border-r border-border/70 bg-muted/40 p-1">
+            <GroupLabel provider="Claude Code">Claude Code</GroupLabel>
             {CLAUDE_COMMANDS.map((command) => {
               const isSelected = choice.provider === "Claude Code" && choice.command === command;
               return (
@@ -136,33 +150,37 @@ export function ModelPicker({ choice, models, onChange }: ModelPickerProps) {
                 </button>
               );
             })}
-            <MenuLabel>Codex</MenuLabel>
+            <GroupLabel provider="Codex">Codex</GroupLabel>
             <button type="button" role="menuitemradio" aria-checked={false} className={MENU_ITEM} disabled>
-              <Box />
+              <SquareTerminal />
               <span className="truncate">codex</span>
               <span className="ms-auto text-2xs text-muted-foreground">{CODEX_COMING}</span>
             </button>
           </div>
-          <div className="flex max-h-80 min-w-0 flex-1 flex-col overflow-y-auto p-1">
-            <MenuLabel>Model</MenuLabel>
-            {models.map((model) => (
-              <button
-                key={model.value}
-                type="button"
-                role="menuitemradio"
-                aria-checked={model.value === choice.model}
-                className={cn(MENU_ITEM, "items-start py-1.5")}
-                onClick={() => choose({ model: model.value })}
-              >
-                <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="truncate">{model.label}</span>
-                  {model.description && (
-                    <span className="text-xs text-pretty text-muted-foreground">{model.description}</span>
-                  )}
-                </span>
-                <OptionCheck isSelected={model.value === choice.model} />
-              </button>
-            ))}
+          <div className="flex min-w-0 flex-col p-1">
+            <div className="flex h-7 shrink-0 items-center px-2 text-xs font-medium text-muted-foreground">Model</div>
+            <div className="flex max-h-72 flex-col gap-px overflow-y-auto">
+              {models.map((model) => (
+                <button
+                  key={model.value}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={model.value === choice.model}
+                  className={MODEL_ROW}
+                  onClick={() => choose({ model: model.value })}
+                >
+                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span className="truncate leading-5">{model.label}</span>
+                    {model.description && (
+                      <span className="line-clamp-2 text-xs leading-4 text-muted-foreground">{model.description}</span>
+                    )}
+                  </span>
+                  <span className="flex h-5 shrink-0 items-center">
+                    <OptionCheck isSelected={model.value === choice.model} />
+                  </span>
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       )}

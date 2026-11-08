@@ -7,7 +7,8 @@ import { useSubagents } from "../useGit";
 import { useProjectFiles } from "../useProjectFiles";
 import { ChangedFilesCard } from "./ChangesPanel";
 import { Composer, COMPOSER_PLACEHOLDER, QUESTION_PLACEHOLDER } from "./Composer";
-import { ChatWorkspaceControls, ProviderIcon, StaticControl } from "./ComposerControls";
+import { ChatWorkspaceControls, StaticControl } from "./ComposerControls";
+import { ProviderLogo } from "./ProviderLogo";
 import { FeedItemView, type FeedActions } from "./FeedItemView";
 import { QuestionDrawer, useQuestionAnswers, type QuestionRequest } from "./QuestionDrawer";
 import { useDockHeight } from "./useDockHeight";
@@ -93,7 +94,7 @@ export function ChatView({ task, actions }: ChatViewProps) {
 
   const controls = (
     <>
-      <StaticControl icon={<ProviderIcon provider={task.provider} />} title="Model, fixed for this chat">
+      <StaticControl icon={<ProviderLogo provider={task.provider} size={14} />} title="Model, fixed for this chat">
         <span className="font-medium text-foreground/70">{modelLabel}</span>
       </StaticControl>
       {task.effort && (
