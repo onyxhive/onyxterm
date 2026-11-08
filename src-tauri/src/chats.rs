@@ -222,6 +222,16 @@ pub fn update_state(connection: &Connection, chat_id: &str, state: ChatState) ->
     Ok(())
 }
 
+pub fn settle_orphaned_turns(connection: &Connection) -> AppResult<()> {
+    connection.execute("UPDATE chats SET state = 'review' WHERE state IN ('running', 'permission', 'question')", [])?;
+    Ok(())
+}
+
+pub fn update_session_id(connection: &Connection, chat_id: &str, session_id: &str) -> AppResult<()> {
+    connection.execute("UPDATE chats SET session_id = ?2 WHERE id = ?1", params![chat_id, session_id])?;
+    Ok(())
+}
+
 #[tauri::command]
 pub fn list_chats(db: State<'_, Db>) -> AppResult<Vec<Chat>> {
     chats(&db.connection())

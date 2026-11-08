@@ -6,6 +6,7 @@ pub enum AppError {
     Io(std::io::Error),
     NotFound(&'static str),
     Invalid(String),
+    Agent(String),
 }
 
 impl std::fmt::Display for AppError {
@@ -15,6 +16,7 @@ impl std::fmt::Display for AppError {
             AppError::Io(error) => write!(formatter, "io error: {error}"),
             AppError::NotFound(what) => write!(formatter, "{what} not found"),
             AppError::Invalid(reason) => write!(formatter, "invalid input: {reason}"),
+            AppError::Agent(reason) => write!(formatter, "{reason}"),
         }
     }
 }
