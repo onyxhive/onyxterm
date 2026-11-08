@@ -56,19 +56,19 @@ impl PrState {
 
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "kebab-case")]
-pub enum PrAuthor {
+pub enum PrAuthorFilter {
     #[default]
     Everyone,
     Mine,
     ReviewRequested,
 }
 
-impl PrAuthor {
+impl PrAuthorFilter {
     fn filter(self) -> &'static [&'static str] {
         match self {
-            PrAuthor::Everyone => &[],
-            PrAuthor::Mine => &["--author", "@me"],
-            PrAuthor::ReviewRequested => &["--search", "review-requested:@me"],
+            PrAuthorFilter::Everyone => &[],
+            PrAuthorFilter::Mine => &["--author", "@me"],
+            PrAuthorFilter::ReviewRequested => &["--search", "review-requested:@me"],
         }
     }
 }
@@ -337,7 +337,7 @@ impl Gh {
         parsed(&self.checked(arguments, GH_LIMITS)?)
     }
 
-    fn list(&self, state: PrState, author: PrAuthor) -> AppResult<Vec<PullRequest>> {
+    fn list(&self, state: PrState, author: PrAuthorFilter) -> AppResult<Vec<PullRequest>> {
         let mut arguments = vec!["pr", "list", "--state", state.as_str(), "--limit", LIST_LIMIT, "--json", LIST_FIELDS];
         arguments.extend_from_slice(author.filter());
         self.json(&arguments)
@@ -416,7 +416,7 @@ fn locate_gh() -> Option<PathBuf> {
     COMMON_GH_PATHS.iter().map(PathBuf::from).find(|path| path.is_file()).or_else(gh_from_login_shell)
 }
 
-type ListKey = (String, PrState, PrAuthor);
+type ListKey = (String, PrState, PrAuthorFilter);
 type CachedList = (Instant, Vec<PullRequest>);
 
 #[derive(Default)]
@@ -472,14 +472,14 @@ impl GitHub {
 }
 
 fn everyones_prs(project_id: &str) -> ListKey {
-    (project_id.to_string(), PrState::All, PrAuthor::Everyone)
+    (project_id.to_string(), PrState::All, PrAuthorFilter::Everyone)
 }
 
 fn refresh_project(app: &AppHandle, project_id: &str) {
     let github = app.state::<GitHub>();
     let listed = project_root(&app.state::<Db>(), project_id)
         .and_then(|root| github.gh(&root))
-        .and_then(|gh| gh.list(PrState::All, PrAuthor::Everyone));
+        .and_then(|gh| gh.list(PrState::All, PrAuthorFilter::Everyone));
     let is_listed = listed.is_ok();
     github.remember_list(everyones_prs(project_id), listed.unwrap_or_default());
     locked(&github.refreshing).remove(project_id);
@@ -523,7 +523,7 @@ pub async fn pr_list(
     github: State<'_, GitHub>,
     project_id: String,
     state: Option<PrState>,
-    author: Option<PrAuthor>,
+    author: Option<PrAuthorFilter>,
 ) -> AppResult<Vec<PullRequest>> {
     let (state, author) = (state.unwrap_or(PrState::Open), author.unwrap_or_default());
     let root = project_root(&db, &project_id)?;
@@ -737,9 +737,9 @@ mod tests {
     fn lists_prs_by_me_awaiting_my_review_or_by_everyone() {
         let gh = fake_gh_listing_by_author();
         let numbers = |author| gh.list(PrState::Merged, author).unwrap().iter().map(|pr| pr.number).collect::<Vec<_>>();
-        assert_eq!(numbers(PrAuthor::Mine), vec![42, 41]);
-        assert_eq!(numbers(PrAuthor::ReviewRequested), vec![9]);
-        assert_eq!(numbers(PrAuthor::Everyone), Vec::<u64>::new());
+        assert_eq!(numbers(PrAuthorFilter::Mine), vec![42, 41]);
+        assert_eq!(numbers(PrAuthorFilter::ReviewRequested), vec![9]);
+        assert_eq!(numbers(PrAuthorFilter::Everyone), Vec::<u64>::new());
     }
 
     #[test]
@@ -749,8 +749,8 @@ mod tests {
         github.remember_list(everyones_prs("p1"), parsed(LIST).unwrap());
         let found = github.chat_pull_request("p1", "onyx/fix-the-sort").unwrap();
         assert_eq!((found.number, found.checks.failed), (42, 1));
-        assert!(github.fresh_list(&("p1".into(), PrState::Open, PrAuthor::Everyone)).is_none());
-        assert!(github.fresh_list(&("p1".into(), PrState::All, PrAuthor::Mine)).is_none());
+        assert!(github.fresh_list(&("p1".into(), PrState::Open, PrAuthorFilter::Everyone)).is_none());
+        assert!(github.fresh_list(&("p1".into(), PrState::All, PrAuthorFilter::Mine)).is_none());
         github.forget_project("p1");
         assert!(github.chat_pull_request("p1", "onyx/fix-the-sort").is_none());
     }
@@ -758,8 +758,11 @@ mod tests {
     #[test]
     fn rejects_bad_states_methods_and_drafts_at_the_boundary() {
         assert!(serde_json::from_str::<PrState>("\"draft\"").is_err());
-        assert!(serde_json::from_str::<PrAuthor>("\"someone-else\"").is_err());
-        assert_eq!(serde_json::from_str::<PrAuthor>("\"review-requested\"").unwrap(), PrAuthor::ReviewRequested);
+        assert!(serde_json::from_str::<PrAuthorFilter>("\"someone-else\"").is_err());
+        assert_eq!(
+            serde_json::from_str::<PrAuthorFilter>("\"review-requested\"").unwrap(),
+            PrAuthorFilter::ReviewRequested
+        );
         assert!(serde_json::from_str::<MergeMethod>("\"force\"").is_err());
         let extra = r#"{"title":"t","body":"","base":null,"draft":false,"reviewers":["x"]}"#;
         assert!(serde_json::from_str::<PullRequestDraft>(extra).is_err());
@@ -772,7 +775,7 @@ mod tests {
         let Ok(root) = std::env::var("ONYX_LIVE_REPO") else { return };
         let gh = GitHub::default().gh(Path::new(&root)).unwrap();
         for state in [PrState::Open, PrState::All] {
-            match gh.list(state, PrAuthor::Everyone) {
+            match gh.list(state, PrAuthorFilter::Everyone) {
                 Ok(listed) => {
                     eprintln!("{} prs: {}", state.as_str(), listed.len());
                     for pull_request in listed.iter().take(3) {
