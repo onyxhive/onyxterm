@@ -64,6 +64,11 @@
   transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
 }
 
+.icon-button:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
 .icon-button:hover,
 .icon-button[aria-pressed="true"] {
   background: var(--surface-hover);

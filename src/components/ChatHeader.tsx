@@ -3,6 +3,8 @@ import type { Task } from "../types";
 import { STATUS_LABEL } from "../status";
 import { StatusGlyph } from "./StatusGlyph";
 
+const RAW_TERMINAL_COMING = "Raw terminal coming later";
+
 interface ChatHeaderProps {
   task: Task;
   projectName: string;
@@ -40,9 +42,11 @@ export function ChatHeader({ task, projectName, isWorkPanelOpen, onMarkDone, onT
         >
           <PanelRight size={16} />
         </button>
-        <button type="button" className="icon-button" aria-label="Open raw terminal" title="Open raw terminal">
-          <SquareTerminal size={16} />
-        </button>
+        <span title={RAW_TERMINAL_COMING}>
+          <button type="button" className="icon-button" aria-label="Open raw terminal" disabled>
+            <SquareTerminal size={16} />
+          </button>
+        </span>
       </div>
     </header>
   );
