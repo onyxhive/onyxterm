@@ -7,7 +7,7 @@ export interface StatusGroup {
 }
 
 export const STATUS_GROUPS: StatusGroup[] = [
-  { id: "waiting", title: "Waiting for you", statuses: ["permission", "question", "review"] },
+  { id: "waiting", title: "Needs you", statuses: ["permission", "question", "review"] },
   { id: "running", title: "Running", statuses: ["running"] },
   { id: "failed", title: "Failed", statuses: ["failed"] },
   { id: "done", title: "Done", statuses: ["done"] },

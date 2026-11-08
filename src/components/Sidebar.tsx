@@ -46,13 +46,6 @@ interface SidebarProps {
   actions: SidebarActions;
 }
 
-const SECTION_TITLES: Record<string, string> = {
-  waiting: "Needs you",
-  running: "Running",
-  failed: "Failed",
-  done: "Done",
-};
-
 function matchesQuery(task: Task, query: string): boolean {
   return task.title.toLowerCase().includes(query.trim().toLowerCase());
 }
@@ -232,7 +225,7 @@ function StatusSection({ group, tasks, isExpanded, onToggle, row }: StatusSectio
   return (
     <li className="list-none">
       <SectionHeader
-        title={SECTION_TITLES[group.id]}
+        title={group.title}
         count={tasks.length}
         isExpanded={isExpanded}
         onToggle={onToggle}
