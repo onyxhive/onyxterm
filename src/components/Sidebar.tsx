@@ -6,8 +6,8 @@ import {
   CircleAlert,
   CircleCheck,
   CircleDashed,
-  Folder,
   FolderPlus,
+  GitBranch,
   MessageCircleQuestion,
   Plus,
   Search,
@@ -19,8 +19,10 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import type { Project, Task, TaskStatus, Workspace } from "../types";
-import { StatusDot } from "./StatusBadge";
+import type { CollapsedSections } from "../collapsedSections";
+import { STATUS_GROUPS, tasksInGroup, type StatusGroup } from "../status";
+import type { Task, TaskStatus, Workspace } from "../types";
+import type { ProjectBranches } from "../useProjectBranches";
 import { cn, FOCUS_RING, ICON_BUTTON } from "./ui";
 
 export interface SidebarActions {
@@ -35,6 +37,8 @@ export interface SidebarActions {
 interface SidebarProps {
   workspace: Workspace;
   tasks: Task[];
+  branches: ProjectBranches;
+  sections: CollapsedSections;
   selectedTaskId: string | null;
   isOpen: boolean;
   isBoardActive: boolean;
@@ -42,11 +46,12 @@ interface SidebarProps {
   actions: SidebarActions;
 }
 
-const FOLDER_ATTENTION_ORDER: TaskStatus[] = ["permission", "question", "failed", "running", "review"];
-
-function mostUrgentStatus(tasks: Task[]): TaskStatus | null {
-  return FOLDER_ATTENTION_ORDER.find((status) => tasks.some((task) => task.status === status)) ?? null;
-}
+const SECTION_TITLES: Record<string, string> = {
+  waiting: "Needs you",
+  running: "Running",
+  failed: "Failed",
+  done: "Done",
+};
 
 function matchesQuery(task: Task, query: string): boolean {
   return task.title.toLowerCase().includes(query.trim().toLowerCase());
@@ -74,14 +79,14 @@ const SIDEBAR_HEADER_ICON_BUTTON = cn(
 );
 
 const ROW_ACTION_CLASS = cn(
-  "pointer-events-none absolute inset-y-0 right-0 inline-flex cursor-pointer items-center rounded-md px-2",
+  "pointer-events-none absolute inset-y-0 right-0 inline-flex cursor-pointer items-center rounded-md px-1.5",
   "text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:pointer-events-auto",
   "focus-visible:opacity-100 group-hover/row:pointer-events-auto group-hover/row:opacity-100",
 );
 
 function RowStatusSlot({ task }: { task: Task }) {
   const status = ROW_STATUS[task.status];
-  if (!status) return <span className="text-xs">{task.elapsed}</span>;
+  if (!status) return null;
   const Icon = status.icon;
   return (
     <span className={cn("inline-flex items-center gap-1 text-xs font-medium", status.className)}>
@@ -107,17 +112,58 @@ function SettleButton({ task, actions }: { task: Task; actions: SidebarActions }
   );
 }
 
-function ThreadRow({ task, isActive, actions }: { task: Task; isActive: boolean; actions: SidebarActions }) {
+function MetaDot() {
+  return (
+    <span aria-hidden="true" className="shrink-0 text-muted-foreground/50">
+      ·
+    </span>
+  );
+}
+
+interface RowMetaProps {
+  projectName: string;
+  branch: string | null;
+  elapsed: string;
+}
+
+function RowMeta({ projectName, branch, elapsed }: RowMetaProps) {
+  return (
+    <span className="flex min-w-0 items-center gap-1 text-xs text-secondary-label">
+      <span className="max-w-1/2 shrink-0 truncate">{projectName}</span>
+      {branch && (
+        <>
+          <MetaDot />
+          <span className="flex min-w-0 items-center gap-1" title={branch}>
+            <GitBranch aria-hidden className="size-3 shrink-0" />
+            <span className="min-w-0 truncate">{branch}</span>
+          </span>
+        </>
+      )}
+      <MetaDot />
+      <span className="shrink-0 tabular-nums">{elapsed}</span>
+    </span>
+  );
+}
+
+interface ThreadRowProps {
+  task: Task;
+  projectName: string;
+  branch: string | null;
+  isActive: boolean;
+  actions: SidebarActions;
+}
+
+function ThreadRow({ task, projectName, branch, isActive, actions }: ThreadRowProps) {
   const isSettled = task.status === "done";
   return (
     <li className="group/row relative list-none">
       <button
         type="button"
         aria-current={isActive}
+        title={task.title}
         onClick={() => actions.onSelect(task.id)}
         className={cn(
-          "relative flex h-9 w-full cursor-pointer select-none items-center gap-2.5 rounded-md ps-9 pe-2.5",
-          "text-left",
+          "relative flex w-full cursor-pointer select-none flex-col gap-0.5 rounded-md px-2 py-1.5 text-left",
           FOCUS_RING,
           isActive
             ? "bg-sidebar-row-active text-sidebar-foreground ring-1 ring-sidebar-border/70 ring-inset dark:ring-0"
@@ -126,87 +172,72 @@ function ThreadRow({ task, isActive, actions }: { task: Task; isActive: boolean;
       >
         <span
           className={cn(
-            "min-w-0 flex-1 truncate text-sm",
+            "line-clamp-2 min-w-0 text-sm leading-5 [overflow-wrap:anywhere]",
             isSettled ? "font-normal text-foreground/75 group-hover/row:text-foreground" : "font-medium",
           )}
         >
-          {task.title}
-        </span>
-        <span className="ml-auto flex h-6 min-w-8 shrink-0 items-center justify-end">
-          <span className="inline-flex justify-end tabular-nums text-secondary-label group-hover/row:opacity-0">
+          <span className="float-right ms-2 flex h-5 items-center tabular-nums group-hover/row:opacity-0">
             <RowStatusSlot task={task} />
           </span>
+          {task.title}
         </span>
+        <RowMeta projectName={projectName} branch={branch} elapsed={task.elapsed} />
       </button>
-      <span className="absolute inset-y-0 right-2.5 flex items-center">
+      <span className="absolute top-1.5 right-2 flex h-5 items-center">
         <SettleButton task={task} actions={actions} />
       </span>
     </li>
   );
 }
 
-interface ProjectFolderProps {
-  project: Project;
-  tasks: Task[];
-  selectedTaskId: string | null;
-  isCollapsed: boolean;
+interface SectionHeaderProps {
+  title: string;
+  count: number;
+  isExpanded: boolean;
   onToggle: () => void;
-  actions: SidebarActions;
 }
 
-function ProjectFolder({ project, tasks, selectedTaskId, isCollapsed, onToggle, actions }: ProjectFolderProps) {
-  const attention = isCollapsed ? mostUrgentStatus(tasks) : null;
+function SectionHeader({ title, count, isExpanded, onToggle }: SectionHeaderProps) {
   return (
-    <li className="group/folder relative mt-2 list-none first:mt-0">
-      <button
-        type="button"
-        aria-expanded={!isCollapsed}
-        title={project.path}
-        onClick={onToggle}
-        className={cn(
-          "flex h-8 w-full cursor-pointer items-center gap-2.5 rounded-(--control-radius) px-2.5 text-left",
-          "hover:bg-sidebar-row-hover",
-          FOCUS_RING,
-        )}
-      >
-        <Folder className="size-4 shrink-0 text-sidebar-muted-foreground" />
-        <span className="min-w-0 flex-1 truncate text-sm font-medium text-sidebar-foreground/90">{project.name}</span>
-        {attention && <StatusDot status={attention} />}
-        {isCollapsed && tasks.length > 0 && (
-          <span className="shrink-0 text-xs tabular-nums text-sidebar-muted-foreground group-hover/folder:invisible">
-            {tasks.length}
-          </span>
-        )}
-        <ChevronDown
-          className={cn(
-            "size-3 shrink-0 text-sidebar-muted-foreground transition-transform",
-            isCollapsed && "-rotate-90",
-          )}
-        />
-      </button>
-      <span
-        className={cn(
-          "absolute top-0 right-6 flex h-8 items-center opacity-0 focus-within:opacity-100",
-          "group-hover/folder:opacity-100",
-        )}
-      >
-        <button
-          type="button"
-          className={cn(ICON_BUTTON, "size-6 [&_svg]:size-3.5")}
-          aria-label={`New chat in ${project.name}`}
-          title={`New chat in ${project.name}`}
-          onClick={() => actions.onNewChat(project.id)}
-        >
-          <SquarePen />
-        </button>
-      </span>
-      {!isCollapsed && tasks.length > 0 && (
-        <ul className="mt-px flex flex-col gap-px">
-          {tasks.map((task) => (
-            <ThreadRow key={task.id} task={task} isActive={task.id === selectedTaskId} actions={actions} />
-          ))}
-        </ul>
+    <button
+      type="button"
+      aria-expanded={isExpanded}
+      onClick={onToggle}
+      className={cn(
+        "flex h-8 w-full cursor-pointer items-center gap-2 rounded-md px-2 text-left text-xs font-medium",
+        "text-sidebar-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset",
+        "focus-visible:ring-ring/70",
       )}
+    >
+      <span className="min-w-0 truncate">{title}</span>
+      <span aria-hidden className="invisible h-px min-w-2 flex-1" />
+      <span className="font-normal tabular-nums">{count}</span>
+      <ChevronDown
+        aria-hidden
+        className={cn("size-3 shrink-0 transition-transform", !isExpanded && "-rotate-90")}
+      />
+    </button>
+  );
+}
+
+interface StatusSectionProps {
+  group: StatusGroup;
+  tasks: Task[];
+  isExpanded: boolean;
+  onToggle: () => void;
+  row: (task: Task) => ReactNode;
+}
+
+function StatusSection({ group, tasks, isExpanded, onToggle, row }: StatusSectionProps) {
+  return (
+    <li className="list-none">
+      <SectionHeader
+        title={SECTION_TITLES[group.id]}
+        count={tasks.length}
+        isExpanded={isExpanded}
+        onToggle={onToggle}
+      />
+      {isExpanded && <ul className="flex flex-col gap-px pb-1">{tasks.map(row)}</ul>}
     </li>
   );
 }
@@ -300,24 +331,30 @@ function EmptyProjects({ onAddProject }: { onAddProject: () => void }) {
 }
 
 export function Sidebar(props: SidebarProps) {
-  const { workspace, tasks, selectedTaskId, isOpen, isBoardActive, header, actions } = props;
-  const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(new Set());
+  const { workspace, tasks, branches, sections, selectedTaskId, isOpen, isBoardActive, header, actions } = props;
   const [query, setQuery] = useState("");
   const isSearching = query.trim().length > 0;
+  const visibleTasks = isSearching ? tasks.filter((task) => matchesQuery(task, query)) : tasks;
+  const sectionTasks = STATUS_GROUPS.map((group) => ({ group, tasks: tasksInGroup(visibleTasks, group) })).filter(
+    (section) => section.tasks.length > 0,
+  );
 
-  function toggleProject(projectId: string) {
-    const next = new Set(collapsedProjects);
-    if (next.has(projectId)) next.delete(projectId);
-    else next.add(projectId);
-    setCollapsedProjects(next);
+  function projectName(projectId: string): string {
+    return workspace.projects.find((project) => project.id === projectId)?.name ?? "Removed project";
   }
 
-  const folders = workspace.projects
-    .map((project) => ({
-      project,
-      tasks: tasks.filter((task) => task.projectId === project.id && (!isSearching || matchesQuery(task, query))),
-    }))
-    .filter((folder) => !isSearching || folder.tasks.length > 0);
+  function row(task: Task) {
+    return (
+      <ThreadRow
+        key={task.id}
+        task={task}
+        projectName={projectName(task.projectId)}
+        branch={branches[task.projectId] ?? null}
+        isActive={task.id === selectedTaskId}
+        actions={actions}
+      />
+    );
+  }
 
   return (
     <aside
@@ -367,21 +404,20 @@ export function Sidebar(props: SidebarProps) {
         </div>
         <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
           {workspace.projects.length === 0 && <EmptyProjects onAddProject={actions.onAddProject} />}
-          {isSearching && folders.length === 0 && (
+          {isSearching && sectionTasks.length === 0 && (
             <p role="status" className="px-2 py-6 text-center text-xs text-sidebar-muted-foreground">
               No chats found
             </p>
           )}
-          <ul className="flex flex-col">
-            {folders.map((folder) => (
-              <ProjectFolder
-                key={folder.project.id}
-                project={folder.project}
-                tasks={folder.tasks}
-                selectedTaskId={selectedTaskId}
-                isCollapsed={!isSearching && collapsedProjects.has(folder.project.id)}
-                onToggle={() => toggleProject(folder.project.id)}
-                actions={actions}
+          <ul className="flex flex-col gap-1">
+            {sectionTasks.map((section) => (
+              <StatusSection
+                key={section.group.id}
+                group={section.group}
+                tasks={section.tasks}
+                isExpanded={isSearching || !sections.isCollapsed(section.group.id)}
+                onToggle={() => sections.toggle(section.group.id)}
+                row={row}
               />
             ))}
           </ul>

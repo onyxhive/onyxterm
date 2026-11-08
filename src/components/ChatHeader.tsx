@@ -1,4 +1,4 @@
-import { CheckCheck, Folder, PanelRight, RotateCcw, SquareTerminal } from "lucide-react";
+import { CheckCheck, Folder, GitBranch, PanelRight, RotateCcw, SquareTerminal } from "lucide-react";
 import type { Project, Task } from "../types";
 import { StatusLabel } from "./StatusBadge";
 import { cn, ICON_BUTTON } from "./ui";
@@ -16,6 +16,7 @@ export interface ChatHeaderActions {
 interface ChatHeaderProps {
   task: Task;
   project: Project | undefined;
+  branch: string | null;
   isChangesPanelOpen: boolean;
   actions: ChatHeaderActions;
 }
@@ -41,7 +42,22 @@ function DoneToggle({ task, actions }: Pick<ChatHeaderProps, "task" | "actions">
   );
 }
 
-export function ChatHeader({ task, project, isChangesPanelOpen, actions }: ChatHeaderProps) {
+function BranchLabel({ branch }: { branch: string }) {
+  return (
+    <li
+      title={branch}
+      className="-ms-2 flex min-w-0 shrink items-center gap-1 text-xs font-normal text-muted-foreground/70"
+    >
+      <span aria-hidden="true" className="shrink-0 text-muted-foreground/50">
+        ·
+      </span>
+      <GitBranch aria-hidden className="size-3 shrink-0" />
+      <span className="max-w-40 min-w-0 truncate">{branch}</span>
+    </li>
+  );
+}
+
+export function ChatHeader({ task, project, branch, isChangesPanelOpen, actions }: ChatHeaderProps) {
   return (
     <>
       <nav aria-label="Chat breadcrumb" data-tauri-drag-region className="min-w-0 flex-1">
@@ -62,6 +78,7 @@ export function ChatHeader({ task, project, isChangesPanelOpen, actions }: ChatH
                   <span className="truncate">{project.name}</span>
                 </button>
               </li>
+              {branch && <BranchLabel branch={branch} />}
               <li aria-hidden="true" className="shrink-0 text-icon-muted">
                 /
               </li>

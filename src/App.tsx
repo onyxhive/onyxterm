@@ -12,9 +12,11 @@ import { Toasts } from "./components/Toasts";
 import { useIsFullscreen } from "./components/useIsFullscreen";
 import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher";
 import { EMPTY_FEED } from "./feed";
-import { toTask } from "./tasks";
+import { displayTitle, toTask } from "./tasks";
 import type { Chat, Provider, TaskStatus, Toast } from "./types";
+import { collapsedSectionsFrom } from "./collapsedSections";
 import { useChats } from "./useChats";
+import { useProjectBranches } from "./useProjectBranches";
 import { useSettings } from "./useSettings";
 import { useWorkspaces } from "./useWorkspaces";
 
@@ -30,6 +32,8 @@ const IS_MAC = navigator.platform.startsWith("Mac");
 const MAC_WINDOW_CONTROLS_INSET = { "--workspace-controls-left": "90px" } as CSSProperties;
 
 const ROOM_FOR_CHANGES_PANEL = "(min-width: 1181px)";
+
+const TURN_END_STATES = new Set<TaskStatus>(["review", "failed"]);
 
 const ATTENTION_HEADLINES: Partial<Record<TaskStatus, string>> = {
   permission: "needs your permission",
@@ -66,6 +70,9 @@ export default function App() {
   const { settings, remember } = useSettings();
   const workspaceState = useWorkspaces({ settings, remember, onError: showError });
   const { workspaces, workspace, actions: workspaceActions } = workspaceState;
+  const projects = workspaces.flatMap((candidate) => candidate.projects);
+  const { branches, refresh: refreshBranch } = useProjectBranches(projects.map((project) => project.id));
+  const sidebarSections = collapsedSectionsFrom(settings, remember);
   const selectedTaskIdRef = useRef(selectedTaskId);
   selectedTaskIdRef.current = selectedTaskId;
 
@@ -75,13 +82,18 @@ export default function App() {
     const toast: Toast = {
       id: `${chat.id}-${chat.state}`,
       taskId: chat.id,
-      headline: `${chat.title} ${headline}`,
+      headline: `${displayTitle(chat.title)} ${headline}`,
       detail: projectName(chat.projectId),
     };
     setToasts((current) => [...current.filter((candidate) => candidate.taskId !== chat.id), toast]);
   }
 
-  const chatState = useChats({ onError: showError, onStateChange: announce });
+  function onStateChange(chat: Chat) {
+    announce(chat);
+    if (TURN_END_STATES.has(chat.state)) refreshBranch(chat.projectId);
+  }
+
+  const chatState = useChats({ onError: showError, onStateChange });
   const { chats, feeds, startChat } = chatState;
 
   const now = Date.now();
@@ -89,7 +101,6 @@ export default function App() {
   const workspaceChatIds = new Set(chats.filter((chat) => chat.workspaceId === workspace?.id).map((chat) => chat.id));
   const workspaceTasks = tasks.filter((task) => workspaceChatIds.has(task.id));
   const selectedTask = workspaceTasks.find((task) => task.id === selectedTaskId) ?? null;
-  const projects = workspaces.flatMap((candidate) => candidate.projects);
 
   useEffect(() => {
     if (selectedTaskId) void chatState.loadHistory(selectedTaskId);
@@ -186,6 +197,7 @@ export default function App() {
       <ChatHeader
         task={selectedTask}
         project={projects.find((project) => project.id === selectedTask.projectId)}
+        branch={branches[selectedTask.projectId] ?? null}
         isChangesPanelOpen={isChangesPanelOpen}
         actions={chatHeaderActions}
       />
@@ -224,6 +236,8 @@ export default function App() {
       <Sidebar
         workspace={workspace}
         tasks={workspaceTasks}
+        branches={branches}
+        sections={sidebarSections}
         selectedTaskId={view === "chat" ? (selectedTask?.id ?? null) : null}
         isOpen={isSidebarOpen}
         isBoardActive={view === "board"}
