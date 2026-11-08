@@ -733,6 +733,19 @@ mod tests {
     }
 
     #[test]
+    fn switches_into_auto_live_without_a_restart() {
+        let chat = chat_with(AgentCommand::Claude, "sonnet", "high");
+        let auto = with_mode(options(AgentCommand::Claude, "sonnet", "high"), PermissionMode::Auto);
+        assert_eq!(
+            live_change(&chat, &auto),
+            LiveChange::Switch(vec![LiveSwitch::PermissionMode(PermissionMode::Auto)])
+        );
+        let request: serde_json::Value =
+            serde_json::from_str(&LiveSwitch::PermissionMode(PermissionMode::Auto).request("a1")).unwrap();
+        assert_eq!(request["request"], serde_json::json!({"subtype": "set_permission_mode", "mode": "auto"}));
+    }
+
+    #[test]
     fn sends_set_permission_mode_with_the_cli_mode_name() {
         let request: serde_json::Value =
             serde_json::from_str(&LiveSwitch::PermissionMode(PermissionMode::BypassPermissions).request("r1")).unwrap();

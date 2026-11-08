@@ -115,6 +115,7 @@ pub enum PermissionMode {
     #[default]
     Default,
     AcceptEdits,
+    Auto,
     Plan,
     BypassPermissions,
 }
@@ -124,6 +125,7 @@ impl PermissionMode {
         match self {
             PermissionMode::Default => "default",
             PermissionMode::AcceptEdits => "acceptEdits",
+            PermissionMode::Auto => "auto",
             PermissionMode::Plan => "plan",
             PermissionMode::BypassPermissions => "bypassPermissions",
         }
@@ -132,6 +134,7 @@ impl PermissionMode {
     fn parse(text: &str) -> PermissionMode {
         match text {
             "acceptEdits" => PermissionMode::AcceptEdits,
+            "auto" => PermissionMode::Auto,
             "plan" => PermissionMode::Plan,
             "bypassPermissions" => PermissionMode::BypassPermissions,
             _ => PermissionMode::Default,
@@ -555,12 +558,12 @@ mod tests {
     }
 
     #[test]
-    fn accepts_only_the_four_permission_modes_at_the_boundary() {
-        for mode in ["default", "acceptEdits", "plan", "bypassPermissions"] {
+    fn accepts_only_the_offered_permission_modes_at_the_boundary() {
+        for mode in ["default", "acceptEdits", "auto", "plan", "bypassPermissions"] {
             let parsed: PermissionMode = serde_json::from_value(mode.into()).unwrap();
             assert_eq!(parsed.as_str(), mode);
         }
-        for unknown in ["dontAsk", "auto", "manual", "BYPASS", "default; rm -rf /"] {
+        for unknown in ["dontAsk", "Auto", "manual", "BYPASS", "default; rm -rf /"] {
             assert!(serde_json::from_value::<PermissionMode>(unknown.into()).is_err(), "{unknown}");
         }
     }

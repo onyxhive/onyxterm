@@ -1080,12 +1080,14 @@ mod tests {
         parser.parse_line(r#"{"type":"system","subtype":"status","status":null,"permissionMode":"default"}"#);
         parser.parse_line(r#"{"type":"system","subtype":"init","session_id":"s1","permissionMode":"plan"}"#);
         parser.parse_line(r#"{"type":"system","subtype":"status","status":null,"permissionMode":"dontAsk"}"#);
+        parser.parse_line(r#"{"type":"system","subtype":"status","status":null,"permissionMode":"auto"}"#);
         parser.parse_line(r#"{"type":"system","subtype":"status","status":"compacting"}"#);
         assert_eq!(
             parser.take_control_notices(),
             vec![
                 ControlNotice::PermissionModeReported(PermissionMode::Default),
-                ControlNotice::PermissionModeReported(PermissionMode::Plan)
+                ControlNotice::PermissionModeReported(PermissionMode::Plan),
+                ControlNotice::PermissionModeReported(PermissionMode::Auto)
             ]
         );
         assert!(parser.take_control_notices().is_empty());

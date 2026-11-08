@@ -169,5 +169,7 @@ mod tests {
         };
         assert!(command_line(&resume).ends_with("stdio --permission-mode bypassPermissions --resume abc"));
         assert!(!command_line(&resume).contains("exec"));
+        let auto = Launch { permission_mode: PermissionMode::Auto, ..resume };
+        assert!(command_line(&auto).contains(" --permission-mode auto --resume abc"));
     }
 }

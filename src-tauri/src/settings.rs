@@ -27,7 +27,7 @@ const CHOICES: &[(&str, &[&str])] = &[
     ("inAppNotifications", TOGGLE_VALUES),
     (WORK_IN_WORKTREES_SETTING, TOGGLE_VALUES),
     (START_FROM_REMOTE_SETTING, TOGGLE_VALUES),
-    (PERMISSION_MODE_SETTING, &["default", "acceptEdits", "plan", "bypassPermissions"]),
+    (PERMISSION_MODE_SETTING, &["default", "acceptEdits", "auto", "plan", "bypassPermissions"]),
 ];
 
 #[tauri::command]
