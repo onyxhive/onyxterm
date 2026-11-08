@@ -185,6 +185,7 @@ function permissionItem(event: Extract<AgentEvent, { kind: "permissionRequested"
     target: summary.filePath ?? summary.detail,
     isShell: summary.verb === SHELL_VERB,
     reason: event.reason,
+    suggestions: event.suggestions ?? [],
     since: Date.now(),
   };
 }

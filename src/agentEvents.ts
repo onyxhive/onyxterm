@@ -1,4 +1,4 @@
-import type { ImageAttachment, Question } from "./types";
+import type { ImageAttachment, Question, RuleChoice } from "./types";
 
 export interface ToolSummary {
   verb: string;
@@ -26,6 +26,8 @@ export interface ModelOption {
   description: string;
   supportsEffort: boolean;
   supportedEffortLevels: string[];
+  supportsFastMode: boolean;
+  supportsAutoMode: boolean;
 }
 
 export interface Account {
@@ -39,6 +41,7 @@ export interface Capabilities {
   agents: AgentProfile[];
   models: ModelOption[];
   account: Account;
+  ultracodeAvailable: boolean;
 }
 
 export type AgentEvent =
@@ -48,7 +51,14 @@ export type AgentEvent =
   | { kind: "text"; messageId: string; text: string }
   | { kind: "toolStarted"; toolUseId: string; parentToolUseId: string | null; summary: ToolSummary }
   | { kind: "toolFinished"; toolUseId: string; isError: boolean }
-  | { kind: "permissionRequested"; requestId: string; toolUseId: string | null; summary: ToolSummary; reason: string }
+  | {
+      kind: "permissionRequested";
+      requestId: string;
+      toolUseId: string | null;
+      summary: ToolSummary;
+      reason: string;
+      suggestions: RuleChoice[];
+    }
   | { kind: "questionAsked"; requestId: string; questions: Question[] }
   | { kind: "permissionCancelled"; requestId: string }
   | { kind: "turnEnded"; isError: boolean; costUsd: number | null; message: string | null }

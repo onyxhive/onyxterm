@@ -21,7 +21,7 @@ import {
   type ChatFeed,
 } from "./feed";
 import { titleFrom } from "./tasks";
-import type { Chat, ImageAttachment, PermissionDecision, TaskStatus } from "./types";
+import type { Chat, ImageAttachment, PermissionDecision, RuleScope, TaskStatus } from "./types";
 
 export interface ChatsInput {
   onError: (message: string) => void;
@@ -94,9 +94,9 @@ export function useChats(input: ChatsInput) {
     }
   }
 
-  async function decide(chatId: string, requestId: string, decision: PermissionDecision) {
+  async function decide(chatId: string, requestId: string, decision: PermissionDecision, suggestion?: RuleScope) {
     try {
-      await api.answerPermission(chatId, requestId, decision);
+      await api.answerPermission(chatId, requestId, decision, suggestion);
       updateFeed(chatId, (feed) => withDecision(feed, requestId, decision));
     } catch (error) {
       report(error);
@@ -136,9 +136,10 @@ export function useChats(input: ChatsInput) {
   async function changeOptions(chatId: string, update: Partial<ChatOptions>) {
     const chat = chatsRef.current.find((candidate) => candidate.id === chatId);
     if (!chat) return;
-    const { command, model, effort, permissionMode } = chat;
+    const { command, model, effort, permissionMode, fastMode, ultracode } = chat;
+    const current = { command, model, effort, permissionMode, fastMode, ultracode };
     try {
-      upsertChat(await api.updateChatOptions(chatId, { command, model, effort, permissionMode, ...update }));
+      upsertChat(await api.updateChatOptions(chatId, { ...current, ...update }));
     } catch (error) {
       report(error);
     }

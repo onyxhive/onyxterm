@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ChevronDown, Eye, SquarePen, SquareTerminal, Wrench, type LucideIcon } from "lucide-react";
 import { elapsedSince } from "../tasks";
-import type { FeedItem, PermissionDecision } from "../types";
+import type { FeedItem, PermissionDecision, RuleChoice, RuleScope } from "../types";
 import { CopyButton } from "./CopyButton";
 import { useShortPaths } from "./projectPaths";
 import { cn, GHOST_BUTTON, INLINE_BUTTON, Kbd, MENU_ITEM, MENU_POPUP, PRIMARY_BUTTON } from "./ui";
@@ -12,12 +12,13 @@ type PermissionRequest = Extract<FeedItem, { kind: "permission" }>;
 interface ApprovalRowProps {
   request: PermissionRequest;
   isShortcutTarget: boolean;
-  onDecide: (requestId: string, decision: PermissionDecision) => void;
+  onDecide: (requestId: string, decision: PermissionDecision, suggestion?: RuleScope) => void;
 }
 
 interface MoreApprovalOptionsProps {
+  suggestions: RuleChoice[];
   hasShortcutHint: boolean;
-  onAlwaysAllow: () => void;
+  onAllowRule: (scope: RuleScope) => void;
 }
 
 const ACTION_ICONS: Record<string, LucideIcon> = {
@@ -61,8 +62,9 @@ function toolNameOf(action: string): string {
   return TOOL_NAMES[action] ?? capitalized(action);
 }
 
-function MoreApprovalOptions({ hasShortcutHint, onAlwaysAllow }: MoreApprovalOptionsProps) {
+function MoreApprovalOptions({ suggestions, hasShortcutHint, onAllowRule }: MoreApprovalOptionsProps) {
   const popup = usePopup<HTMLSpanElement>();
+  if (suggestions.length === 0) return null;
 
   return (
     <span ref={popup.rootRef} className="relative inline-flex">
@@ -79,10 +81,18 @@ function MoreApprovalOptions({ hasShortcutHint, onAlwaysAllow }: MoreApprovalOpt
       </button>
       {popup.isOpen && (
         <div role="menu" className={cn(MENU_POPUP, "absolute right-0 bottom-full mb-1 w-max")}>
-          <button type="button" role="menuitem" className={MENU_ITEM} onClick={onAlwaysAllow}>
-            <span className="min-w-0 flex-1 whitespace-normal">Always allow this session</span>
-            {hasShortcutHint && <Kbd>⌥⌘↵</Kbd>}
-          </button>
+          {suggestions.map((suggestion) => (
+            <button
+              key={suggestion.value}
+              type="button"
+              role="menuitem"
+              className={MENU_ITEM}
+              onClick={() => onAllowRule(suggestion.value)}
+            >
+              <span className="max-w-80 min-w-0 flex-1 whitespace-normal">{suggestion.label}</span>
+              {hasShortcutHint && suggestion.value === "session" && <Kbd>⌥⌘↵</Kbd>}
+            </button>
+          ))}
         </div>
       )}
     </span>
@@ -171,7 +181,11 @@ function DecisionButtons({ request, isShortcutTarget, onDecide }: ApprovalRowPro
   const decide = (decision: PermissionDecision) => () => onDecide(request.requestId, decision);
   return (
     <>
-      <MoreApprovalOptions hasShortcutHint={isShortcutTarget} onAlwaysAllow={decide("always")} />
+      <MoreApprovalOptions
+        suggestions={request.suggestions}
+        hasShortcutHint={isShortcutTarget}
+        onAllowRule={(scope) => onDecide(request.requestId, "always", scope)}
+      />
       <button type="button" className={cn(GHOST_BUTTON, "h-7 gap-2 px-2.5 text-xs")} onClick={decide("deny")}>
         Decline
         {isShortcutTarget && <Kbd className="h-4 text-3xs">esc</Kbd>}

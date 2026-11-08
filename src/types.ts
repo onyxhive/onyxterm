@@ -27,6 +27,8 @@ export interface Chat {
   model: string;
   effort: string;
   permissionMode: PermissionMode;
+  fastMode: boolean;
+  ultracode: boolean;
   sessionId: string;
   title: string;
   state: TaskStatus;
@@ -39,6 +41,13 @@ export interface Chat {
 }
 
 export type PermissionDecision = "once" | "always" | "deny";
+
+export type RuleScope = "session" | "localSettings";
+
+export interface RuleChoice {
+  label: string;
+  value: RuleScope;
+}
 
 export interface ImageAttachment {
   mediaType: string;
@@ -83,6 +92,7 @@ export type FeedItem =
       target: string;
       isShell: boolean;
       reason: string;
+      suggestions: RuleChoice[];
       since: number;
     }
   | { kind: "question"; requestId: string; questions: Question[]; since: number }
@@ -118,6 +128,8 @@ export interface Task {
   model: string;
   effort: string;
   permissionMode: PermissionMode;
+  fastMode: boolean;
+  ultracode: boolean;
   elapsed: string;
   workingSince: number;
   feed: FeedItem[];

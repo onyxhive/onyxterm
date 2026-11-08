@@ -3,7 +3,15 @@ import { effortOptionsFor, modelChoices } from "../agentChoices";
 import { CODEX_COMMAND } from "../agentOptions";
 import { mentionTargetsOf } from "../mentions";
 import type { PermissionMode } from "../permissionModes";
-import type { FeedItem, ImageAttachment, PermissionDecision, Subagent, Task, TaskStatus } from "../types";
+import type {
+  FeedItem,
+  ImageAttachment,
+  PermissionDecision,
+  RuleScope,
+  Subagent,
+  Task,
+  TaskStatus,
+} from "../types";
 import { suggestionSources, useCapabilities } from "../useCapabilities";
 import { useSubagents } from "../useGit";
 import { useProjectFiles } from "../useProjectFiles";
@@ -21,7 +29,7 @@ import { useDockHeight } from "./useDockHeight";
 import { WorkingRow } from "./WorkingRow";
 
 export interface ChatActions {
-  onDecide: (requestId: string, decision: PermissionDecision) => void;
+  onDecide: (requestId: string, decision: PermissionDecision, suggestion?: RuleScope) => void;
   onReply: (text: string, images: ImageAttachment[]) => void;
   onAnswer: (requestId: string, answers: Record<string, string>) => void;
   onStop: () => void;

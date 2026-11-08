@@ -2,7 +2,16 @@ import { invoke } from "@tauri-apps/api/core";
 import type { AgentEvent, Capabilities } from "./agentEvents";
 import type { GitTarget } from "./gitApi";
 import type { PermissionMode } from "./permissionModes";
-import type { Chat, ImageAttachment, PermissionDecision, Project, Provider, TaskStatus, Workspace } from "./types";
+import type {
+  Chat,
+  ImageAttachment,
+  PermissionDecision,
+  Project,
+  Provider,
+  RuleScope,
+  TaskStatus,
+  Workspace,
+} from "./types";
 
 export interface ChatDraft {
   projectId: string;
@@ -11,6 +20,8 @@ export interface ChatDraft {
   model: string;
   effort: string;
   permissionMode: PermissionMode;
+  fastMode?: boolean;
+  ultracode?: boolean;
   title: string;
 }
 
@@ -19,6 +30,8 @@ export interface ChatOptions {
   model: string;
   effort: string;
   permissionMode: PermissionMode;
+  fastMode: boolean;
+  ultracode: boolean;
 }
 
 export type Settings = Record<string, string>;
@@ -39,8 +52,8 @@ export const api = {
   interruptChat: (chatId: string) => invoke<void>("interrupt_chat", { chatId }),
   updateChatOptions: (chatId: string, options: ChatOptions) =>
     invoke<Chat>("update_chat_options", { chatId, options }),
-  answerPermission: (chatId: string, requestId: string, decision: PermissionDecision) =>
-    invoke<void>("answer_permission", { chatId, requestId, decision }),
+  answerPermission: (chatId: string, requestId: string, decision: PermissionDecision, suggestion?: RuleScope) =>
+    invoke<void>("answer_permission", { chatId, requestId, decision, suggestion }),
   answerQuestion: (chatId: string, requestId: string, answers: Record<string, string>) =>
     invoke<void>("answer_question", { chatId, requestId, answers }),
   loadChatHistory: (chatId: string) => invoke<AgentEvent[]>("load_chat_history", { chatId }),
