@@ -65,3 +65,9 @@ export interface ChatEventPayload {
 
 export const CHAT_EVENT = "chat-event";
 export const CHAT_UPDATED = "chat-updated";
+export const CHAT_OPTION_REJECTED = "chat-option-rejected";
+
+export interface OptionRejectedPayload {
+  chatId: string;
+  message: string;
+}

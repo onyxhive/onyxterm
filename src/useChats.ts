@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { CHAT_EVENT, CHAT_UPDATED, type ChatEventPayload } from "./agentEvents";
+import {
+  CHAT_EVENT,
+  CHAT_OPTION_REJECTED,
+  CHAT_UPDATED,
+  type ChatEventPayload,
+  type OptionRejectedPayload,
+} from "./agentEvents";
 import { api, type ChatOptions } from "./api";
 import type { ChatStart } from "./components/NewChat";
 import {
@@ -58,6 +64,7 @@ export function useChats(input: ChatsInput) {
         upsertChat(payload);
         if (previous !== payload.state) inputRef.current.onStateChange(payload, previous);
       }),
+      listen<OptionRejectedPayload>(CHAT_OPTION_REJECTED, ({ payload }) => report(payload.message)),
     ];
     return () => subscriptions.forEach((subscription) => subscription.then((unlisten) => unlisten()));
   }, []);
