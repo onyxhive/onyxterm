@@ -23,6 +23,8 @@ const DEFAULT_CHOICE: ChatChoice = {
   effort: DEFAULT_EFFORT,
 };
 
+const ROOM_FOR_WORK_PANEL = "(min-width: 1181px)";
+
 const ATTENTION_HEADLINES: Partial<Record<TaskStatus, string>> = {
   permission: "needs your permission",
   question: "asked you a question",
@@ -43,7 +45,7 @@ export default function App() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [view, setView] = useState<View>("chat");
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [isWorkPanelOpen, setIsWorkPanelOpen] = useState(true);
+  const [isWorkPanelOpen, setIsWorkPanelOpen] = useState(() => window.matchMedia(ROOM_FOR_WORK_PANEL).matches);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   function showError(message: string) {
