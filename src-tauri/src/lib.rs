@@ -2,11 +2,13 @@ mod branches;
 mod chats;
 mod db;
 mod error;
+mod git;
 mod process;
 mod project_files;
 mod protocol;
 mod runtime;
 mod settings;
+mod subprocess;
 mod transcripts;
 mod workspaces;
 
@@ -59,6 +61,13 @@ pub fn run() {
             transcripts::load_chat_history,
             project_files::list_project_files,
             branches::project_branch,
+            git::git_status,
+            git::git_branches,
+            git::git_checkout,
+            git::git_create_branch,
+            git::git_diff,
+            git::git_commit,
+            git::git_push,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

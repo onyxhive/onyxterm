@@ -7,6 +7,8 @@ pub enum AppError {
     NotFound(&'static str),
     Invalid(String),
     Agent(String),
+    Git(String),
+    TimedOut(&'static str),
 }
 
 impl std::fmt::Display for AppError {
@@ -17,6 +19,8 @@ impl std::fmt::Display for AppError {
             AppError::NotFound(what) => write!(formatter, "{what} not found"),
             AppError::Invalid(reason) => write!(formatter, "invalid input: {reason}"),
             AppError::Agent(reason) => write!(formatter, "{reason}"),
+            AppError::Git(reason) => write!(formatter, "git: {reason}"),
+            AppError::TimedOut(what) => write!(formatter, "{what} timed out"),
         }
     }
 }
