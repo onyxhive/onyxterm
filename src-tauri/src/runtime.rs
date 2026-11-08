@@ -481,6 +481,7 @@ fn discover(command: AgentCommand, cwd: &Path, model: &str) -> AppResult<Capabil
         permission_mode: PermissionMode::Default,
         is_fast_mode: false,
         is_ultracode: false,
+        project_permissions: None,
         session: SessionFlag::Discover,
         cwd,
     };
@@ -512,6 +513,14 @@ fn discover(command: AgentCommand, cwd: &Path, model: &str) -> AppResult<Capabil
     Ok(Capabilities { is_ultracode_available, ..capabilities })
 }
 
+fn worktree_permissions(app: &AppHandle, chat: &Chat, cwd: &Path) -> Option<serde_json::Value> {
+    let project_root = crate::git::project_root(&app.state::<Db>(), &chat.project_id).ok()?;
+    if project_root == cwd {
+        return None;
+    }
+    project_rules::launch_permissions(&project_root)
+}
+
 impl AgentRuntime {
     fn process(&self, chat_id: &str) -> Option<Arc<AgentProcess>> {
         locked(&self.processes).get(chat_id).cloned()
@@ -539,6 +548,7 @@ impl AgentRuntime {
             permission_mode: chat.permission_mode,
             is_fast_mode: chat.is_fast_mode,
             is_ultracode: chat.is_ultracode,
+            project_permissions: worktree_permissions(app, chat, cwd),
             session: session_flag(chat),
             cwd,
         };
@@ -995,6 +1005,7 @@ mod live_tests {
             permission_mode: PermissionMode::Default,
             is_fast_mode: false,
             is_ultracode: false,
+            project_permissions: None,
             session,
             cwd,
         };

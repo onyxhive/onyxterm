@@ -15,6 +15,7 @@ const PERMISSIONS_KEY: &str = "permissions";
 const DIRECTORIES_KEY: &str = "additionalDirectories";
 const RULE_BEHAVIORS: [&str; 3] = ["allow", "deny", "ask"];
 const DEFAULT_BEHAVIOR: &str = "allow";
+const LAUNCH_PERMISSION_KEYS: [&str; 4] = ["allow", "deny", "ask", DIRECTORIES_KEY];
 
 fn text<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
     value.get(key).and_then(Value::as_str)
@@ -111,6 +112,36 @@ pub fn save(project_root: &Path, updates: &[Value]) -> AppResult<()> {
     keep_out_of_git(project_root)
 }
 
+fn string_list(value: &Value) -> Vec<Value> {
+    value.as_array().into_iter().flatten().filter(|entry| entry.is_string()).cloned().collect()
+}
+
+fn launch_permissions_of(mut settings: Map<String, Value>) -> AppResult<Option<Value>> {
+    let permissions = match settings.remove(PERMISSIONS_KEY) {
+        None => return Ok(None),
+        Some(Value::Object(permissions)) => permissions,
+        Some(_) => return Err(AppError::Invalid(format!("\"{PERMISSIONS_KEY}\" is not an object"))),
+    };
+    let kept: Map<String, Value> = LAUNCH_PERMISSION_KEYS
+        .iter()
+        .filter_map(|key| Some((key.to_string(), string_list(permissions.get(*key)?))))
+        .filter(|(_, entries)| !entries.is_empty())
+        .map(|(key, entries)| (key, Value::Array(entries)))
+        .collect();
+    Ok((!kept.is_empty()).then_some(Value::Object(kept)))
+}
+
+pub fn launch_permissions(project_root: &Path) -> Option<Value> {
+    let path = project_root.join(LOCAL_SETTINGS_PATH);
+    match read_settings(&path).and_then(launch_permissions_of) {
+        Ok(permissions) => permissions,
+        Err(error) => {
+            eprintln!("skipping project rules in {}: {error}", path.display());
+            None
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -151,6 +182,24 @@ mod tests {
         fs::write(root.join(LOCAL_SETTINGS_PATH), "{ broken").unwrap();
         assert!(save(&root, &[bash_rule("ls:*")]).is_err());
         assert_eq!(fs::read_to_string(root.join(LOCAL_SETTINGS_PATH)).unwrap(), "{ broken");
+    }
+
+    #[test]
+    fn hands_launches_only_the_permission_lists_and_skips_bad_files() {
+        let root = scratch_folder();
+        assert_eq!(launch_permissions(&root), None);
+        fs::create_dir_all(root.join(SETTINGS_DIR)).unwrap();
+        let settings = json!({"model": "opus", "permissions": {"allow": ["Bash(ls:*)", 7], "deny": [],
+            "ask": ["WebFetch"], "defaultMode": "plan", "additionalDirectories": ["/tmp/shared"]}});
+        fs::write(root.join(LOCAL_SETTINGS_PATH), settings.to_string()).unwrap();
+        assert_eq!(
+            launch_permissions(&root),
+            Some(json!({"allow": ["Bash(ls:*)"], "ask": ["WebFetch"], "additionalDirectories": ["/tmp/shared"]}))
+        );
+        fs::write(root.join(LOCAL_SETTINGS_PATH), r#"{"permissions": ["Bash"]}"#).unwrap();
+        assert_eq!(launch_permissions(&root), None);
+        fs::write(root.join(LOCAL_SETTINGS_PATH), "{ broken").unwrap();
+        assert_eq!(launch_permissions(&root), None);
     }
 
     #[test]

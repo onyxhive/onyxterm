@@ -52,6 +52,7 @@ pub struct Launch<'a> {
     pub permission_mode: PermissionMode,
     pub is_fast_mode: bool,
     pub is_ultracode: bool,
+    pub project_permissions: Option<Value>,
     pub session: SessionFlag,
     pub cwd: &'a Path,
 }
@@ -72,6 +73,9 @@ fn flag_settings(launch: &Launch<'_>) -> Option<String> {
     }
     if launch.is_ultracode {
         settings.insert("ultracode".into(), Value::Bool(true));
+    }
+    if let Some(permissions) = &launch.project_permissions {
+        settings.insert("permissions".into(), permissions.clone());
     }
     (!settings.is_empty()).then(|| Value::Object(settings).to_string())
 }
@@ -170,6 +174,7 @@ mod tests {
             permission_mode: PermissionMode::AcceptEdits,
             is_fast_mode: false,
             is_ultracode: false,
+            project_permissions: None,
             session: SessionFlag::Start("abc".into()),
             cwd,
         };
@@ -186,6 +191,7 @@ mod tests {
             permission_mode: PermissionMode::BypassPermissions,
             is_fast_mode: false,
             is_ultracode: false,
+            project_permissions: None,
             session: SessionFlag::Resume("abc".into()),
             cwd,
         };
@@ -197,5 +203,10 @@ mod tests {
         assert!(command_line(&fast).ends_with(r#"auto --settings '{"fastMode":true}' --resume abc"#));
         let both = Launch { is_ultracode: true, ..fast };
         assert!(command_line(&both).contains(r#"--settings '{"fastMode":true,"ultracode":true}'"#));
+        let ruled = Launch { project_permissions: Some(serde_json::json!({"allow": ["Bash(ls:*)"]})), ..both };
+        assert!(
+            command_line(&ruled)
+                .contains(r#"--settings '{"fastMode":true,"permissions":{"allow":["Bash(ls:*)"]},"ultracode":true}'"#)
+        );
     }
 }
