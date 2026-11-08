@@ -128,12 +128,14 @@ export default function App() {
           onSelect={openTask}
           onNewChat={openNewChat}
         />
-        <main className="app__main">{renderMain()}</main>
+        <main className="app__main">
+          {renderMain()}
+          <Toasts toasts={toasts} tasks={tasks} onOpen={openToast} onDismiss={dismissToast} />
+        </main>
         {isWorkPanelVisible && (
           <WorkPanel work={selectedTask.work} projectName={projectName(selectedTask.projectId)} />
         )}
       </div>
-      <Toasts toasts={toasts} tasks={tasks} onOpen={openToast} onDismiss={dismissToast} />
     </div>
   );
 }

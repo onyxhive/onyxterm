@@ -3,6 +3,7 @@ import type { Task } from "../mock";
 import { ChatHeader } from "./ChatHeader";
 import { Composer } from "./Composer";
 import { FeedItemView, type FeedActions } from "./FeedItemView";
+import { useDockHeight } from "./useDockHeight";
 import { WorkingLine } from "./WorkingLine";
 
 export interface ChatActions extends FeedActions {
@@ -23,6 +24,8 @@ const PROVIDER_MARK = { "Claude Code": "C", Codex: "X" } as const;
 
 export function ChatView({ task, projectName, isWorkPanelOpen, actions }: ChatViewProps) {
   const feedRef = useRef<HTMLDivElement>(null);
+  const dockRef = useRef<HTMLDivElement>(null);
+  useDockHeight(dockRef);
 
   useEffect(() => {
     feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight });
@@ -44,7 +47,7 @@ export function ChatView({ task, projectName, isWorkPanelOpen, actions }: ChatVi
           ))}
         </div>
       </div>
-      <div className="chat__dock">
+      <div className="chat__dock" ref={dockRef}>
         <div className="chat__column">
           {task.status === "running" && (
             <WorkingLine
