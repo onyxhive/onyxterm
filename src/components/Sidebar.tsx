@@ -125,7 +125,7 @@ function RowMeta({ projectName, branch, pr, elapsed }: RowMetaProps) {
   return (
     <span className="flex min-w-0 items-center gap-1 text-xs text-secondary-label group-hover/row:pe-6">
       <span className="max-w-1/2 shrink-0 truncate">{projectName}</span>
-      {branch && (
+      {branch && !pr && (
         <>
           <MetaDot />
           <span className="flex min-w-0 items-center gap-1" title={branch}>
