@@ -1,0 +1,7 @@
+{"type":"queue-operation","operation":"enqueue","timestamp":"2026-11-08T16:12:40.097Z","sessionId":"6a1f0a3e-0000-4000-8000-000000000001"}
+{"parentUuid":"00000000-0000-4000-8000-000000000002","isSidechain":false,"promptId":"00000000-0000-4000-8000-000000000003","type":"user","message":{"role":"user","content":[{"type":"text","text":"@src/order.ts whats does this do? explain the sorting of nearby stores"}]},"uuid":"00000000-0000-4000-8000-000000000004","sessionId":"6a1f0a3e-0000-4000-8000-000000000001"}
+{"type":"ai-title","aiTitle":"Nearby stores sorting in src/order.ts","sessionId":"6a1f0a3e-0000-4000-8000-000000000001"}
+{"type":"last-prompt","lastPrompt":"@src/order.ts whats does this do? explain the sorting of nearby stores","leafUuid":"00000000-0000-4000-8000-000000000004","sessionId":"6a1f0a3e-0000-4000-8000-000000000001"}
+{"type":"ai-title","aiTitle":"Nearby stores sorting in src/order.ts","sessionId":"6a1f0a3e-0000-4000-8000-000000000001"}
+{"type":"control_response","response":{"subtype":"success","request_id":"title1","response":{"title":"Nearby stores sorting in src/order.ts"}}}
+{"type":"system","subtype":"session_title_changed","title":"Store sort walkthrough","uuid":"00000000-0000-4000-8000-000000000005","session_id":"6a1f0a3e-0000-4000-8000-000000000001"}

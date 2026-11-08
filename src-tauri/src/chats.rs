@@ -222,6 +222,24 @@ pub fn update_state(connection: &Connection, chat_id: &str, state: ChatState) ->
     Ok(())
 }
 
+fn cleaned_title(raw: &str) -> Option<String> {
+    let joined = raw
+        .split(|character: char| character.is_whitespace() || character.is_control())
+        .filter(|word| !word.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ");
+    let capped: String = joined.chars().take(MAX_TITLE_LENGTH).collect();
+    let trimmed = capped.trim_end();
+    if trimmed.is_empty() { None } else { Some(trimmed.to_string()) }
+}
+
+pub fn update_title(connection: &Connection, chat_id: &str, raw_title: &str) -> AppResult<bool> {
+    let title = cleaned_title(raw_title).ok_or_else(|| AppError::Invalid("title is empty".into()))?;
+    let changed =
+        connection.execute("UPDATE chats SET title = ?2 WHERE id = ?1 AND title <> ?2", params![chat_id, title])?;
+    Ok(changed > 0)
+}
+
 pub fn settle_orphaned_turns(connection: &Connection) -> AppResult<()> {
     connection.execute("UPDATE chats SET state = 'review' WHERE state IN ('running', 'permission', 'question')", [])?;
     Ok(())
@@ -296,6 +314,20 @@ mod tests {
         let connection = db.connection();
         let bad = NewChat { model: "opus; echo pwned".into(), ..draft(project_id(&connection)) };
         assert!(insert_chat(&connection, bad).is_err());
+    }
+
+    #[test]
+    fn stores_a_cleaned_capped_title_and_reports_real_changes_only() {
+        let db = Db::open_in_memory().unwrap();
+        let connection = db.connection();
+        let created = insert_chat(&connection, draft(project_id(&connection))).unwrap();
+        assert!(update_title(&connection, &created.id, "  Nearby\u{0}stores\n sorting  ").unwrap());
+        assert_eq!(chat(&connection, &created.id).unwrap().title, "Nearby stores sorting");
+        assert!(!update_title(&connection, &created.id, "Nearby stores sorting").unwrap());
+        assert!(update_title(&connection, &created.id, " \t ").is_err());
+        let long = "a".repeat(MAX_TITLE_LENGTH + 50);
+        update_title(&connection, &created.id, &long).unwrap();
+        assert_eq!(chat(&connection, &created.id).unwrap().title.chars().count(), MAX_TITLE_LENGTH);
     }
 
     #[test]

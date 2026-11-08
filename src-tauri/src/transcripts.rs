@@ -2,17 +2,58 @@ use std::collections::HashSet;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
-use tauri::State;
+use serde::Deserialize;
+use tauri::{AppHandle, State};
 
 use crate::chats;
 use crate::db::Db;
 use crate::error::AppResult;
 use crate::protocol::{AgentEvent, Source, StreamParser};
+use crate::runtime::rename_chat;
 
 const DEFAULT_CONFIG_DIR: &str = ".claude";
 const ALTERNATE_CONFIG_PREFIX: &str = ".claude-";
 const PROJECTS_DIR: &str = "projects";
 const TRANSCRIPT_EXTENSION: &str = "jsonl";
+const TITLE_LINE_MARKER: &str = "-title\"";
+
+#[derive(Deserialize)]
+#[serde(tag = "type", rename_all = "kebab-case")]
+enum TitleLine {
+    CustomTitle {
+        #[serde(rename = "customTitle")]
+        custom_title: String,
+    },
+    AiTitle {
+        #[serde(rename = "aiTitle")]
+        ai_title: String,
+    },
+    #[serde(other)]
+    Other,
+}
+
+#[derive(Default)]
+struct SessionTitles {
+    custom: Option<String>,
+    generated: Option<String>,
+}
+
+impl SessionTitles {
+    fn record(&mut self, line: &str) {
+        if !line.contains(TITLE_LINE_MARKER) {
+            return;
+        }
+        match serde_json::from_str::<TitleLine>(line) {
+            Ok(TitleLine::CustomTitle { custom_title }) => self.custom = Some(custom_title),
+            Ok(TitleLine::AiTitle { ai_title }) => self.generated = Some(ai_title),
+            _ => {}
+        }
+    }
+
+    fn preferred(self) -> Option<String> {
+        self.custom.filter(|title| !title.trim().is_empty()).or(self.generated)
+    }
+}
 
 fn config_dirs(home: &Path) -> Vec<PathBuf> {
     let alternates = std::fs::read_dir(home)
@@ -47,25 +88,39 @@ pub fn find(session_id: &str) -> Option<PathBuf> {
     find_in(&dirs::home_dir()?, session_id)
 }
 
-pub fn history(transcript: &Path) -> AppResult<Vec<AgentEvent>> {
-    let mut parser = StreamParser::new(Source::Transcript);
+fn for_each_line(transcript: &Path, mut on_line: impl FnMut(&str)) -> AppResult<()> {
     let mut reader = BufReader::new(std::fs::File::open(transcript)?);
     let mut buffer = Vec::new();
-    let mut events = Vec::new();
     while reader.read_until(b'\n', &mut buffer)? > 0 {
-        events.extend(parser.parse_line(String::from_utf8_lossy(&buffer).trim_end()));
+        on_line(String::from_utf8_lossy(&buffer).trim_end());
         buffer.clear();
     }
+    Ok(())
+}
+
+pub fn history(transcript: &Path) -> AppResult<Vec<AgentEvent>> {
+    let mut parser = StreamParser::new(Source::Transcript);
+    let mut events = Vec::new();
+    for_each_line(transcript, |line| events.extend(parser.parse_line(line)))?;
     Ok(events)
 }
 
+pub fn session_title(transcript: &Path) -> AppResult<Option<String>> {
+    let mut titles = SessionTitles::default();
+    for_each_line(transcript, |line| titles.record(line))?;
+    Ok(titles.preferred())
+}
+
 #[tauri::command]
-pub fn load_chat_history(db: State<'_, Db>, chat_id: String) -> AppResult<Vec<AgentEvent>> {
+pub fn load_chat_history(app: AppHandle, db: State<'_, Db>, chat_id: String) -> AppResult<Vec<AgentEvent>> {
     let session_id = chats::chat(&db.connection(), &chat_id)?.session_id;
-    match find(&session_id) {
-        Some(transcript) => history(&transcript),
-        None => Ok(Vec::new()),
+    let Some(transcript) = find(&session_id) else {
+        return Ok(Vec::new());
+    };
+    if let Some(title) = session_title(&transcript)? {
+        rename_chat(&app, &chat_id, &title);
     }
+    history(&transcript)
 }
 
 #[cfg(test)]
@@ -120,6 +175,35 @@ mod tests {
         assert_eq!(events[1], AgentEvent::Text { message_id: "m1".into(), text: "ok".into() });
         assert!(matches!(&events[2], AgentEvent::ToolStarted { tool_use_id, .. } if tool_use_id == "t1"));
         assert_eq!(events[3], AgentEvent::ToolFinished { tool_use_id: "t1".into(), is_error: false });
+    }
+
+    #[test]
+    fn takes_the_title_claude_generated_for_the_session() {
+        let home = scratch_home("ai-title");
+        let transcript = home.join("session.jsonl");
+        std::fs::write(&transcript, include_str!("fixtures/titles.jsonl")).unwrap();
+        assert_eq!(session_title(&transcript).unwrap().as_deref(), Some("Nearby stores sorting in src/order.ts"));
+    }
+
+    #[test]
+    fn prefers_a_custom_name_over_the_generated_title_until_it_is_cleared() {
+        let home = scratch_home("custom-title");
+        let transcript = home.join("session.jsonl");
+        let renamed = r#"{"type":"custom-title","customTitle":"Store sort walkthrough","sessionId":"s"}"#;
+        let later_ai = r#"{"type":"ai-title","aiTitle":"Something else","sessionId":"s"}"#;
+        std::fs::write(&transcript, [renamed, later_ai].join("\n")).unwrap();
+        assert_eq!(session_title(&transcript).unwrap().as_deref(), Some("Store sort walkthrough"));
+        let cleared = r#"{"type":"custom-title","customTitle":"","sessionId":"s"}"#;
+        std::fs::write(&transcript, [renamed, later_ai, cleared].join("\n")).unwrap();
+        assert_eq!(session_title(&transcript).unwrap().as_deref(), Some("Something else"));
+    }
+
+    #[test]
+    fn has_no_title_before_claude_writes_one() {
+        let home = scratch_home("untitled");
+        let transcript = home.join("session.jsonl");
+        std::fs::write(&transcript, r#"{"type":"user","message":{"role":"user","content":"hi"}}"#).unwrap();
+        assert_eq!(session_title(&transcript).unwrap(), None);
     }
 
     #[test]

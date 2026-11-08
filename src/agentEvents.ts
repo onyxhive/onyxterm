@@ -52,6 +52,7 @@ export type AgentEvent =
   | { kind: "permissionCancelled"; requestId: string }
   | { kind: "turnEnded"; isError: boolean; costUsd: number | null; message: string | null }
   | { kind: "initialized"; capabilities: Capabilities }
+  | { kind: "titleChanged"; title: string }
   | { kind: "processExited"; message: string };
 
 export interface ChatEventPayload {

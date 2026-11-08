@@ -27,6 +27,7 @@ const EXIT_WAIT: Duration = Duration::from_secs(5);
 const EXIT_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const STDERR_TAIL_LENGTH: usize = 2000;
 const MAX_MESSAGE_LENGTH: usize = 200_000;
+const MAX_TITLE_DESCRIPTION_LENGTH: usize = 2_000;
 const DENY_MESSAGE: &str = "The user denied this tool use.";
 const CODEX_UNSUPPORTED: &str = "Codex support coming next";
 
@@ -50,6 +51,7 @@ struct Activity {
     is_turn_active: bool,
     was_interrupted: bool,
     is_closing: bool,
+    has_requested_title: bool,
 }
 
 struct AgentProcess {
@@ -108,6 +110,17 @@ fn change_state(app: &AppHandle, chat_id: &str, state: ChatState) {
     }
 }
 
+pub fn rename_chat(app: &AppHandle, chat_id: &str, title: &str) {
+    let db = app.state::<Db>();
+    let connection = db.connection();
+    if !matches!(chats::update_title(&connection, chat_id, title), Ok(true)) {
+        return;
+    }
+    if let Ok(chat) = chats::chat(&connection, chat_id) {
+        let _ = app.emit(CHAT_UPDATED, chat);
+    }
+}
+
 fn remember_session(app: &AppHandle, chat_id: &str, session_id: &str) {
     let _ = chats::update_session_id(&app.state::<Db>().connection(), chat_id, session_id);
 }
@@ -123,6 +136,7 @@ fn apply_event(app: &AppHandle, chat_id: &str, process: &AgentProcess, event: &A
         AgentEvent::Session { session_id } => remember_session(app, chat_id, session_id),
         AgentEvent::PermissionRequested { .. } => change_state(app, chat_id, ChatState::Permission),
         AgentEvent::QuestionAsked { .. } => change_state(app, chat_id, ChatState::Question),
+        AgentEvent::TitleChanged { title } => rename_chat(app, chat_id, title),
         AgentEvent::PermissionCancelled { request_id } => {
             locked(&process.permissions).remove(request_id);
             change_state(app, chat_id, ChatState::Running);
@@ -220,6 +234,7 @@ fn spawn_process(launch: &Launch<'_>) -> AppResult<(Arc<AgentProcess>, ChildStdo
             is_turn_active: false,
             was_interrupted: false,
             is_closing: false,
+            has_requested_title: false,
         }),
         permissions: Mutex::new(HashMap::new()),
         stderr_tail,
@@ -348,12 +363,17 @@ pub async fn send_message(
         return Err(AppError::Agent(CODEX_UNSUPPORTED.into()));
     }
     let process = runtime.process_for(&app, &chat, Path::new(&cwd))?;
-    {
+    let is_first_message = {
         let mut activity = locked(&process.activity);
         activity.is_turn_active = true;
         activity.last_seen = Instant::now();
-    }
+        !std::mem::replace(&mut activity.has_requested_title, true)
+    };
     process.write_line(&protocol::user_message(&text))?;
+    if is_first_message {
+        let description: String = text.chars().take(MAX_TITLE_DESCRIPTION_LENGTH).collect();
+        process.write_line(&protocol::title_request(&new_id(), &description))?;
+    }
     resume_running(&app, &chat_id);
     Ok(())
 }

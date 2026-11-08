@@ -176,6 +176,7 @@ export function reduceFeed(feed: ChatFeed, event: AgentEvent): ChatFeed {
       ]);
     case "session":
     case "initialized":
+    case "titleChanged":
       return feed;
   }
 }

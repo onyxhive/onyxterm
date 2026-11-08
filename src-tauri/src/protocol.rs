@@ -6,6 +6,7 @@ use serde_json::{Value, json};
 const ASK_USER_QUESTION: &str = "AskUserQuestion";
 const DETAIL_LENGTH: usize = 160;
 const SESSION_DESTINATION: &str = "session";
+const TITLE_FIELD: &str = "title";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -109,6 +110,7 @@ pub enum AgentEvent {
     PermissionCancelled { request_id: String },
     TurnEnded { is_error: bool, cost_usd: Option<f64>, message: Option<String> },
     Initialized { capabilities: Capabilities },
+    TitleChanged { title: String },
     ProcessExited { message: String },
 }
 
@@ -140,6 +142,7 @@ struct SystemLine {
     #[serde(default)]
     subtype: String,
     session_id: Option<String>,
+    title: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -413,8 +416,9 @@ impl StreamParser {
     }
 
     fn system_events(system: SystemLine) -> Vec<AgentEvent> {
-        match (system.subtype.as_str(), system.session_id) {
-            ("init", Some(session_id)) => vec![AgentEvent::Session { session_id }],
+        match (system.subtype.as_str(), system.session_id, system.title) {
+            ("init", Some(session_id), _) => vec![AgentEvent::Session { session_id }],
+            ("session_title_changed", _, Some(title)) => vec![AgentEvent::TitleChanged { title }],
             _ => Vec::new(),
         }
     }
@@ -527,10 +531,13 @@ impl StreamParser {
     }
 
     fn control_response_events(response: ControlResponseLine) -> Vec<AgentEvent> {
-        response
-            .response
-            .response
-            .and_then(|payload| serde_json::from_value::<Capabilities>(payload).ok())
+        let Some(payload) = response.response.response else {
+            return Vec::new();
+        };
+        if let Some(title) = payload.get(TITLE_FIELD).and_then(Value::as_str) {
+            return vec![AgentEvent::TitleChanged { title: title.to_string() }];
+        }
+        serde_json::from_value::<Capabilities>(payload)
             .map(|capabilities| vec![AgentEvent::Initialized { capabilities }])
             .unwrap_or_default()
     }
@@ -538,6 +545,15 @@ impl StreamParser {
 
 pub fn initialize_request(request_id: &str) -> String {
     json!({"type": "control_request", "request_id": request_id, "request": {"subtype": "initialize"}}).to_string()
+}
+
+pub fn title_request(request_id: &str, description: &str) -> String {
+    json!({
+        "type": "control_request",
+        "request_id": request_id,
+        "request": {"subtype": "generate_session_title", "description": description, "persist": true},
+    })
+    .to_string()
 }
 
 pub fn interrupt_request(request_id: &str) -> String {
@@ -607,6 +623,7 @@ mod tests {
 
     const PROBE_ONE: &str = include_str!("fixtures/probe1.jsonl");
     const PROBE_TWO: &str = include_str!("fixtures/probe2.jsonl");
+    const TITLES: &str = include_str!("fixtures/titles.jsonl");
 
     fn parse_all(source: Source, capture: &str) -> (Vec<AgentEvent>, Vec<PermissionRequest>) {
         let mut parser = StreamParser::new(source);
@@ -737,6 +754,27 @@ mod tests {
         assert!(destinations.iter().all(|destination| *destination == "session"));
         let denied: Value = serde_json::from_str(&deny(&permissions[0], "no")).unwrap();
         assert_eq!(denied["response"]["response"]["behavior"], "deny");
+    }
+
+    #[test]
+    fn reads_generated_and_renamed_session_titles() {
+        let (events, _) = parse_all(Source::Live, TITLES);
+        let titles: Vec<_> = events
+            .iter()
+            .filter_map(|event| match event {
+                AgentEvent::TitleChanged { title } => Some(title.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(titles, vec!["Nearby stores sorting in src/order.ts", "Store sort walkthrough"]);
+    }
+
+    #[test]
+    fn asks_claude_to_generate_and_persist_a_title() {
+        let request: Value = serde_json::from_str(&title_request("t1", "fix the sort")).unwrap();
+        assert_eq!(request["request"]["subtype"], "generate_session_title");
+        assert_eq!(request["request"]["description"], "fix the sort");
+        assert_eq!(request["request"]["persist"], true);
     }
 
     #[test]
