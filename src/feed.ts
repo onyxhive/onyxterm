@@ -1,16 +1,16 @@
 import type { AgentEvent, ToolSummary } from "./agentEvents";
-import type { PermissionDecision } from "./components/ApprovalRow";
 import { clockTime } from "./tasks";
-import type { ChangedFile, FeedItem, Step } from "./types";
+import type { ChangedFile, FeedItem, PermissionDecision, Step } from "./types";
 
 export interface ChatFeed {
   items: FeedItem[];
   runningTools: Record<string, string>;
   files: Record<string, ChangedFile>;
   turnStartedAt: number | null;
+  decisions: Record<string, PermissionDecision>;
 }
 
-export const EMPTY_FEED: ChatFeed = { items: [], runningTools: {}, files: {}, turnStartedAt: null };
+export const EMPTY_FEED: ChatFeed = { items: [], runningTools: {}, files: {}, turnStartedAt: null, decisions: {} };
 
 const PRESENT_TENSE: Record<string, string> = {
   Ran: "run",
@@ -27,8 +27,8 @@ const PRESENT_TENSE: Record<string, string> = {
 
 const SHELL_VERB = "Ran";
 const FILE_CHANGE_VERBS = new Set(["Edited", "Wrote"]);
-const AGENT_REQUESTER = "the agent";
-const SUBAGENT_REQUESTER = "a subagent";
+const MAIN_AGENT_REQUESTER = "main agent";
+const GROUP_PASSTHROUGH_KINDS = new Set<FeedItem["kind"]>(["permission"]);
 
 type AgentItem = Extract<FeedItem, { kind: "agent" }>;
 type StepsItem = Extract<FeedItem, { kind: "steps" }>;
@@ -92,47 +92,80 @@ function withFile(files: Record<string, ChangedFile>, summary: ToolSummary): Rec
   };
 }
 
-function startTool(feed: ChatFeed, toolUseId: string, isNested: boolean, summary: ToolSummary): ChatFeed {
+function openGroupIndex(items: FeedItem[]): number {
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const { kind } = items[index];
+    if (kind === "steps") return index;
+    if (!GROUP_PASSTHROUGH_KINDS.has(kind)) return -1;
+  }
+  return -1;
+}
+
+function groupWith(group: StepsItem, step: Step): StepsItem {
+  const steps = [...group.steps, step];
+  return { ...group, steps, files: changedFileCount(steps) };
+}
+
+function withGroupedStep(items: FeedItem[], step: Step): FeedItem[] {
+  const at = openGroupIndex(items);
+  if (at === -1) return [...items, { kind: "steps", steps: [step], files: changedFileCount([step]), time: "" }];
+  return items.map((item, index) => (index === at && item.kind === "steps" ? groupWith(item, step) : item));
+}
+
+function withSubagentStep(items: FeedItem[], parentToolUseId: string, step: Step): FeedItem[] | null {
+  const isOwnedBySubagent = items.some((item) => item.kind === "subagent" && item.toolUseId === parentToolUseId);
+  if (!isOwnedBySubagent) return null;
+  return items.map((item) =>
+    item.kind === "subagent" && item.toolUseId === parentToolUseId ? { ...item, steps: [...item.steps, step] } : item,
+  );
+}
+
+function mapSteps(items: FeedItem[], change: (step: Step) => Step): FeedItem[] {
+  return items.map((item) => {
+    if (item.kind === "steps") return { ...item, steps: item.steps.map(change) };
+    if (item.kind === "subagent") return { ...item, steps: item.steps.map(change) };
+    return item;
+  });
+}
+
+function startTool(feed: ChatFeed, event: Extract<AgentEvent, { kind: "toolStarted" }>): ChatFeed {
+  const { toolUseId, parentToolUseId, summary } = event;
   const step: Step = {
     id: toolUseId,
     verb: summary.verb,
     detail: summary.detail,
-    isNested,
+    isNested: parentToolUseId !== null,
     isFailed: false,
+    decision: feed.decisions[toolUseId],
   };
-  const last = feed.items.at(-1);
   const files = withFile(feed.files, summary);
   const runningTools = { ...feed.runningTools, [toolUseId]: `${summary.verb} ${summary.detail}` };
-  if (last?.kind === "steps") {
-    const steps = [...last.steps, step];
-    const updated: StepsItem = { ...last, steps, files: changedFileCount(steps) };
-    return { ...feed, files, runningTools, items: [...feed.items.slice(0, -1), updated] };
-  }
-  const created: StepsItem = { kind: "steps", steps: [step], files: changedFileCount([step]) };
-  return { ...feed, files, runningTools, items: [...feed.items, created] };
+  const nestedItems = parentToolUseId ? withSubagentStep(feed.items, parentToolUseId, step) : null;
+  return { ...feed, files, runningTools, items: nestedItems ?? withGroupedStep(feed.items, step) };
 }
 
 function finishTool(feed: ChatFeed, toolUseId: string, isError: boolean): ChatFeed {
   const runningTools = { ...feed.runningTools };
   delete runningTools[toolUseId];
   if (!isError) return { ...feed, runningTools };
-  const items = feed.items.map((item) =>
-    item.kind === "steps"
-      ? { ...item, steps: item.steps.map((step) => (step.id === toolUseId ? { ...step, isFailed: true } : step)) }
-      : item,
-  );
+  const items = mapSteps(feed.items, (step) => (step.id === toolUseId ? { ...step, isFailed: true } : step));
   return { ...feed, runningTools, items };
+}
+
+function requesterOf(feed: ChatFeed, toolUseId: string | null): string {
+  const owner = feed.items.find(
+    (item) => item.kind === "subagent" && item.steps.some((step) => step.id === toolUseId),
+  );
+  return owner?.kind === "subagent" ? owner.agentType : MAIN_AGENT_REQUESTER;
 }
 
 function permissionItem(event: Extract<AgentEvent, { kind: "permissionRequested" }>, feed: ChatFeed): FeedItem {
   const { summary } = event;
-  const step = feed.items
-    .flatMap((item) => (item.kind === "steps" ? item.steps : []))
-    .find((candidate) => candidate.id === event.toolUseId);
   return {
     kind: "permission",
     requestId: event.requestId,
-    requester: step?.isNested ? SUBAGENT_REQUESTER : AGENT_REQUESTER,
+    toolUseId: event.toolUseId,
+    requester: requesterOf(feed, event.toolUseId),
     action: PRESENT_TENSE[summary.verb] ?? "use",
     target: summary.filePath ?? summary.detail,
     isShell: summary.verb === SHELL_VERB,
@@ -151,6 +184,7 @@ function startSubagent(feed: ChatFeed, event: Extract<AgentEvent, { kind: "subag
     status: "running",
     lastTool: null,
     summary: null,
+    steps: [],
   };
   return withItems(feed, [...feed.items, created]);
 }
@@ -162,11 +196,16 @@ function updateSubagent(feed: ChatFeed, toolUseId: string, change: (item: Subage
   return withItems(feed, items);
 }
 
+function isRequest(item: FeedItem, requestId: string): boolean {
+  return (item.kind === "permission" || item.kind === "question") && item.requestId === requestId;
+}
+
+function withoutRequest(feed: ChatFeed, requestId: string): ChatFeed {
+  return withItems(feed, feed.items.filter((item) => !isRequest(item, requestId)));
+}
+
 function replaceRequest(feed: ChatFeed, requestId: string, replacement: FeedItem): ChatFeed {
-  const items = feed.items.map((item) =>
-    (item.kind === "permission" || item.kind === "question") && item.requestId === requestId ? replacement : item,
-  );
-  return withItems(feed, items);
+  return withItems(feed, feed.items.map((item) => (isRequest(item, requestId) ? replacement : item)));
 }
 
 function endTurn(feed: ChatFeed, isError: boolean, message: string | null): ChatFeed {
@@ -184,7 +223,7 @@ export function reduceFeed(feed: ChatFeed, event: AgentEvent): ChatFeed {
     case "text":
       return finalizeText(feed, event.messageId, event.text);
     case "toolStarted":
-      return startTool(feed, event.toolUseId, event.parentToolUseId !== null, event.summary);
+      return startTool(feed, event);
     case "toolFinished":
       return finishTool(feed, event.toolUseId, event.isError);
     case "permissionRequested":
@@ -195,7 +234,7 @@ export function reduceFeed(feed: ChatFeed, event: AgentEvent): ChatFeed {
         { kind: "question", requestId: event.requestId, questions: event.questions, since: Date.now() },
       ]);
     case "permissionCancelled":
-      return replaceRequest(feed, event.requestId, { kind: "note", text: "The agent withdrew its request" });
+      return withoutRequest(feed, event.requestId);
     case "turnEnded":
       return endTurn(feed, event.isError, event.message);
     case "processExited":
@@ -220,8 +259,17 @@ export function reduceFeed(feed: ChatFeed, event: AgentEvent): ChatFeed {
   }
 }
 
+function stampToolGroup(feed: ChatFeed, toolUseId: string): ChatFeed {
+  const time = clockTime();
+  const items = feed.items.map((item) =>
+    item.kind === "steps" && !item.time && item.steps.some((step) => step.id === toolUseId) ? { ...item, time } : item,
+  );
+  return withItems(feed, items);
+}
+
 export function reduceLiveFeed(feed: ChatFeed, event: AgentEvent): ChatFeed {
   const reduced = reduceFeed(feed, event);
+  if (event.kind === "toolStarted") return stampToolGroup(reduced, event.toolUseId);
   if (event.kind !== "text") return reduced;
   const time = clockTime();
   const items = reduced.items.map((item) =>
@@ -238,16 +286,16 @@ export function withSentMessage(feed: ChatFeed, text: string): ChatFeed {
   };
 }
 
-const DECISION_NOTES: Record<PermissionDecision, string> = {
-  once: "You allowed it once",
-  always: "You allowed it for this task",
-  deny: "You denied it",
-};
-
 export function withDecision(feed: ChatFeed, requestId: string, decision: PermissionDecision): ChatFeed {
   const request = feed.items.find((item) => item.kind === "permission" && item.requestId === requestId);
-  const target = request?.kind === "permission" ? `: ${request.action} ${request.target}` : "";
-  return replaceRequest(feed, requestId, { kind: "note", text: `${DECISION_NOTES[decision]}${target}` });
+  const remaining = withoutRequest(feed, requestId);
+  if (request?.kind !== "permission" || !request.toolUseId) return remaining;
+  const { toolUseId } = request;
+  return {
+    ...remaining,
+    decisions: { ...remaining.decisions, [toolUseId]: decision },
+    items: mapSteps(remaining.items, (step) => (step.id === toolUseId ? { ...step, decision } : step)),
+  };
 }
 
 export function withAnswers(feed: ChatFeed, requestId: string, answers: Record<string, string>): ChatFeed {
@@ -258,7 +306,7 @@ export function withAnswers(feed: ChatFeed, requestId: string, answers: Record<s
 }
 
 export function withStop(feed: ChatFeed): ChatFeed {
-  return withItems(feed, [...feed.items, { kind: "note", text: "You stopped the agent" }]);
+  return withItems(feed, [...feed.items, { kind: "interrupted" }]);
 }
 
 export function feedFromHistory(events: AgentEvent[]): ChatFeed {

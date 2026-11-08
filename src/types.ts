@@ -38,12 +38,15 @@ export interface Chat {
   pr?: ChatPullRequest | null;
 }
 
+export type PermissionDecision = "once" | "always" | "deny";
+
 export interface Step {
   id: string;
   verb: string;
   detail: string;
   isNested: boolean;
   isFailed: boolean;
+  decision?: PermissionDecision;
 }
 
 export interface QuestionOption {
@@ -61,11 +64,13 @@ export interface Question {
 export type FeedItem =
   | { kind: "user"; text: string; time: string }
   | { kind: "agent"; messageId: string; blockIndex: number; markdown: string; isFinal: boolean; time: string }
-  | { kind: "steps"; files: number; steps: Step[] }
+  | { kind: "steps"; files: number; steps: Step[]; time: string }
+  | { kind: "interrupted" }
   | { kind: "note"; text: string }
   | {
       kind: "permission";
       requestId: string;
+      toolUseId: string | null;
       requester: string;
       action: string;
       target: string;
@@ -82,6 +87,7 @@ export type FeedItem =
       status: SubagentStatus;
       lastTool: string | null;
       summary: string | null;
+      steps: Step[];
     };
 
 export interface ChangedFile {

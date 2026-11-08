@@ -335,7 +335,8 @@ export default function App() {
         />
       );
     }
-    return <ChatView task={selectedTask} actions={chatActions} />;
+    const chatProject = projects.find((project) => project.id === selectedTask.projectId);
+    return <ChatView task={selectedTask} projectPath={chatProject?.path ?? null} actions={chatActions} />;
   }
 
   const isChatOpen = view === "chat" && selectedTask !== null;

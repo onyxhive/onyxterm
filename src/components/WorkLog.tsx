@@ -1,4 +1,4 @@
-import { useState, type ComponentProps, type ReactNode } from "react";
+import { useState } from "react";
 import {
   Bot,
   ChevronDown,
@@ -11,11 +11,13 @@ import {
   Search,
   SquarePen,
   SquareTerminal,
+  Terminal,
   Wrench,
   X,
   type LucideIcon,
 } from "lucide-react";
-import type { Step } from "../types";
+import type { PermissionDecision, Step } from "../types";
+import { useShortPaths } from "./projectPaths";
 import { cn } from "./ui";
 
 const VERB_ICONS: Record<string, LucideIcon> = {
@@ -31,72 +33,41 @@ const VERB_ICONS: Record<string, LucideIcon> = {
   Updated: ListTodo,
 };
 
-export function verbIcon(verb: string): LucideIcon {
+function verbIcon(verb: string): LucideIcon {
   return VERB_ICONS[verb] ?? Wrench;
 }
 
-interface WorkLogLineProps {
-  icon: ReactNode;
-  label: ReactNode;
-  trailing?: ReactNode;
-  isWrapping?: boolean;
-}
+const DECISION_BADGES: Record<PermissionDecision, string> = {
+  once: "Allowed once",
+  always: "Allowed for this task",
+  deny: "Declined",
+};
 
-export function WorkLogLine({ icon, label, trailing, isWrapping = false }: WorkLogLineProps) {
+function DecisionBadge({ decision }: { decision: PermissionDecision }) {
   return (
-    <div
+    <span
       className={cn(
-        "flex min-h-6 min-w-0 gap-1.5 text-sm leading-relaxed",
-        isWrapping ? "items-start" : "items-center",
+        "shrink-0 rounded-full border border-border px-1.5 py-px text-3xs text-muted-foreground",
+        decision === "deny" && "text-error-foreground",
       )}
     >
-      <span className="flex size-6 shrink-0 items-center justify-center text-icon-muted">{icon}</span>
-      <div className={cn("min-w-0 flex-1 text-secondary-label", !isWrapping && "truncate")}>{label}</div>
-      {trailing}
-    </div>
+      {DECISION_BADGES[decision]}
+    </span>
   );
 }
 
-export const TIMELINE_ROW_CLASS =
-  "group/timeline-row relative w-full min-w-0 rounded-md px-0.5 py-0.5 text-left transition-colors";
-
-export function WorkLogRow({
-  icon,
-  label,
-  trailing,
-  isWrapping,
-  children,
-  ...rowProps
-}: WorkLogLineProps & Omit<ComponentProps<"div">, "className">) {
-  return (
-    <div {...rowProps} className={TIMELINE_ROW_CLASS}>
-      <WorkLogLine icon={icon} label={label} trailing={trailing} isWrapping={isWrapping} />
-      {children}
-    </div>
-  );
-}
-
-function StepRow({ step, isLive }: { step: Step; isLive: boolean }) {
+export function StepRow({ step, isLive }: { step: Step; isLive: boolean }) {
   const Icon = verbIcon(step.verb);
+  const shortPaths = useShortPaths();
   return (
-    <WorkLogRow
-      icon={<Icon className={cn("size-4", step.isFailed && "text-error")} strokeWidth={2} />}
-      label={
-        <span className={cn("block truncate", isLive && "live-tool-shine")}>
-          <span className="text-foreground/80">{step.verb}</span> {step.detail}
-        </span>
-      }
-      trailing={
-        <span className="flex shrink-0 items-center gap-1.5">
-          {step.isNested && (
-            <span className="rounded-full border border-border/70 px-1.5 py-px text-3xs text-muted-foreground">
-              subagent
-            </span>
-          )}
-          {step.isFailed && <X aria-label="Failed" className="size-3 text-error" />}
-        </span>
-      }
-    />
+    <div className="flex min-h-6 min-w-0 items-center gap-2 text-xs leading-relaxed">
+      <Icon aria-hidden className={cn("size-3.5 shrink-0 text-icon-muted", step.isFailed && "text-error")} />
+      <span className={cn("min-w-0 flex-1 truncate text-muted-foreground", isLive && "live-tool-shine")}>
+        <span className="text-foreground/80">{step.verb}</span> {shortPaths(step.detail)}
+      </span>
+      {step.decision && <DecisionBadge decision={step.decision} />}
+      {step.isFailed && <X aria-label="Failed" className="size-3 shrink-0 text-error" />}
+    </div>
   );
 }
 
@@ -140,45 +111,45 @@ export function summarizeSteps(steps: Step[]): string {
 
 interface WorkGroupProps {
   steps: Step[];
+  time: string;
   liveStepId: string | null;
 }
 
-export function WorkGroup({ steps, liveStepId }: WorkGroupProps) {
+export function WorkGroup({ steps, time, liveStepId }: WorkGroupProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const liveStep = steps.find((step) => step.id === liveStepId);
   const hasFailure = steps.some((step) => step.isFailed);
   const Chevron = isExpanded ? ChevronDown : ChevronRight;
 
   return (
-    <div className="pb-2">
+    <div className="pb-3">
       <button
         type="button"
         aria-expanded={isExpanded}
         onClick={() => setIsExpanded(!isExpanded)}
         className={cn(
-          TIMELINE_ROW_CLASS,
-          "cursor-pointer hover:text-foreground focus-visible:outline-none focus-visible:ring-2",
-          "focus-visible:ring-ring/70 focus-visible:ring-inset",
+          "group/tools flex h-7 w-full min-w-0 cursor-pointer items-center gap-2 rounded-md px-1 text-left text-sm",
+          "text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none",
+          "focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-inset",
         )}
       >
-        <WorkLogLine
-          icon={<Wrench className={cn("size-4", hasFailure && "text-error")} strokeWidth={2} />}
-          label={
-            <span className="flex items-center gap-1 group-hover/timeline-row:text-foreground">
-              {summarizeSteps(steps)}
-              <Chevron className="size-3.5" />
-            </span>
-          }
-        />
+        <Terminal aria-hidden strokeWidth={1.5} className={cn("size-3.5 shrink-0", hasFailure && "text-error")} />
+        <span className="min-w-0 truncate">{summarizeSteps(steps)}</span>
+        <Chevron aria-hidden className="size-3.5 shrink-0 opacity-70" />
+        <span className="ms-auto shrink-0 text-xs text-muted-foreground/80 tabular-nums">{time}</span>
       </button>
       {isExpanded && (
-        <div className="flex flex-col">
+        <div className="ms-2.5 mt-1 flex flex-col border-l border-border ps-3">
           {steps.map((step) => (
             <StepRow key={step.id} step={step} isLive={step.id === liveStepId} />
           ))}
         </div>
       )}
-      {!isExpanded && liveStep && <StepRow step={liveStep} isLive />}
+      {!isExpanded && liveStep && (
+        <div className="ms-2.5 mt-1 border-l border-border ps-3">
+          <StepRow step={liveStep} isLive />
+        </div>
+      )}
     </div>
   );
 }

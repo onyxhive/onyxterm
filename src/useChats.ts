@@ -3,7 +3,6 @@ import { listen } from "@tauri-apps/api/event";
 import { CHAT_EVENT, CHAT_UPDATED, type ChatEventPayload } from "./agentEvents";
 import { api, type ChatOptions } from "./api";
 import type { ChatStart } from "./components/NewChat";
-import type { PermissionDecision } from "./components/ApprovalRow";
 import {
   EMPTY_FEED,
   feedFromHistory,
@@ -16,7 +15,7 @@ import {
   type ChatFeed,
 } from "./feed";
 import { titleFrom } from "./tasks";
-import type { Chat, TaskStatus } from "./types";
+import type { Chat, PermissionDecision, TaskStatus } from "./types";
 
 export interface ChatsInput {
   onError: (message: string) => void;

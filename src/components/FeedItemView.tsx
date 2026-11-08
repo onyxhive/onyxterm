@@ -1,12 +1,12 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
+import { CircleStop } from "lucide-react";
 import remarkGfm from "remark-gfm";
 import { remarkMentions } from "../remarkMentions";
-import type { FeedItem, Subagent } from "../types";
-import { ApprovalRow, type PermissionDecision } from "./ApprovalRow";
+import type { FeedItem, PermissionDecision } from "../types";
+import { ApprovalRow } from "./ApprovalRow";
 import { CopyButton } from "./CopyButton";
 import { Markdown } from "./Markdown";
 import { QuestionRow } from "./QuestionDrawer";
-import { SubagentRow } from "./SubagentRow";
 import { cn } from "./ui";
 import { WorkGroup } from "./WorkLog";
 
@@ -18,7 +18,6 @@ interface FeedItemViewProps {
   item: FeedItem;
   liveStepId: string | null;
   isTurnReply: boolean;
-  subagent: Subagent | undefined;
   actions: FeedActions;
 }
 
@@ -125,33 +124,50 @@ function AssistantMessage({ item, isTurnReply }: { item: AgentItem; isTurnReply:
   );
 }
 
-function SystemDivider({ text }: { text: string }) {
+function SystemDivider({ children, title }: { children: ReactNode; title: string }) {
   return (
-    <div role="note" className="flex items-center gap-3 pt-1 pb-3 text-xs text-muted-foreground">
-      <span aria-hidden="true" className="h-px flex-1 bg-border/70" />
-      <span className="max-w-[80%] min-w-0 truncate" title={text}>
-        {text}
+    <div role="note" className="flex items-center gap-3 pt-2 pb-4 text-xs text-muted-foreground">
+      <span aria-hidden="true" className="h-px flex-1 bg-border" />
+      <span className="flex max-w-[80%] min-w-0 items-center gap-1.5 truncate" title={title}>
+        {children}
       </span>
-      <span aria-hidden="true" className="h-px flex-1 bg-border/70" />
+      <span aria-hidden="true" className="h-px flex-1 bg-border" />
     </div>
   );
 }
 
-export function FeedItemView({ item, liveStepId, isTurnReply, subagent, actions }: FeedItemViewProps) {
+function InterruptedDivider() {
+  return (
+    <SystemDivider title="Run interrupted · Stopped by user">
+      <CircleStop aria-hidden strokeWidth={1.5} className="size-3.5 shrink-0" />
+      <span className="text-foreground/70">Run interrupted</span>
+      <span aria-hidden="true">·</span>
+      <span>Stopped by user</span>
+    </SystemDivider>
+  );
+}
+
+export function FeedItemView({ item, liveStepId, isTurnReply, actions }: FeedItemViewProps) {
   switch (item.kind) {
     case "user":
       return <UserMessage text={item.text} time={item.time} />;
     case "agent":
       return <AssistantMessage item={item} isTurnReply={isTurnReply} />;
     case "steps":
-      return <WorkGroup steps={item.steps} liveStepId={liveStepId} />;
+      return <WorkGroup steps={item.steps} time={item.time} liveStepId={liveStepId} />;
     case "note":
-      return <SystemDivider text={item.text} />;
+      return (
+        <SystemDivider title={item.text}>
+          <span className="truncate">{item.text}</span>
+        </SystemDivider>
+      );
+    case "interrupted":
+      return <InterruptedDivider />;
     case "permission":
       return <ApprovalRow request={item} onDecide={actions.onDecide} />;
     case "question":
       return <QuestionRow request={item} />;
     case "subagent":
-      return <SubagentRow agent={subagent ?? item} />;
+      return null;
   }
 }

@@ -1,9 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { AgentEvent, Capabilities } from "./agentEvents";
-import type { PermissionDecision } from "./components/ApprovalRow";
 import type { GitTarget } from "./gitApi";
 import type { PermissionMode } from "./permissionModes";
-import type { Chat, Project, Provider, TaskStatus, Workspace } from "./types";
+import type { Chat, PermissionDecision, Project, Provider, TaskStatus, Workspace } from "./types";
 
 export interface ChatDraft {
   projectId: string;
