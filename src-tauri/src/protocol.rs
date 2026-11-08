@@ -104,6 +104,7 @@ pub struct Question {
 pub struct ToolSummary {
     pub verb: String,
     pub detail: String,
+    pub description: String,
     pub file_path: Option<String>,
     pub added: usize,
     pub removed: usize,
@@ -435,7 +436,14 @@ fn file_name(path: &str) -> String {
 }
 
 fn file_summary(verb: &str, path: &str, added: usize, removed: usize) -> ToolSummary {
-    ToolSummary { verb: verb.into(), detail: file_name(path), file_path: Some(path.to_string()), added, removed }
+    ToolSummary {
+        verb: verb.into(),
+        detail: file_name(path),
+        file_path: Some(path.to_string()),
+        added,
+        removed,
+        ..ToolSummary::default()
+    }
 }
 
 fn plain_summary(verb: &str, detail: &str) -> ToolSummary {
@@ -458,7 +466,10 @@ fn mcp_summary(name: &str) -> ToolSummary {
 
 pub fn describe_tool(name: &str, input: &Value) -> ToolSummary {
     match name {
-        "Bash" => plain_summary("Ran", text_field(input, "command")),
+        "Bash" => ToolSummary {
+            description: truncated(text_field(input, "description")),
+            ..plain_summary("Ran", text_field(input, "command"))
+        },
         "Read" => file_summary("Read", text_field(input, "file_path"), 0, 0),
         "Edit" => file_summary(
             "Edited",
