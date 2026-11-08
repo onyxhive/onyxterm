@@ -8,7 +8,6 @@ import {
   CircleMinus,
   CircleX,
   ExternalLink,
-  FileText,
   TriangleAlert,
   type LucideIcon,
 } from "lucide-react";
@@ -18,12 +17,21 @@ import type { MergeMethod, PrCheck, PullRequestDetail as Detail } from "../types
 import { usePr } from "../useGit";
 import { useLoaded } from "../useLoaded";
 import { MERGE_METHODS, useMergeMethod } from "../useMergeMethod";
-import { DiffStat } from "./ChangesPanel";
 import { GhProblemState } from "./GhProblemState";
 import { Markdown } from "./Markdown";
 import { PR_STATE_PRESENTATION, prDisplayState, reviewDecisionLabel } from "./prPresentation";
+import { PullRequestChanges } from "./PullRequestChanges";
+import { Segmented } from "./Segmented";
 import { cn, GHOST_BUTTON, MENU_ITEM, MENU_POPUP, MenuLabel, OUTLINE_BUTTON, PRIMARY_BUTTON } from "./ui";
 import { usePopup } from "./usePopup";
+
+type DetailTab = "overview" | "changes" | "checks";
+
+const DETAIL_TABS = [
+  { value: "overview" as const, label: "Overview" },
+  { value: "changes" as const, label: "Changes" },
+  { value: "checks" as const, label: "Checks" },
+];
 
 const MERGE_LABEL: Record<MergeMethod, string> = {
   merge: "Merge",
@@ -94,7 +102,7 @@ function ChecksList({ projectId, number }: { projectId: string; number: number }
   const checks = useLoaded(`${projectId}:${number}:checks`, () => prApi.checks(projectId, number));
   const list = checks.data ?? [];
   return (
-    <section>
+    <section aria-label="Checks">
       <SectionHeading title="Checks" count={list.length} />
       {list.length === 0 && (
         <p className="px-1 text-xs text-muted-foreground">{checks.isLoading ? "Loading checks…" : "No checks"}</p>
@@ -126,23 +134,6 @@ function CheckRow({ check }: { check: PrCheck }) {
         </button>
       )}
     </li>
-  );
-}
-
-function FilesList({ detail }: { detail: Detail }) {
-  return (
-    <section>
-      <SectionHeading title="Files" count={detail.files.length} />
-      <ul className="flex flex-col">
-        {detail.files.map((file) => (
-          <li key={file.path} className="flex h-7 min-w-0 items-center gap-2 rounded-md px-1" title={file.path}>
-            <FileText className="size-3.5 shrink-0 text-muted-foreground/70" />
-            <span className="min-w-0 flex-1 truncate font-mono text-xs text-foreground/85">{file.path}</span>
-            <DiffStat added={file.additions} removed={file.deletions} className="shrink-0 text-2xs" />
-          </li>
-        ))}
-      </ul>
-    </section>
   );
 }
 
@@ -284,7 +275,7 @@ function DetailHeader({ detail, projectId, onMerged }: MergeControlProps) {
   const review = reviewDecisionLabel(detail.reviewDecision);
   const isOpen = detail.state.toLowerCase() === "open";
   return (
-    <header className="flex flex-col gap-3 border-b border-border px-6 pt-5 pb-4">
+    <header className="flex flex-col gap-3 px-6 pt-5 pb-4">
       <div className="flex items-start gap-3">
         <h2 className="min-w-0 flex-1 text-lg leading-snug font-semibold text-pretty text-foreground">
           {detail.title} <span className="font-normal text-muted-foreground tabular-nums">#{detail.number}</span>
@@ -327,8 +318,22 @@ interface PullRequestDetailProps {
   onChanged: () => void;
 }
 
+function OverviewTab({ detail }: { detail: Detail }) {
+  return (
+    <>
+      {detail.body ? (
+        <Markdown source={detail.body} />
+      ) : (
+        <p className="text-sm text-muted-foreground">No description</p>
+      )}
+      <ActivityList detail={detail} />
+    </>
+  );
+}
+
 export function PullRequestDetail({ projectId, number, onChanged }: PullRequestDetailProps) {
   const pr = usePr(projectId, number);
+  const [tab, setTab] = useState<DetailTab>("overview");
   const problem = pr.error ? ghProblemOf(pr.error) : null;
 
   function merged() {
@@ -343,16 +348,21 @@ export function PullRequestDetail({ projectId, number, onChanged }: PullRequestD
   return (
     <article aria-label={`Pull request #${detail.number}`} className="flex min-h-0 flex-1 flex-col">
       <DetailHeader detail={detail} projectId={projectId} onMerged={merged} />
+      <nav aria-label="Pull request tabs" className="flex shrink-0 items-center border-y border-border px-6 py-2">
+        <Segmented label="Pull request section" options={DETAIL_TABS} value={tab} onChange={setTab} />
+      </nav>
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto flex max-w-(--chat-content-max-width) flex-col gap-6 px-6 py-5">
-          {detail.body ? (
-            <Markdown source={detail.body} />
-          ) : (
-            <p className="text-sm text-muted-foreground">No description</p>
+        <div
+          className={cn(
+            "flex flex-col gap-6 px-6 py-5",
+            tab !== "changes" && "max-w-(--chat-content-max-width)",
           )}
-          <ChecksList projectId={projectId} number={detail.number} />
-          <FilesList detail={detail} />
-          <ActivityList detail={detail} />
+        >
+          {tab === "overview" && <OverviewTab detail={detail} />}
+          {tab === "changes" && (
+            <PullRequestChanges projectId={projectId} number={detail.number} files={detail.files} />
+          )}
+          {tab === "checks" && <ChecksList projectId={projectId} number={detail.number} />}
         </div>
       </div>
     </article>

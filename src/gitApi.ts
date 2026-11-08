@@ -63,6 +63,7 @@ export const prApi = {
   forBranch: (projectId: string, branch: string) =>
     invoke<PullRequest | null>("pr_for_branch", { projectId, branch }),
   checks: (projectId: string, number: number) => invoke<PrCheck[]>("pr_checks", { projectId, number }),
+  diff: (projectId: string, number: number) => invoke<GitDiff>("pr_diff", { projectId, number }),
   create: (target: GitTarget, draft: PullRequestDraft) => invoke<PullRequestDetail>("pr_create", { target, draft }),
   merge: (projectId: string, number: number, method: MergeMethod) =>
     invoke<void>("pr_merge", { projectId, number, method }),
