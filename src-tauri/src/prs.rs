@@ -54,6 +54,25 @@ impl PrState {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "kebab-case")]
+pub enum PrAuthor {
+    #[default]
+    Everyone,
+    Mine,
+    ReviewRequested,
+}
+
+impl PrAuthor {
+    fn filter(self) -> &'static [&'static str] {
+        match self {
+            PrAuthor::Everyone => &[],
+            PrAuthor::Mine => &["--author", "@me"],
+            PrAuthor::ReviewRequested => &["--search", "review-requested:@me"],
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum MergeMethod {
@@ -318,8 +337,10 @@ impl Gh {
         parsed(&self.checked(arguments, GH_LIMITS)?)
     }
 
-    fn list(&self, state: PrState) -> AppResult<Vec<PullRequest>> {
-        self.json(&["pr", "list", "--state", state.as_str(), "--limit", LIST_LIMIT, "--json", LIST_FIELDS])
+    fn list(&self, state: PrState, author: PrAuthor) -> AppResult<Vec<PullRequest>> {
+        let mut arguments = vec!["pr", "list", "--state", state.as_str(), "--limit", LIST_LIMIT, "--json", LIST_FIELDS];
+        arguments.extend_from_slice(author.filter());
+        self.json(&arguments)
     }
 
     fn for_branch(&self, branch: &str) -> AppResult<Option<PullRequest>> {
@@ -395,7 +416,7 @@ fn locate_gh() -> Option<PathBuf> {
     COMMON_GH_PATHS.iter().map(PathBuf::from).find(|path| path.is_file()).or_else(gh_from_login_shell)
 }
 
-type ListKey = (String, PrState);
+type ListKey = (String, PrState, PrAuthor);
 type CachedList = (Instant, Vec<PullRequest>);
 
 #[derive(Default)]
@@ -419,28 +440,28 @@ impl GitHub {
         Ok(Gh { executable, root: root.to_path_buf() })
     }
 
-    fn fresh_list(&self, project_id: &str, state: PrState) -> Option<Vec<PullRequest>> {
+    fn fresh_list(&self, key: &ListKey) -> Option<Vec<PullRequest>> {
         let lists = locked(&self.lists);
-        let (read_at, pull_requests) = lists.get(&(project_id.to_string(), state))?;
+        let (read_at, pull_requests) = lists.get(key)?;
         (read_at.elapsed() < LIST_LIFETIME).then(|| pull_requests.clone())
     }
 
-    fn remember_list(&self, project_id: &str, state: PrState, pull_requests: Vec<PullRequest>) {
-        locked(&self.lists).insert((project_id.to_string(), state), (Instant::now(), pull_requests));
+    fn remember_list(&self, key: ListKey, pull_requests: Vec<PullRequest>) {
+        locked(&self.lists).insert(key, (Instant::now(), pull_requests));
     }
 
     fn forget_project(&self, project_id: &str) {
-        locked(&self.lists).retain(|(cached_project, _), _| cached_project != project_id);
+        locked(&self.lists).retain(|(cached_project, _, _), _| cached_project != project_id);
     }
 
     pub fn chat_pull_request(&self, project_id: &str, branch: &str) -> Option<ChatPullRequest> {
-        let pull_requests = self.fresh_list(project_id, PrState::All)?;
+        let pull_requests = self.fresh_list(&everyones_prs(project_id))?;
         pull_requests.iter().find(|pull_request| pull_request.head_ref_name == branch).map(ChatPullRequest::from)
     }
 
     pub fn refresh_stale(&self, app: &AppHandle, project_ids: HashSet<String>) {
         for project_id in project_ids {
-            let is_fresh = self.fresh_list(&project_id, PrState::All).is_some();
+            let is_fresh = self.fresh_list(&everyones_prs(&project_id)).is_some();
             if is_fresh || !locked(&self.refreshing).insert(project_id.clone()) {
                 continue;
             }
@@ -450,13 +471,17 @@ impl GitHub {
     }
 }
 
+fn everyones_prs(project_id: &str) -> ListKey {
+    (project_id.to_string(), PrState::All, PrAuthor::Everyone)
+}
+
 fn refresh_project(app: &AppHandle, project_id: &str) {
     let github = app.state::<GitHub>();
     let listed = project_root(&app.state::<Db>(), project_id)
         .and_then(|root| github.gh(&root))
-        .and_then(|gh| gh.list(PrState::All));
+        .and_then(|gh| gh.list(PrState::All, PrAuthor::Everyone));
     let is_listed = listed.is_ok();
-    github.remember_list(project_id, PrState::All, listed.unwrap_or_default());
+    github.remember_list(everyones_prs(project_id), listed.unwrap_or_default());
     locked(&github.refreshing).remove(project_id);
     if is_listed {
         let _ = app.emit(PRS_UPDATED, PrsUpdated { project_id });
@@ -498,15 +523,17 @@ pub async fn pr_list(
     github: State<'_, GitHub>,
     project_id: String,
     state: Option<PrState>,
+    author: Option<PrAuthor>,
 ) -> AppResult<Vec<PullRequest>> {
-    let state = state.unwrap_or(PrState::Open);
+    let (state, author) = (state.unwrap_or(PrState::Open), author.unwrap_or_default());
     let root = project_root(&db, &project_id)?;
-    if let Some(cached) = github.fresh_list(&project_id, state) {
+    let key = (project_id, state, author);
+    if let Some(cached) = github.fresh_list(&key) {
         return Ok(cached);
     }
     let gh = github.gh(&root)?;
-    let listed = in_background(move || gh.list(state)).await?;
-    github.remember_list(&project_id, state, listed.clone());
+    let listed = in_background(move || gh.list(state, author)).await?;
+    github.remember_list(key, listed.clone());
     Ok(listed)
 }
 
@@ -609,20 +636,37 @@ mod tests {
     const CHECKS: &str = include_str!("fixtures/gh_pr_checks.json");
     const DIFF: &str = include_str!("fixtures/gh_pr_diff.patch");
     const DIFF_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/fixtures/gh_pr_diff.patch");
+    const LIST_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/fixtures/gh_pr_list.json");
     const OVERSIZED_PR: u64 = 7;
     const EXECUTABLE_MODE: u32 = 0o755;
 
-    fn fake_gh(name: &str) -> Gh {
+    fn fake_gh_running(name: &str, script: &str) -> Gh {
         let folder = std::env::temp_dir().join(format!("onyx-fake-gh-{name}-{}", std::process::id()));
         std::fs::create_dir_all(&folder).unwrap();
         let executable = folder.join("gh");
+        std::fs::write(&executable, script).unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(EXECUTABLE_MODE)).unwrap();
+        Gh { executable, root: folder }
+    }
+
+    fn fake_gh(name: &str) -> Gh {
         let script = format!(
             "#!/bin/sh\n[ \"$1 $2 $4\" = \"pr diff --color=never\" ] || exit 1\n\
              [ \"$3\" = {OVERSIZED_PR} ] && exec head -c 3000000 /dev/zero\ncat '{DIFF_PATH}'\n"
         );
-        std::fs::write(&executable, script).unwrap();
-        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(EXECUTABLE_MODE)).unwrap();
-        Gh { executable, root: folder }
+        fake_gh_running(name, &script)
+    }
+
+    fn fake_gh_listing_by_author() -> Gh {
+        let listing = format!("pr list --state merged --limit {LIST_LIMIT} --json {LIST_FIELDS}");
+        let script = format!(
+            "#!/bin/sh\ncase \"$*\" in\n\
+             \"{listing} --author @me\") cat '{LIST_PATH}' ;;\n\
+             \"{listing} --search review-requested:@me\") echo '[{{\"number\":9}}]' ;;\n\
+             \"{listing}\") echo '[]' ;;\n\
+             *) exit 1 ;;\nesac\n"
+        );
+        fake_gh_running("authors", &script)
     }
 
     #[test]
@@ -690,13 +734,23 @@ mod tests {
     }
 
     #[test]
+    fn lists_prs_by_me_awaiting_my_review_or_by_everyone() {
+        let gh = fake_gh_listing_by_author();
+        let numbers = |author| gh.list(PrState::Merged, author).unwrap().iter().map(|pr| pr.number).collect::<Vec<_>>();
+        assert_eq!(numbers(PrAuthor::Mine), vec![42, 41]);
+        assert_eq!(numbers(PrAuthor::ReviewRequested), vec![9]);
+        assert_eq!(numbers(PrAuthor::Everyone), Vec::<u64>::new());
+    }
+
+    #[test]
     fn caches_lists_per_project_and_finds_a_branch_pr() {
         let github = GitHub::default();
         assert!(github.chat_pull_request("p1", "onyx/fix-the-sort").is_none());
-        github.remember_list("p1", PrState::All, parsed(LIST).unwrap());
+        github.remember_list(everyones_prs("p1"), parsed(LIST).unwrap());
         let found = github.chat_pull_request("p1", "onyx/fix-the-sort").unwrap();
         assert_eq!((found.number, found.checks.failed), (42, 1));
-        assert!(github.fresh_list("p1", PrState::Open).is_none());
+        assert!(github.fresh_list(&("p1".into(), PrState::Open, PrAuthor::Everyone)).is_none());
+        assert!(github.fresh_list(&("p1".into(), PrState::All, PrAuthor::Mine)).is_none());
         github.forget_project("p1");
         assert!(github.chat_pull_request("p1", "onyx/fix-the-sort").is_none());
     }
@@ -704,6 +758,8 @@ mod tests {
     #[test]
     fn rejects_bad_states_methods_and_drafts_at_the_boundary() {
         assert!(serde_json::from_str::<PrState>("\"draft\"").is_err());
+        assert!(serde_json::from_str::<PrAuthor>("\"someone-else\"").is_err());
+        assert_eq!(serde_json::from_str::<PrAuthor>("\"review-requested\"").unwrap(), PrAuthor::ReviewRequested);
         assert!(serde_json::from_str::<MergeMethod>("\"force\"").is_err());
         let extra = r#"{"title":"t","body":"","base":null,"draft":false,"reviewers":["x"]}"#;
         assert!(serde_json::from_str::<PullRequestDraft>(extra).is_err());
@@ -716,7 +772,7 @@ mod tests {
         let Ok(root) = std::env::var("ONYX_LIVE_REPO") else { return };
         let gh = GitHub::default().gh(Path::new(&root)).unwrap();
         for state in [PrState::Open, PrState::All] {
-            match gh.list(state) {
+            match gh.list(state, PrAuthor::Everyone) {
                 Ok(listed) => {
                     eprintln!("{} prs: {}", state.as_str(), listed.len());
                     for pull_request in listed.iter().take(3) {
