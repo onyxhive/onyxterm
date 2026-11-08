@@ -35,6 +35,7 @@ export interface SidebarActions {
   onAddProject: () => void;
   onToggleBoard: () => void;
   onTogglePullRequests: () => void;
+  onToggleSettings: () => void;
 }
 
 interface SidebarProps {
@@ -46,6 +47,7 @@ interface SidebarProps {
   isOpen: boolean;
   isBoardActive: boolean;
   isPullRequestsActive: boolean;
+  isSettingsActive: boolean;
   header: ReactNode;
   actions: SidebarActions;
 }
@@ -427,7 +429,12 @@ export function Sidebar(props: SidebarProps) {
           </ul>
         </nav>
         <div className="flex shrink-0 flex-row items-center gap-1 px-2 pt-1 pb-2">
-          <UtilityItem icon={<Settings />} label="Settings" disabledReason="Settings coming later" />
+          <UtilityItem
+            icon={<Settings />}
+            label="Settings"
+            isActive={props.isSettingsActive}
+            onClick={actions.onToggleSettings}
+          />
           <UtilityItem
             icon={<SquareKanban />}
             label="Board"

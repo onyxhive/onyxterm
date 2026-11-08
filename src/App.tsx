@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { DEFAULT_EFFORT, DEFAULT_MODEL } from "./agentOptions";
+import { CHAT_CHOICE_SETTING as CHOICE_SETTING, DEFAULT_EFFORT, DEFAULT_MODEL } from "./agentOptions";
 import { Board } from "./components/Board";
 import { ChatHeader, type ChatHeaderActions } from "./components/ChatHeader";
 import { ChatView, type ChatActions } from "./components/ChatView";
@@ -7,6 +7,7 @@ import { DiffPanel, LATEST_TURN_SCOPE, type DiffScope } from "./components/DiffP
 import type { AgentChoice } from "./components/ComposerControls";
 import { NewChat, type ChatStart } from "./components/NewChat";
 import { PullRequestsPage } from "./components/PullRequestsPage";
+import { SettingsPage } from "./components/SettingsPage";
 import { Sidebar, type SidebarActions } from "./components/Sidebar";
 import { SidebarToggle, TopBar, TopBarHeading, type View } from "./components/TitleBar";
 import { ThreadDetails, type ThreadDetailsActions } from "./components/ThreadDetails";
@@ -23,7 +24,6 @@ import { useProjectBranches } from "./useProjectBranches";
 import { useSettings } from "./useSettings";
 import { useWorkspaces } from "./useWorkspaces";
 
-const CHOICE_SETTING = "chatChoice";
 const DEFAULT_CHOICE: AgentChoice = {
   provider: "Claude Code" as Provider,
   command: "claude-lyxa-team",
@@ -207,11 +207,13 @@ export default function App() {
     onAddProject: workspaceActions.onAddProject,
     onToggleBoard: () => setView(view === "board" ? "chat" : "board"),
     onTogglePullRequests: () => setView(view === "prs" ? "chat" : "prs"),
+    onToggleSettings: () => setView(view === "settings" ? "chat" : "settings"),
   };
 
   function renderHeading() {
     if (view === "board") return <TopBarHeading title="Board" meta={`${workspaceTasks.length} chats`} />;
     if (view === "prs") return <TopBarHeading title="Pull requests" meta={workspace?.name ?? ""} />;
+    if (view === "settings") return <TopBarHeading title="Settings" meta="" />;
     if (!selectedTask) return null;
     const project = projects.find((candidate) => candidate.id === selectedTask.projectId);
     return (
@@ -239,6 +241,17 @@ export default function App() {
   function renderMain() {
     if (!workspace || !settings) return null;
     if (view === "prs") return <PullRequestsPage key={workspace.id} projects={workspace.projects} />;
+    if (view === "settings") {
+      return (
+        <SettingsPage
+          settings={settings}
+          projects={projects}
+          defaultChoice={rememberedChoice(settings[CHOICE_SETTING])}
+          onDefaultChoiceChange={(choice) => remember(CHOICE_SETTING, JSON.stringify(choice))}
+          onRemember={remember}
+        />
+      );
+    }
     if (view === "board") {
       return (
         <Board
@@ -285,6 +298,7 @@ export default function App() {
         isOpen={isSidebarOpen}
         isBoardActive={view === "board"}
         isPullRequestsActive={view === "prs"}
+        isSettingsActive={view === "settings"}
         actions={sidebarActions}
         header={
           <WorkspaceSwitcher

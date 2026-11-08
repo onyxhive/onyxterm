@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { PanelLeft, PanelLeftClose } from "lucide-react";
 import { cn, ICON_BUTTON } from "./ui";
 
-export type View = "chat" | "board" | "prs";
+export type View = "chat" | "board" | "prs" | "settings";
 
 interface SidebarToggleProps {
   isSidebarOpen: boolean;
