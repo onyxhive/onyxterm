@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::branches::ProjectBranches;
-use crate::chats::{self, AgentCommand, Chat, ChatOptions, ChatState, Provider};
+use crate::chats::{self, AgentCommand, Chat, ChatOptions, ChatState, PermissionMode, Provider};
 use crate::checkpoints;
 use crate::db::{Db, new_id};
 use crate::error::{AppError, AppResult};
@@ -35,21 +35,50 @@ const DENY_MESSAGE: &str = "The user denied this tool use.";
 const CODEX_UNSUPPORTED: &str = "Codex support coming next";
 const TURN_IS_RUNNING: &str = "the agent is working; wait for this turn to finish or stop it before changing settings";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum LiveSwitch {
+    Model(String),
+    PermissionMode(PermissionMode),
+}
+
+impl LiveSwitch {
+    fn request(&self) -> String {
+        match self {
+            LiveSwitch::Model(model) => protocol::set_model_request(&new_id(), model),
+            LiveSwitch::PermissionMode(mode) => protocol::set_permission_mode_request(&new_id(), mode.as_str()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum LiveChange {
-    Unchanged,
-    SwitchModel,
+    Switch(Vec<LiveSwitch>),
     Respawn,
 }
 
+fn needs_respawn(chat: &Chat, options: &ChatOptions) -> bool {
+    let enters_launch_only_mode =
+        chat.permission_mode != options.permission_mode && options.permission_mode.needs_launch_flag();
+    chat.command != options.command || chat.effort != options.effort || enters_launch_only_mode
+}
+
 fn live_change(chat: &Chat, options: &ChatOptions) -> LiveChange {
-    if chat.command != options.command || chat.effort != options.effort {
+    if needs_respawn(chat, options) {
         return LiveChange::Respawn;
     }
-    if chat.model != options.model {
-        return LiveChange::SwitchModel;
+    let model = (chat.model != options.model).then(|| LiveSwitch::Model(options.model.clone()));
+    let mode = (chat.permission_mode != options.permission_mode)
+        .then_some(LiveSwitch::PermissionMode(options.permission_mode));
+    LiveChange::Switch(model.into_iter().chain(mode).collect())
+}
+
+fn chat_options(chat: &Chat) -> ChatOptions {
+    ChatOptions {
+        command: chat.command,
+        model: chat.model.clone(),
+        effort: chat.effort.clone(),
+        permission_mode: chat.permission_mode,
     }
-    LiveChange::Unchanged
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -300,7 +329,14 @@ fn close_processes(processes: Vec<Arc<AgentProcess>>) {
 }
 
 fn discover(command: AgentCommand, cwd: &Path) -> AppResult<Capabilities> {
-    let launch = Launch { command, model: "", effort: "", session: SessionFlag::Discover, cwd };
+    let launch = Launch {
+        command,
+        model: "",
+        effort: "",
+        permission_mode: PermissionMode::Default,
+        session: SessionFlag::Discover,
+        cwd,
+    };
     let (process, stdout) = spawn_process(&launch)?;
     let (sender, receiver) = mpsc::channel();
     thread::spawn(move || {
@@ -344,6 +380,7 @@ impl AgentRuntime {
             command: chat.command,
             model: &chat.model,
             effort: &chat.effort,
+            permission_mode: chat.permission_mode,
             session: session_flag(chat),
             cwd,
         };
@@ -432,11 +469,8 @@ pub async fn send_message(
 async fn apply_live_change(app: &AppHandle, before: &Chat, updated: &Chat) -> AppResult<()> {
     let runtime = app.state::<AgentRuntime>();
     let Some(process) = runtime.process(&updated.id) else { return Ok(()) };
-    let options =
-        ChatOptions { command: updated.command, model: updated.model.clone(), effort: updated.effort.clone() };
-    match live_change(before, &options) {
-        LiveChange::Unchanged => Ok(()),
-        LiveChange::SwitchModel => process.write_line(&protocol::set_model_request(&new_id(), &updated.model)),
+    match live_change(before, &chat_options(updated)) {
+        LiveChange::Switch(switches) => switches.iter().try_for_each(|switch| process.write_line(&switch.request())),
         LiveChange::Respawn => {
             runtime.forget(&updated.id, &process);
             in_background(move || {
@@ -564,20 +598,62 @@ mod tests {
             branch: None,
             worktree_path: None,
             is_worktree_removed: false,
+            permission_mode: PermissionMode::Default,
         }
     }
 
     fn options(command: AgentCommand, model: &str, effort: &str) -> ChatOptions {
-        ChatOptions { command, model: model.into(), effort: effort.into() }
+        ChatOptions { command, model: model.into(), effort: effort.into(), permission_mode: PermissionMode::Default }
+    }
+
+    fn with_mode(options: ChatOptions, permission_mode: PermissionMode) -> ChatOptions {
+        ChatOptions { permission_mode, ..options }
     }
 
     #[test]
     fn switches_models_live_but_respawns_for_effort_or_command_changes() {
         let chat = chat_with(AgentCommand::Claude, "sonnet", "high");
-        assert_eq!(live_change(&chat, &options(AgentCommand::Claude, "sonnet", "high")), LiveChange::Unchanged);
-        assert_eq!(live_change(&chat, &options(AgentCommand::Claude, "opus", "high")), LiveChange::SwitchModel);
+        assert_eq!(live_change(&chat, &options(AgentCommand::Claude, "sonnet", "high")), LiveChange::Switch(vec![]));
+        assert_eq!(
+            live_change(&chat, &options(AgentCommand::Claude, "opus", "high")),
+            LiveChange::Switch(vec![LiveSwitch::Model("opus".into())])
+        );
         assert_eq!(live_change(&chat, &options(AgentCommand::Claude, "opus", "max")), LiveChange::Respawn);
         assert_eq!(live_change(&chat, &options(AgentCommand::ClaudeLyxa, "sonnet", "high")), LiveChange::Respawn);
+    }
+
+    #[test]
+    fn switches_permission_modes_live_but_respawns_to_bypass_them() {
+        let chat = chat_with(AgentCommand::Claude, "sonnet", "high");
+        let same = options(AgentCommand::Claude, "sonnet", "high");
+        assert_eq!(
+            live_change(&chat, &with_mode(same.clone(), PermissionMode::Plan)),
+            LiveChange::Switch(vec![LiveSwitch::PermissionMode(PermissionMode::Plan)])
+        );
+        assert_eq!(
+            live_change(&chat, &with_mode(options(AgentCommand::Claude, "opus", "high"), PermissionMode::AcceptEdits)),
+            LiveChange::Switch(vec![
+                LiveSwitch::Model("opus".into()),
+                LiveSwitch::PermissionMode(PermissionMode::AcceptEdits)
+            ])
+        );
+        assert_eq!(
+            live_change(&chat, &with_mode(same.clone(), PermissionMode::BypassPermissions)),
+            LiveChange::Respawn
+        );
+        let bypassing = Chat { permission_mode: PermissionMode::BypassPermissions, ..chat };
+        assert_eq!(
+            live_change(&bypassing, &same),
+            LiveChange::Switch(vec![LiveSwitch::PermissionMode(PermissionMode::Default)])
+        );
+    }
+
+    #[test]
+    fn sends_set_permission_mode_with_the_cli_mode_name() {
+        let request: serde_json::Value =
+            serde_json::from_str(&LiveSwitch::PermissionMode(PermissionMode::BypassPermissions).request()).unwrap();
+        assert_eq!(request["request"]["subtype"], "set_permission_mode");
+        assert_eq!(request["request"]["mode"], "bypassPermissions");
     }
 
     #[test]
@@ -612,7 +688,8 @@ mod live_tests {
     }
 
     fn start(command: AgentCommand, session: SessionFlag, cwd: &Path) -> LiveChat {
-        let launch = Launch { command, model: MODEL, effort: "", session, cwd };
+        let launch =
+            Launch { command, model: MODEL, effort: "", permission_mode: PermissionMode::Default, session, cwd };
         let (process, stdout) = spawn_process(&launch).unwrap();
         let (sender, events) = mpsc::channel();
         thread::spawn(move || {

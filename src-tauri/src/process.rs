@@ -4,7 +4,7 @@ use std::process::{Child, Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use crate::chats::AgentCommand;
+use crate::chats::{AgentCommand, PermissionMode};
 
 pub const STRIPPED_ENV: &[&str] = &[
     "CLAUDECODE",
@@ -47,6 +47,7 @@ pub struct Launch<'a> {
     pub command: AgentCommand,
     pub model: &'a str,
     pub effort: &'a str,
+    pub permission_mode: PermissionMode,
     pub session: SessionFlag,
     pub cwd: &'a Path,
 }
@@ -69,6 +70,7 @@ fn arguments(launch: &Launch<'_>) -> Vec<String> {
     if !launch.effort.is_empty() {
         arguments.extend(["--effort".to_string(), launch.effort.to_string()]);
     }
+    arguments.extend(["--permission-mode".to_string(), launch.permission_mode.as_str().to_string()]);
     match &launch.session {
         SessionFlag::Start(session_id) => arguments.extend(["--session-id".to_string(), session_id.clone()]),
         SessionFlag::Resume(session_id) => arguments.extend(["--resume".to_string(), session_id.clone()]),
@@ -147,22 +149,25 @@ mod tests {
             command: AgentCommand::ClaudeLyxaTeam,
             model: "haiku",
             effort: "low",
+            permission_mode: PermissionMode::AcceptEdits,
             session: SessionFlag::Start("abc".into()),
             cwd,
         };
         assert_eq!(
             command_line(&start),
             "claude-lyxa-team -p --input-format stream-json --output-format stream-json --verbose \
-             --include-partial-messages --permission-prompt-tool stdio --model haiku --effort low --session-id abc"
+             --include-partial-messages --permission-prompt-tool stdio --model haiku --effort low \
+             --permission-mode acceptEdits --session-id abc"
         );
         let resume = Launch {
             command: AgentCommand::Claude,
             model: "default",
             effort: "",
+            permission_mode: PermissionMode::BypassPermissions,
             session: SessionFlag::Resume("abc".into()),
             cwd,
         };
-        assert!(command_line(&resume).ends_with("stdio --resume abc"));
+        assert!(command_line(&resume).ends_with("stdio --permission-mode bypassPermissions --resume abc"));
         assert!(!command_line(&resume).contains("exec"));
     }
 }

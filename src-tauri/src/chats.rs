@@ -109,6 +109,40 @@ impl AgentCommand {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum PermissionMode {
+    #[default]
+    Default,
+    AcceptEdits,
+    Plan,
+    BypassPermissions,
+}
+
+impl PermissionMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            PermissionMode::Default => "default",
+            PermissionMode::AcceptEdits => "acceptEdits",
+            PermissionMode::Plan => "plan",
+            PermissionMode::BypassPermissions => "bypassPermissions",
+        }
+    }
+
+    fn parse(text: &str) -> PermissionMode {
+        match text {
+            "acceptEdits" => PermissionMode::AcceptEdits,
+            "plan" => PermissionMode::Plan,
+            "bypassPermissions" => PermissionMode::BypassPermissions,
+            _ => PermissionMode::Default,
+        }
+    }
+
+    pub fn needs_launch_flag(self) -> bool {
+        self == PermissionMode::BypassPermissions
+    }
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Chat {
@@ -119,6 +153,7 @@ pub struct Chat {
     pub command: AgentCommand,
     pub model: String,
     pub effort: String,
+    pub permission_mode: PermissionMode,
     pub session_id: String,
     pub title: String,
     pub state: ChatState,
@@ -160,6 +195,7 @@ pub struct NewChat {
     pub command: AgentCommand,
     pub model: String,
     pub effort: String,
+    pub permission_mode: PermissionMode,
     pub title: String,
 }
 
@@ -169,10 +205,11 @@ pub struct ChatOptions {
     pub command: AgentCommand,
     pub model: String,
     pub effort: String,
+    pub permission_mode: PermissionMode,
 }
 
 const CHAT_COLUMNS: &str = "id, workspace_id, project_id, provider, command, model, effort, session_id, title, \
-    state, created_at, updated_at, branch, worktree_path";
+    state, created_at, updated_at, branch, worktree_path, permission_mode";
 
 fn chat_from_row(row: &Row<'_>) -> rusqlite::Result<Chat> {
     let worktree_path: Option<String> = row.get(13)?;
@@ -192,6 +229,7 @@ fn chat_from_row(row: &Row<'_>) -> rusqlite::Result<Chat> {
         branch: row.get(12)?,
         is_worktree_removed: worktree_path.as_deref().is_some_and(|path| !Path::new(path).is_dir()),
         worktree_path,
+        permission_mode: PermissionMode::parse(&row.get::<_, String>(14)?),
     })
 }
 
@@ -246,6 +284,7 @@ pub fn insert_chat(connection: &Connection, draft: NewChat, checkout: ChatChecko
         command: draft.command,
         model: draft.model,
         effort: draft.effort,
+        permission_mode: draft.permission_mode,
         session_id: new_id(),
         title: draft.title,
         state: ChatState::Review,
@@ -257,7 +296,8 @@ pub fn insert_chat(connection: &Connection, draft: NewChat, checkout: ChatChecko
     };
     connection.execute(
         &format!(
-            "INSERT INTO chats ({CHAT_COLUMNS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)"
+            "INSERT INTO chats ({CHAT_COLUMNS}) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)"
         ),
         params![
             created.id,
@@ -273,7 +313,8 @@ pub fn insert_chat(connection: &Connection, draft: NewChat, checkout: ChatChecko
             created.created_at,
             created.updated_at,
             created.branch,
-            created.worktree_path
+            created.worktree_path,
+            created.permission_mode.as_str()
         ],
     )?;
     Ok(created)
@@ -287,8 +328,8 @@ pub fn update_options(connection: &Connection, chat_id: &str, options: &ChatOpti
         return Err(AppError::Invalid("a Claude Code chat cannot switch to codex".into()));
     }
     let changed = connection.execute(
-        "UPDATE chats SET command = ?2, model = ?3, effort = ?4 WHERE id = ?1",
-        params![chat_id, options.command.as_str(), options.model, options.effort],
+        "UPDATE chats SET command = ?2, model = ?3, effort = ?4, permission_mode = ?5 WHERE id = ?1",
+        params![chat_id, options.command.as_str(), options.model, options.effort, options.permission_mode.as_str()],
     )?;
     if changed == 0 {
         return Err(AppError::NotFound("chat"));
@@ -446,6 +487,7 @@ mod tests {
             command: AgentCommand::ClaudeLyxaTeam,
             model: "default".into(),
             effort: "high".into(),
+            permission_mode: PermissionMode::AcceptEdits,
             title: " Fix the sort ".into(),
         }
     }
@@ -490,11 +532,16 @@ mod tests {
         let db = Db::open_in_memory().unwrap();
         let connection = db.connection();
         let created = insert_chat(&connection, draft(project_id(&connection)), ChatCheckout::default()).unwrap();
-        let options = ChatOptions { command: AgentCommand::Claude, model: "opus".into(), effort: "max".into() };
+        let options = ChatOptions {
+            command: AgentCommand::Claude,
+            model: "opus".into(),
+            effort: "max".into(),
+            permission_mode: PermissionMode::Plan,
+        };
         update_options(&connection, &created.id, &options).unwrap();
         let loaded = chat(&connection, &created.id).unwrap();
-        let saved = (loaded.command, loaded.model.as_str(), loaded.effort.as_str());
-        assert_eq!(saved, (AgentCommand::Claude, "opus", "max"));
+        let saved = (loaded.command, loaded.model.as_str(), loaded.effort.as_str(), loaded.permission_mode);
+        assert_eq!(saved, (AgentCommand::Claude, "opus", "max", PermissionMode::Plan));
         let shell = ChatOptions { model: "opus; rm -rf /".into(), ..options.clone() };
         assert!(update_options(&connection, &created.id, &shell).is_err());
         let codex = ChatOptions { command: AgentCommand::Codex, ..options };
@@ -505,6 +552,35 @@ mod tests {
     fn rejects_unknown_commands_at_the_boundary() {
         let parsed: Result<AgentCommand, _> = serde_json::from_str("\"bash\"");
         assert!(parsed.is_err());
+    }
+
+    #[test]
+    fn accepts_only_the_four_permission_modes_at_the_boundary() {
+        for mode in ["default", "acceptEdits", "plan", "bypassPermissions"] {
+            let parsed: PermissionMode = serde_json::from_value(mode.into()).unwrap();
+            assert_eq!(parsed.as_str(), mode);
+        }
+        for unknown in ["dontAsk", "auto", "manual", "BYPASS", "default; rm -rf /"] {
+            assert!(serde_json::from_value::<PermissionMode>(unknown.into()).is_err(), "{unknown}");
+        }
+    }
+
+    #[test]
+    fn stores_the_permission_mode_and_defaults_older_chats_to_ask() {
+        let db = Db::open_in_memory().unwrap();
+        let connection = db.connection();
+        let created = insert_chat(&connection, draft(project_id(&connection)), ChatCheckout::default()).unwrap();
+        assert_eq!(chat(&connection, &created.id).unwrap().permission_mode, PermissionMode::AcceptEdits);
+        assert_eq!(serde_json::to_value(&created).unwrap()["permissionMode"], "acceptEdits");
+        connection
+            .execute(
+                "INSERT INTO chats (id, workspace_id, project_id, provider, command, model, effort, session_id, \
+                 title, state, created_at, updated_at) SELECT 'old', workspace_id, project_id, provider, command, \
+                 model, effort, 's-old', 'Old', 'review', 0, 0 FROM chats WHERE id = ?1",
+                [&created.id],
+            )
+            .unwrap();
+        assert_eq!(chat(&connection, "old").unwrap().permission_mode, PermissionMode::Default);
     }
 
     #[test]
@@ -522,9 +598,10 @@ mod tests {
 
     #[test]
     fn rejects_paths_and_modes_supplied_by_the_ui() {
-        let base = r#""projectId":"p1","provider":"Claude Code","command":"claude","model":"default","effort":"high""#;
+        let base = r#""projectId":"p1","provider":"Claude Code","command":"claude","model":"default","effort":"high",
+            "permissionMode":"plan""#;
         assert!(serde_json::from_str::<NewChat>(&format!(r#"{{{base},"title":"t"}}"#)).is_ok());
-        for extra in [r#""newBranch":true"#, r#""worktreePath":"/etc""#, r#""branch":"x""#] {
+        for extra in [r#""newBranch":true"#, r#""worktreePath":"/etc""#, r#""branch":"x""#, r#""mode":"plan""#] {
             assert!(serde_json::from_str::<NewChat>(&format!(r#"{{{base},"title":"t",{extra}}}"#)).is_err());
         }
     }

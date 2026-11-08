@@ -722,6 +722,15 @@ pub fn set_model_request(request_id: &str, model: &str) -> String {
         .to_string()
 }
 
+pub fn set_permission_mode_request(request_id: &str, mode: &str) -> String {
+    json!({
+        "type": "control_request",
+        "request_id": request_id,
+        "request": {"subtype": "set_permission_mode", "mode": mode},
+    })
+    .to_string()
+}
+
 pub fn interrupt_request(request_id: &str) -> String {
     json!({"type": "control_request", "request_id": request_id, "request": {"subtype": "interrupt"}}).to_string()
 }
@@ -957,6 +966,14 @@ mod tests {
         assert_eq!(request["type"], "control_request");
         assert_eq!(request["request_id"], "m1");
         assert_eq!(request["request"], json!({"subtype": "set_model", "model": "opus"}));
+    }
+
+    #[test]
+    fn asks_the_live_session_to_switch_permission_modes() {
+        let request: Value = serde_json::from_str(&set_permission_mode_request("p1", "acceptEdits")).unwrap();
+        assert_eq!(request["type"], "control_request");
+        assert_eq!(request["request_id"], "p1");
+        assert_eq!(request["request"], json!({"subtype": "set_permission_mode", "mode": "acceptEdits"}));
     }
 
     #[test]
