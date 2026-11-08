@@ -30,6 +30,7 @@ export interface ChatStart extends ChatChoice {
 interface NewChatProps {
   workspace: Workspace;
   initialChoice: ChatChoice;
+  initialProjectId: string | null;
   onStart: (start: ChatStart) => void;
   onAddProject: () => void;
 }
@@ -48,8 +49,8 @@ function pickOption(options: string[], preferred: string, fallback: string): str
   return options[0] ?? "";
 }
 
-export function NewChat({ workspace, initialChoice, onStart, onAddProject }: NewChatProps) {
-  const [projectId, setProjectId] = useState(workspace.projects[0]?.id ?? "");
+export function NewChat({ workspace, initialChoice, initialProjectId, onStart, onAddProject }: NewChatProps) {
+  const [projectId, setProjectId] = useState(initialProjectId ?? workspace.projects[0]?.id ?? "");
   const [choice, setChoice] = useState<ChatChoice>(initialChoice);
 
   const project = workspace.projects.find((candidate) => candidate.id === projectId) ?? workspace.projects[0];

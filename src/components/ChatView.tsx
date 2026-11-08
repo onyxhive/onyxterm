@@ -11,6 +11,7 @@ import { WorkingLine } from "./WorkingLine";
 export interface ChatActions extends FeedActions {
   onReply: (text: string) => void;
   onMarkDone: () => void;
+  onReopen: () => void;
   onStop: () => void;
   onToggleWorkPanel: () => void;
 }
@@ -44,6 +45,7 @@ export function ChatView({ task, projectName, isWorkPanelOpen, actions }: ChatVi
         projectName={projectName}
         isWorkPanelOpen={isWorkPanelOpen}
         onMarkDone={actions.onMarkDone}
+        onReopen={actions.onReopen}
         onToggleWorkPanel={actions.onToggleWorkPanel}
       />
       <div className="chat__feed" ref={feedRef}>

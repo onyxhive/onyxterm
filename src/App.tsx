@@ -64,7 +64,7 @@ export default function App() {
       id: `${chat.id}-${chat.state}`,
       taskId: chat.id,
       headline: `${chat.title} ${headline}`,
-      detail: "",
+      detail: projectName(chat.projectId),
     };
     setToasts((current) => [...current.filter((candidate) => candidate.taskId !== chat.id), toast]);
   }
@@ -137,6 +137,7 @@ export default function App() {
     onDecide: (requestId, decision) => withSelectedChat((chatId) => chatState.decide(chatId, requestId, decision)),
     onAnswer: (requestId, answers) => withSelectedChat((chatId) => chatState.answer(chatId, requestId, answers)),
     onMarkDone: () => withSelectedChat((chatId) => chatState.setState(chatId, "done")),
+    onReopen: () => withSelectedChat((chatId) => chatState.setState(chatId, "review")),
     onStop: () => withSelectedChat(chatState.stop),
     onToggleWorkPanel: () => setIsWorkPanelOpen(!isWorkPanelOpen),
   };
@@ -150,6 +151,7 @@ export default function App() {
           key={`${workspace.id}-${workspace.projects.length}`}
           workspace={workspace}
           initialChoice={rememberedChoice(settings[CHOICE_SETTING])}
+          initialProjectId={workspaceState.lastAddedProjectId}
           onStart={start}
           onAddProject={workspaceActions.onAddProject}
         />

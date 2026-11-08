@@ -1,4 +1,4 @@
-import { CheckCheck, PanelRight, SquareTerminal } from "lucide-react";
+import { CheckCheck, PanelRight, RotateCcw, SquareTerminal } from "lucide-react";
 import type { Task } from "../types";
 import { STATUS_LABEL } from "../status";
 import { StatusGlyph } from "./StatusGlyph";
@@ -10,10 +10,12 @@ interface ChatHeaderProps {
   projectName: string;
   isWorkPanelOpen: boolean;
   onMarkDone: () => void;
+  onReopen: () => void;
   onToggleWorkPanel: () => void;
 }
 
-export function ChatHeader({ task, projectName, isWorkPanelOpen, onMarkDone, onToggleWorkPanel }: ChatHeaderProps) {
+export function ChatHeader(props: ChatHeaderProps) {
+  const { task, projectName, isWorkPanelOpen, onMarkDone, onReopen, onToggleWorkPanel } = props;
   return (
     <header className="chat-header">
       <div className="chat-header__heading">
@@ -27,7 +29,12 @@ export function ChatHeader({ task, projectName, isWorkPanelOpen, onMarkDone, onT
         </span>
       </div>
       <div className="chat-header__actions">
-        {task.status !== "done" && (
+        {task.status === "done" ? (
+          <button type="button" className="button button--small" onClick={onReopen}>
+            <RotateCcw size={14} />
+            Reopen
+          </button>
+        ) : (
           <button type="button" className="button button--small" onClick={onMarkDone}>
             <CheckCheck size={14} />
             Mark done

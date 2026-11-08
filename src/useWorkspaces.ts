@@ -13,6 +13,7 @@ interface WorkspacesInput {
 export function useWorkspaces({ settings, remember, onError }: WorkspacesInput) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
+  const [lastAddedProjectId, setLastAddedProjectId] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     setWorkspaces(await api.listWorkspaces());
@@ -59,9 +60,14 @@ export function useWorkspaces({ settings, remember, onError }: WorkspacesInput) 
         select(created.id);
       }),
     onRename: (id: string, name: string) => guarded(() => api.renameWorkspace(id, name)),
-    onAddProject: () => guarded(async () => workspace && api.addProject(workspace.id)),
+    onAddProject: () =>
+      guarded(async () => {
+        if (!workspace) return;
+        const added = await api.addProject(workspace.id);
+        if (added) setLastAddedProjectId(added.id);
+      }),
     onRemoveProject: (projectId: string) => guarded(() => api.removeProject(projectId)),
   };
 
-  return { workspaces, workspace, actions };
+  return { workspaces, workspace, actions, lastAddedProjectId };
 }
