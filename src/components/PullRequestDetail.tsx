@@ -17,6 +17,7 @@ import { elapsedSince } from "../tasks";
 import type { MergeMethod, PrCheck, PullRequestDetail as Detail } from "../types";
 import { usePr } from "../useGit";
 import { useLoaded } from "../useLoaded";
+import { MERGE_METHODS, useMergeMethod } from "../useMergeMethod";
 import { DiffStat } from "./ChangesPanel";
 import { GhProblemState } from "./GhProblemState";
 import { Markdown } from "./Markdown";
@@ -25,12 +26,10 @@ import { cn, GHOST_BUTTON, MENU_ITEM, MENU_POPUP, MenuLabel, OUTLINE_BUTTON, PRI
 import { usePopup } from "./usePopup";
 
 const MERGE_LABEL: Record<MergeMethod, string> = {
+  merge: "Merge",
   squash: "Squash and merge",
-  merge: "Create a merge commit",
   rebase: "Rebase and merge",
 };
-
-const MERGE_METHODS: MergeMethod[] = ["squash", "merge", "rebase"];
 
 const CONFLICTING = "CONFLICTING";
 
@@ -194,7 +193,7 @@ interface MergeControlProps {
 
 function MergeControl({ detail, projectId, onMerged }: MergeControlProps) {
   const popup = usePopup();
-  const [method, setMethod] = useState<MergeMethod>("squash");
+  const [method, chooseMethod] = useMergeMethod();
   const [isConfirming, setIsConfirming] = useState(false);
   const [isMerging, setIsMerging] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -266,7 +265,7 @@ function MergeControl({ detail, projectId, onMerged }: MergeControlProps) {
               aria-checked={candidate === method}
               className={MENU_ITEM}
               onClick={() => {
-                setMethod(candidate);
+                chooseMethod(candidate);
                 popup.close();
               }}
             >
