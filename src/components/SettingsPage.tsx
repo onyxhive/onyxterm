@@ -25,6 +25,12 @@ import {
   TIMESTAMP_FORMAT_SETTING,
   type TimestampFormat,
 } from "../preferences";
+import {
+  PERMISSION_MODE_INFO,
+  PERMISSION_MODE_SETTING,
+  PERMISSION_MODES,
+  type PermissionMode,
+} from "../permissionModes";
 import type { Project } from "../types";
 import { useCapabilities } from "../useCapabilities";
 import { useLoaded } from "../useLoaded";
@@ -72,6 +78,11 @@ const SEND_SHORTCUT_OPTIONS: SelectOption<SendShortcut>[] = [
   { value: "mod-enter-multiline", label: "⌘ + Enter for multiline prompts" },
   { value: "mod-enter", label: "⌘ + Enter always" },
 ];
+
+const PERMISSION_MODE_OPTIONS: SelectOption<PermissionMode>[] = PERMISSION_MODES.map((mode) => ({
+  value: mode,
+  label: mode === "default" ? `${PERMISSION_MODE_INFO[mode].label} (default)` : PERMISSION_MODE_INFO[mode].label,
+}));
 
 const MERGE_METHOD_OPTIONS = MERGE_METHODS.map((method) => ({ value: method, label: MERGE_METHOD_LABELS[method] }));
 
@@ -405,6 +416,18 @@ export function SettingsPage(props: SettingsPageProps) {
         </SettingsSection>
         <SettingsSection title="Providers">
           <DefaultAgentRow choice={defaultChoice} projectId={firstProjectId} onChange={onDefaultChoiceChange} />
+          <SettingsRow
+            title="Permission mode"
+            description="New chats start in this mode. Change it per chat from the composer."
+            control={
+              <SettingsSelect
+                label="Permission mode"
+                options={PERMISSION_MODE_OPTIONS}
+                value={settings[PERMISSION_MODE_SETTING]}
+                onChange={(mode) => onRemember(PERMISSION_MODE_SETTING, mode)}
+              />
+            }
+          />
           <SettingsRow
             title="Claude commands"
             description="The Claude Code launchers a chat can run. Pick one per chat in the agent menu."
