@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+use crate::chats::PermissionMode;
+
 const ASK_USER_QUESTION: &str = "AskUserQuestion";
 const DETAIL_LENGTH: usize = 160;
 const SESSION_DESTINATION: &str = "session";
@@ -14,6 +16,8 @@ const COMPLETED_STATUS: &str = "completed";
 const ASYNC_LAUNCH_PREFIX: &str = "Async agent launched";
 const REPORT_MARKER: &str = "The report follows:";
 const AGENT_ID_TRAILER: &str = "\nagentId:";
+const ERROR_SUBTYPE: &str = "error";
+const UNKNOWN_CONTROL_ERROR: &str = "the agent refused the request";
 pub const SUMMARY_LENGTH: usize = 400;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -165,6 +169,8 @@ struct SystemLine {
     status: Option<String>,
     #[serde(default)]
     is_backgrounded: bool,
+    #[serde(rename = "permissionMode")]
+    permission_mode: Option<Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -305,7 +311,17 @@ struct ControlResponseLine {
 
 #[derive(Debug, Deserialize)]
 struct ControlResponseBody {
+    #[serde(default)]
+    subtype: String,
+    request_id: Option<String>,
+    error: Option<String>,
     response: Option<Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ControlNotice {
+    PermissionModeReported(PermissionMode),
+    RequestFailed { request_id: String, message: String },
 }
 
 #[derive(Debug, Deserialize)]
@@ -335,6 +351,7 @@ pub struct StreamParser {
     source: Source,
     current_message_id: Option<String>,
     pending_permissions: Vec<PermissionRequest>,
+    notices: Vec<ControlNotice>,
     subagents: HashMap<String, SubagentTrack>,
 }
 
@@ -454,7 +471,17 @@ fn questions_of(input: &Value) -> Vec<Question> {
 
 impl StreamParser {
     pub fn new(source: Source) -> Self {
-        StreamParser { source, current_message_id: None, pending_permissions: Vec::new(), subagents: HashMap::new() }
+        StreamParser {
+            source,
+            current_message_id: None,
+            pending_permissions: Vec::new(),
+            notices: Vec::new(),
+            subagents: HashMap::new(),
+        }
+    }
+
+    pub fn take_control_notices(&mut self) -> Vec<ControlNotice> {
+        std::mem::take(&mut self.notices)
     }
 
     pub fn take_permission_requests(&mut self) -> Vec<PermissionRequest> {
@@ -479,7 +506,7 @@ impl StreamParser {
             Incoming::User(user) => self.user_events(user),
             Incoming::Result(result) => vec![Self::turn_end(result)],
             Incoming::ControlRequest(request) => self.control_request_events(request),
-            Incoming::ControlResponse(response) => Self::control_response_events(response),
+            Incoming::ControlResponse(response) => self.control_response_events(response),
             Incoming::ControlCancelRequest(cancel) => {
                 vec![AgentEvent::PermissionCancelled { request_id: cancel.request_id }]
             }
@@ -488,6 +515,10 @@ impl StreamParser {
     }
 
     fn system_events(&mut self, system: SystemLine) -> Vec<AgentEvent> {
+        let reported_mode = system.permission_mode.clone().and_then(|mode| serde_json::from_value(mode).ok());
+        if let Some(mode) = reported_mode {
+            self.notices.push(ControlNotice::PermissionModeReported(mode));
+        }
         let event = match system.subtype.as_str() {
             "init" => system.session_id.map(|session_id| AgentEvent::Session { session_id }),
             "session_title_changed" => system.title.map(|title| AgentEvent::TitleChanged { title }),
@@ -691,8 +722,13 @@ impl StreamParser {
         vec![event]
     }
 
-    fn control_response_events(response: ControlResponseLine) -> Vec<AgentEvent> {
-        let Some(payload) = response.response.response else {
+    fn control_response_events(&mut self, response: ControlResponseLine) -> Vec<AgentEvent> {
+        let body = response.response;
+        if body.subtype == ERROR_SUBTYPE {
+            self.record_failure(body);
+            return Vec::new();
+        }
+        let Some(payload) = body.response else {
             return Vec::new();
         };
         if let Some(title) = payload.get(TITLE_FIELD).and_then(Value::as_str) {
@@ -701,6 +737,12 @@ impl StreamParser {
         serde_json::from_value::<Capabilities>(payload)
             .map(|capabilities| vec![AgentEvent::Initialized { capabilities }])
             .unwrap_or_default()
+    }
+
+    fn record_failure(&mut self, body: ControlResponseBody) {
+        let Some(request_id) = body.request_id else { return };
+        let message = body.error.unwrap_or_else(|| UNKNOWN_CONTROL_ERROR.into());
+        self.notices.push(ControlNotice::RequestFailed { request_id, message });
     }
 }
 
@@ -974,6 +1016,41 @@ mod tests {
         assert_eq!(request["type"], "control_request");
         assert_eq!(request["request_id"], "p1");
         assert_eq!(request["request"], json!({"subtype": "set_permission_mode", "mode": "acceptEdits"}));
+    }
+
+    #[test]
+    fn reports_the_permission_mode_claude_says_it_is_in() {
+        let mut parser = StreamParser::new(Source::Live);
+        parser.parse_line(r#"{"type":"system","subtype":"status","status":null,"permissionMode":"default"}"#);
+        parser.parse_line(r#"{"type":"system","subtype":"init","session_id":"s1","permissionMode":"plan"}"#);
+        parser.parse_line(r#"{"type":"system","subtype":"status","status":null,"permissionMode":"dontAsk"}"#);
+        parser.parse_line(r#"{"type":"system","subtype":"status","status":"compacting"}"#);
+        assert_eq!(
+            parser.take_control_notices(),
+            vec![
+                ControlNotice::PermissionModeReported(PermissionMode::Default),
+                ControlNotice::PermissionModeReported(PermissionMode::Plan)
+            ]
+        );
+        assert!(parser.take_control_notices().is_empty());
+    }
+
+    #[test]
+    fn reports_control_requests_claude_refused() {
+        let mut parser = StreamParser::new(Source::Live);
+        let refused = r#"{"type":"control_response","response":{"subtype":"error","request_id":"p1",
+            "error":"Cannot set permission mode to bypassPermissions","error_code":"bypass_not_launched"}}"#;
+        assert!(parser.parse_line(&refused.replace('\n', "")).is_empty());
+        let accepted = r#"{"type":"control_response","response":{"subtype":"success","request_id":"p2",
+            "response":{"mode":"plan"}}}"#;
+        parser.parse_line(&accepted.replace('\n', ""));
+        assert_eq!(
+            parser.take_control_notices(),
+            vec![ControlNotice::RequestFailed {
+                request_id: "p1".into(),
+                message: "Cannot set permission mode to bypassPermissions".into()
+            }]
+        );
     }
 
     #[test]

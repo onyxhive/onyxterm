@@ -16,13 +16,14 @@ use crate::checkpoints;
 use crate::db::{Db, new_id};
 use crate::error::{AppError, AppResult};
 use crate::process::{self, Launch, SessionFlag};
-use crate::protocol::{self, AgentEvent, Capabilities, PermissionRequest, Source, StreamParser};
+use crate::protocol::{self, AgentEvent, Capabilities, ControlNotice, PermissionRequest, Source, StreamParser};
 use crate::subprocess::in_background;
 use crate::transcripts;
 use crate::workspaces::project;
 
 pub const CHAT_EVENT: &str = "chat-event";
 pub const CHAT_UPDATED: &str = "chat-updated";
+pub const CHAT_OPTION_REJECTED: &str = "chat-option-rejected";
 const IDLE_LIMIT: Duration = Duration::from_secs(10 * 60);
 const REAP_INTERVAL: Duration = Duration::from_secs(30);
 const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(45);
@@ -42,11 +43,33 @@ enum LiveSwitch {
 }
 
 impl LiveSwitch {
-    fn request(&self) -> String {
+    fn request(&self, request_id: &str) -> String {
         match self {
-            LiveSwitch::Model(model) => protocol::set_model_request(&new_id(), model),
-            LiveSwitch::PermissionMode(mode) => protocol::set_permission_mode_request(&new_id(), mode.as_str()),
+            LiveSwitch::Model(model) => protocol::set_model_request(request_id, model),
+            LiveSwitch::PermissionMode(mode) => protocol::set_permission_mode_request(request_id, mode.as_str()),
         }
+    }
+
+    fn undo_from(&self, before: &Chat) -> LiveSwitch {
+        match self {
+            LiveSwitch::Model(_) => LiveSwitch::Model(before.model.clone()),
+            LiveSwitch::PermissionMode(_) => LiveSwitch::PermissionMode(before.permission_mode),
+        }
+    }
+
+    fn applied_to(&self, options: ChatOptions) -> ChatOptions {
+        match self {
+            LiveSwitch::Model(model) => ChatOptions { model: model.clone(), ..options },
+            LiveSwitch::PermissionMode(permission_mode) => ChatOptions { permission_mode: *permission_mode, ..options },
+        }
+    }
+
+    fn refusal(&self, reason: &str) -> String {
+        let setting = match self {
+            LiveSwitch::Model(_) => "model",
+            LiveSwitch::PermissionMode(_) => "permission mode",
+        };
+        format!("Claude Code kept the previous {setting}: {reason}")
     }
 }
 
@@ -88,6 +111,13 @@ struct ChatEventPayload<'a> {
     event: &'a AgentEvent,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OptionRejectedPayload<'a> {
+    chat_id: &'a str,
+    message: &'a str,
+}
+
 #[derive(Debug, Clone, Copy, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum PermissionDecision {
@@ -110,6 +140,7 @@ struct AgentProcess {
     stdin: Mutex<ChildStdin>,
     activity: Mutex<Activity>,
     permissions: Mutex<HashMap<String, PermissionRequest>>,
+    pending_undos: Mutex<HashMap<String, LiveSwitch>>,
     stderr_tail: Arc<Mutex<String>>,
 }
 
@@ -137,6 +168,12 @@ impl AgentProcess {
 
     fn take_permission(&self, request_id: &str) -> AppResult<PermissionRequest> {
         locked(&self.permissions).remove(request_id).ok_or(AppError::NotFound("permission request"))
+    }
+
+    fn send_switch(&self, switch: &LiveSwitch, before: &Chat) -> AppResult<()> {
+        let request_id = new_id();
+        locked(&self.pending_undos).insert(request_id.clone(), switch.undo_from(before));
+        self.write_line(&switch.request(&request_id))
     }
 }
 
@@ -169,6 +206,37 @@ pub fn rename_chat(app: &AppHandle, chat_id: &str, title: &str) {
     }
     if let Ok(chat) = chats::chat(&connection, chat_id) {
         let _ = app.emit(CHAT_UPDATED, chat);
+    }
+}
+
+fn store_switch(app: &AppHandle, chat_id: &str, switch: &LiveSwitch) -> AppResult<()> {
+    let db = app.state::<Db>();
+    let connection = db.connection();
+    let chat = chats::chat(&connection, chat_id)?;
+    let options = switch.applied_to(chat_options(&chat));
+    if options == chat_options(&chat) {
+        return Ok(());
+    }
+    chats::update_options(&connection, chat_id, &options)?;
+    let _ = app.emit(CHAT_UPDATED, chats::chat(&connection, chat_id)?);
+    Ok(())
+}
+
+fn undo_refused_switch(app: &AppHandle, chat_id: &str, process: &AgentProcess, request_id: &str, reason: &str) {
+    let Some(undo) = locked(&process.pending_undos).remove(request_id) else { return };
+    let _ = store_switch(app, chat_id, &undo);
+    let message = undo.refusal(reason);
+    let _ = app.emit(CHAT_OPTION_REJECTED, OptionRejectedPayload { chat_id, message: &message });
+}
+
+fn apply_notice(app: &AppHandle, chat_id: &str, process: &AgentProcess, notice: ControlNotice) {
+    match notice {
+        ControlNotice::PermissionModeReported(mode) => {
+            let _ = store_switch(app, chat_id, &LiveSwitch::PermissionMode(mode));
+        }
+        ControlNotice::RequestFailed { request_id, message } => {
+            undo_refused_switch(app, chat_id, process, &request_id, &message)
+        }
     }
 }
 
@@ -272,6 +340,9 @@ fn pump_stdout(app: AppHandle, chat_id: String, process: Arc<AgentProcess>, stdo
             for request in parser.take_permission_requests() {
                 locked(&process.permissions).insert(request.request_id.clone(), request);
             }
+            for notice in parser.take_control_notices() {
+                apply_notice(&app, &chat_id, &process, notice);
+            }
             for event in &events {
                 apply_event(&app, &chat_id, &process, event);
                 emit_event(&app, &chat_id, event);
@@ -313,6 +384,7 @@ fn spawn_process(launch: &Launch<'_>) -> AppResult<(Arc<AgentProcess>, ChildStdo
             checkpoint_turn: None,
         }),
         permissions: Mutex::new(HashMap::new()),
+        pending_undos: Mutex::new(HashMap::new()),
         stderr_tail,
     });
     process.write_line(&protocol::initialize_request(&new_id()))?;
@@ -470,7 +542,7 @@ async fn apply_live_change(app: &AppHandle, before: &Chat, updated: &Chat) -> Ap
     let runtime = app.state::<AgentRuntime>();
     let Some(process) = runtime.process(&updated.id) else { return Ok(()) };
     match live_change(before, &chat_options(updated)) {
-        LiveChange::Switch(switches) => switches.iter().try_for_each(|switch| process.write_line(&switch.request())),
+        LiveChange::Switch(switches) => switches.iter().try_for_each(|switch| process.send_switch(switch, before)),
         LiveChange::Respawn => {
             runtime.forget(&updated.id, &process);
             in_background(move || {
@@ -651,9 +723,25 @@ mod tests {
     #[test]
     fn sends_set_permission_mode_with_the_cli_mode_name() {
         let request: serde_json::Value =
-            serde_json::from_str(&LiveSwitch::PermissionMode(PermissionMode::BypassPermissions).request()).unwrap();
+            serde_json::from_str(&LiveSwitch::PermissionMode(PermissionMode::BypassPermissions).request("r1")).unwrap();
+        assert_eq!(request["request_id"], "r1");
         assert_eq!(request["request"]["subtype"], "set_permission_mode");
         assert_eq!(request["request"]["mode"], "bypassPermissions");
+    }
+
+    #[test]
+    fn undoes_a_refused_switch_back_to_the_value_before_it() {
+        let before = chat_with(AgentCommand::Claude, "sonnet", "high");
+        let to_plan = LiveSwitch::PermissionMode(PermissionMode::Plan);
+        let undo = to_plan.undo_from(&before);
+        assert_eq!(undo, LiveSwitch::PermissionMode(PermissionMode::Default));
+        let switched = to_plan.applied_to(chat_options(&before));
+        assert_eq!(undo.applied_to(switched), chat_options(&before));
+        assert_eq!(LiveSwitch::Model("opus".into()).undo_from(&before), LiveSwitch::Model("sonnet".into()));
+        assert_eq!(
+            undo.refusal("bypass_restricted"),
+            "Claude Code kept the previous permission mode: bypass_restricted"
+        );
     }
 
     #[test]
