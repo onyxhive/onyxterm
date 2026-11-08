@@ -18,9 +18,10 @@ export interface ChatStart extends AgentChoice {
 interface NewChatProps {
   workspace: Workspace;
   initialChoice: AgentChoice;
-  initialProjectId: string | null;
+  projectId: string | null;
   isWorktreeMode: boolean;
   onStart: (start: ChatStart) => void;
+  onPickProject: (projectId: string) => void;
   onAddProject: () => void;
 }
 
@@ -91,8 +92,7 @@ function ProjectPicker({ project, projects, onPick, onAddProject }: ProjectPicke
 }
 
 export function NewChat(props: NewChatProps) {
-  const { workspace, initialChoice, initialProjectId, isWorktreeMode, onStart, onAddProject } = props;
-  const [projectId, setProjectId] = useState(initialProjectId ?? workspace.projects[0]?.id ?? "");
+  const { workspace, initialChoice, projectId, isWorktreeMode, onStart, onPickProject, onAddProject } = props;
   const [choice, setChoice] = useState<AgentChoice>(initialChoice);
 
   const project = workspace.projects.find((candidate) => candidate.id === projectId) ?? workspace.projects[0];
@@ -129,7 +129,7 @@ export function NewChat(props: NewChatProps) {
         <ProjectPicker
           project={project}
           projects={workspace.projects}
-          onPick={setProjectId}
+          onPick={onPickProject}
           onAddProject={onAddProject}
         />
       )}

@@ -77,7 +77,6 @@ export default function App() {
   const [diffScope, setDiffScope] = useState<DiffScope>(LATEST_TURN_SCOPE);
   const workbench = useWorkbench();
   const { closeFilesPanel, toggleFilesPanel, toggleTerminal } = workbench;
-  const [newChatProjectId, setNewChatProjectId] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   function showError(message: string) {
@@ -167,20 +166,24 @@ export default function App() {
     setView("chat");
   }
 
+  function rememberProject(projectId: string) {
+    if (lastProjectSetting) remember(lastProjectSetting, projectId);
+  }
+
   function openNewChat(projectId?: string) {
-    setNewChatProjectId(projectId ?? null);
+    if (projectId) rememberProject(projectId);
     setSelectedTaskId(null);
     setView("chat");
   }
 
   useEffect(() => {
-    if (lastAddedProjectId && lastProjectSetting) remember(lastProjectSetting, lastAddedProjectId);
+    if (lastAddedProjectId) rememberProject(lastAddedProjectId);
   }, [lastAddedProjectId]);
 
   async function start(chatStart: ChatStart) {
     const { provider, command, model, effort, projectId } = chatStart;
     remember(CHOICE_SETTING, JSON.stringify({ provider, command, model, effort }));
-    if (lastProjectSetting) remember(lastProjectSetting, projectId);
+    rememberProject(projectId);
     const chat = await startChat(chatStart);
     if (chat) setSelectedTaskId(chat.id);
   }
@@ -317,12 +320,13 @@ export default function App() {
     if (!selectedTask) {
       return (
         <NewChat
-          key={`${workspace.id}-${workspace.projects.length}-${newChatProjectId}-${lastProjectId}`}
+          key={workspace.id}
           workspace={workspace}
           initialChoice={rememberedChoice(settings[CHOICE_SETTING])}
-          initialProjectId={newChatProjectId ?? lastProjectId ?? null}
+          projectId={lastProjectId ?? null}
           isWorktreeMode={settings[WORK_IN_WORKTREES_SETTING] === "true"}
           onStart={start}
+          onPickProject={rememberProject}
           onAddProject={workspaceActions.onAddProject}
         />
       );
