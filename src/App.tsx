@@ -203,7 +203,6 @@ export default function App() {
         />
         <main className="app__main">
           {renderMain()}
-          <Toasts toasts={toasts} tasks={tasks} onOpen={openToast} onDismiss={dismissToast} />
         </main>
         {isWorkPanelVisible && (
           <WorkPanel
@@ -211,6 +210,7 @@ export default function App() {
             project={projects.find((project) => project.id === selectedTask.projectId)}
           />
         )}
+        <Toasts toasts={toasts} tasks={tasks} onOpen={openToast} onDismiss={dismissToast} />
       </div>
     </div>
   );

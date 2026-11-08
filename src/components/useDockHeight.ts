@@ -5,15 +5,15 @@ const DOCK_HEIGHT_VARIABLE = "--dock-height";
 export function useDockHeight(dockRef: RefObject<HTMLElement | null>) {
   useLayoutEffect(() => {
     const dock = dockRef.current;
-    const main = dock?.closest<HTMLElement>(".app__main");
-    if (!dock || !main) return;
+    const body = dock?.closest<HTMLElement>(".app__body");
+    if (!dock || !body) return;
     const observer = new ResizeObserver(() => {
-      main.style.setProperty(DOCK_HEIGHT_VARIABLE, `${dock.offsetHeight}px`);
+      body.style.setProperty(DOCK_HEIGHT_VARIABLE, `${dock.offsetHeight}px`);
     });
     observer.observe(dock);
     return () => {
       observer.disconnect();
-      main.style.removeProperty(DOCK_HEIGHT_VARIABLE);
+      body.style.removeProperty(DOCK_HEIGHT_VARIABLE);
     };
   }, [dockRef]);
 }
