@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Check, ChevronDown, Folder, FolderGit2, FolderOpen, FolderPlus, TriangleAlert } from "lucide-react";
+import { Check, ChevronDown, Folder, FolderGit2, FolderPlus, TriangleAlert } from "lucide-react";
 import { effortOptionsFor, modelChoices, pickOption } from "../agentChoices";
 import { CODEX_COMMAND, DEFAULT_EFFORT, DEFAULT_MODEL } from "../agentOptions";
 import type { PermissionMode } from "../permissionModes";
@@ -67,7 +67,7 @@ function ProjectPicker({ project, projects, onPick, onAddProject }: ProjectPicke
         <div
           role="menu"
           aria-label="Projects"
-          className={cn(MENU_POPUP, "absolute top-full left-0 mt-2 w-72")}
+          className={cn(MENU_POPUP, "absolute top-full left-0 mt-2 w-max max-w-[min(24rem,90vw)] min-w-48")}
         >
           <MenuLabel>Project</MenuLabel>
           {projects.map((candidate) => (
@@ -76,12 +76,12 @@ function ProjectPicker({ project, projects, onPick, onAddProject }: ProjectPicke
               type="button"
               role="menuitemradio"
               aria-checked={candidate.id === project.id}
+              title={candidate.path}
               className={MENU_ITEM}
               onClick={() => choose(() => onPick(candidate.id))}
             >
               <Folder />
               <span className="min-w-0 flex-1 truncate">{candidate.name}</span>
-              <span className="max-w-32 truncate text-xs text-muted-foreground">{candidate.path}</span>
               <Check className={cn("size-3.5", candidate.id !== project.id && "invisible")} />
             </button>
           ))}
@@ -160,12 +160,6 @@ export function NewChat(props: NewChatProps) {
         <span className="flex min-w-0 items-center gap-1.5" title={project.path}>
           <FolderGit2 className="size-3.5 shrink-0" />
           <span className="truncate">Runs in a new worktree of {project.name} on its own branch</span>
-        </span>
-      )}
-      {project && !isWorktreeMode && (
-        <span className="flex min-w-0 items-center gap-1.5" title={project.path}>
-          <FolderOpen className="size-3.5 shrink-0" />
-          <span className="truncate">Runs in {project.path}</span>
         </span>
       )}
       {problem && (
