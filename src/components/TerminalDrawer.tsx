@@ -122,7 +122,7 @@ export function TerminalDrawer({ chatId, height, onHeightChange, onHide, onError
     <section
       aria-label="Terminal"
       style={{ height }}
-      className="relative flex shrink-0 flex-col border-t border-border bg-background"
+      className="island relative flex shrink-0 flex-col overflow-visible bg-background"
     >
       <div
         aria-hidden

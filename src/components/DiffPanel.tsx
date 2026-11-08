@@ -223,11 +223,11 @@ export function DiffPanel({ task, project, scope, onScopeChange }: DiffPanelProp
   return (
     <aside
       aria-label="Diff"
-      className="flex h-full w-(--diff-panel-width) shrink-0 flex-col border-l border-border bg-background"
+      className="island flex h-full w-(--diff-panel-width) shrink-0 flex-col bg-background"
     >
       <header
         data-tauri-drag-region
-        className="flex h-(--topbar-height) shrink-0 items-center gap-2 border-b border-border px-3 text-sm"
+        className="flex h-(--island-header-height) shrink-0 items-center gap-2 border-b border-border px-3 text-sm"
       >
         <Segmented label="Diff scope" options={SCOPE_OPTIONS} value={scope.kind} onChange={changeScope} />
         {currentTurn !== null && turnDiff.turns.length > 1 && (

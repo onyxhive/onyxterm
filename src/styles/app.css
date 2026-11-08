@@ -7,6 +7,9 @@
   --mention: oklch(0.55 0.17 255);
   --control-radius: 0.5rem;
   --topbar-height: 52px;
+  --island-gap: 0.5rem;
+  --island-radius: 0.75rem;
+  --island-header-height: calc(var(--topbar-height) - 2 * var(--island-gap));
   --workspace-controls-left: calc(env(safe-area-inset-left) + 0.75rem);
   --workspace-titlebar-control-size: 1.75rem;
   --workspace-titlebar-control-gap: 0.75rem;
@@ -28,6 +31,7 @@
   --scrollbar-thumb: rgb(217 217 217);
   --scrollbar-thumb-hover: rgb(191 191 191);
 
+  --window: color-mix(in srgb, var(--color-zinc-200) 45%, var(--color-zinc-100));
   --background: var(--color-zinc-25);
   --foreground: var(--color-zinc-900);
   --card: var(--color-white);
@@ -85,6 +89,8 @@
   --composer-shadow: 0 1px 2px rgb(0 0 0 / 5%);
   --popover-shadow: 0 16px 40px -18px rgb(0 0 0 / 55%);
   --popover-outline: color-mix(in srgb, var(--foreground) 10%, transparent);
+  --island-border: rgb(0 0 0 / 7%);
+  --island-shadow: 0 1px 2px rgb(0 0 0 / 4%), 0 2px 8px -4px rgb(0 0 0 / 6%);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -96,7 +102,8 @@
     --scrollbar-thumb: rgb(255 255 255 / 8%);
     --scrollbar-thumb-hover: rgb(255 255 255 / 12%);
 
-    --background: #000;
+    --window: #000;
+    --background: oklch(0.165 0 0);
     --foreground: var(--color-neutral-100);
     --card: color-mix(in srgb, var(--color-neutral-950) 97%, var(--color-white));
     --popover: color-mix(in srgb, var(--color-neutral-950) 97%, var(--color-white));
@@ -129,7 +136,7 @@
     --diff-addition: var(--color-emerald-400);
     --diff-deletion: var(--color-red-400);
     --code-background: rgb(255 255 255 / 3.5%);
-    --sidebar: #000;
+    --sidebar: oklch(0.145 0 0);
     --sidebar-foreground: #f1f3f7;
     --sidebar-muted-foreground: #a3a3a3;
     --sidebar-row-hover: color-mix(in srgb, #f1f3f7 8%, transparent);
@@ -141,6 +148,8 @@
     --composer-shadow: none;
     --popover-shadow: 0 18px 44px -18px rgb(0 0 0 / 80%);
     --popover-outline: color-mix(in srgb, var(--color-white) 10%, transparent);
+    --island-border: rgb(255 255 255 / 7%);
+    --island-shadow: 0 1px 2px rgb(0 0 0 / 40%);
   }
 }
 
@@ -184,6 +193,7 @@
   --text-3xs: 0.625rem;
   --text-3xs--line-height: calc(0.875 / 0.625);
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --color-window: var(--window);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -283,6 +293,13 @@
   box-decoration-break: clone;
 }
 
+@utility island {
+  overflow: hidden;
+  border: 1px solid var(--island-border);
+  border-radius: var(--island-radius);
+  box-shadow: var(--island-shadow);
+}
+
 @utility composer-outline {
   border: 1px solid var(--composer-outline);
   box-shadow:
@@ -329,7 +346,7 @@
     margin: 0;
     overflow: hidden;
     overscroll-behavior: none;
-    background: var(--background);
+    background: var(--window);
     color: var(--foreground);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
