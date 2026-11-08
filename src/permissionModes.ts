@@ -1,6 +1,6 @@
 import type { Settings } from "./api";
 
-export const PERMISSION_MODES = ["default", "acceptEdits", "plan", "bypassPermissions"] as const;
+export const PERMISSION_MODES = ["default", "acceptEdits", "auto", "plan", "bypassPermissions"] as const;
 export type PermissionMode = (typeof PERMISSION_MODES)[number];
 
 export const PERMISSION_MODE_SETTING = "permissionMode";
@@ -21,6 +21,11 @@ export const PERMISSION_MODE_INFO: Record<PermissionMode, PermissionModeInfo> = 
     label: "Auto-accept edits",
     shortLabel: "Accept edits",
     description: "Auto-approve edits, ask before other actions.",
+  },
+  auto: {
+    label: "Auto",
+    shortLabel: "Auto",
+    description: "Claude approves safe actions itself and asks only for risky ones",
   },
   plan: {
     label: "Plan",

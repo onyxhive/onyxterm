@@ -1,4 +1,4 @@
-import { Shield, ShieldCheck, ShieldEllipsis, ShieldOff, type LucideIcon } from "lucide-react";
+import { Shield, ShieldCheck, ShieldEllipsis, ShieldHalf, ShieldOff, type LucideIcon } from "lucide-react";
 import { isFullAccess, PERMISSION_MODE_INFO, PERMISSION_MODES, type PermissionMode } from "../permissionModes";
 import { OptionCheck } from "./ComposerControls";
 import { cn, MENU_ITEM, MenuLabel } from "./ui";
@@ -6,6 +6,7 @@ import { cn, MENU_ITEM, MenuLabel } from "./ui";
 const MODE_ICONS: Record<PermissionMode, LucideIcon> = {
   default: Shield,
   acceptEdits: ShieldCheck,
+  auto: ShieldHalf,
   plan: ShieldEllipsis,
   bypassPermissions: ShieldOff,
 };
