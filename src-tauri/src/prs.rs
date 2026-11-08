@@ -1,12 +1,13 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::{Mutex, MutexGuard};
+use std::thread;
 use std::time::{Duration, Instant};
 
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Deserializer, Serialize};
-use tauri::State;
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::db::Db;
 use crate::error::{AppError, AppResult};
@@ -14,6 +15,7 @@ use crate::git::{self, Git, project_root};
 use crate::process::login_shell;
 use crate::subprocess::{self, Limits, Output, in_background};
 
+pub const PRS_UPDATED: &str = "prs-updated";
 const LIST_LIFETIME: Duration = Duration::from_secs(30);
 const GH_LIMITS: Limits = Limits { timeout: Duration::from_secs(30), max_output: 8 << 20, label: "gh" };
 const PUSH_LIMITS: Limits = Limits { timeout: Duration::from_secs(120), max_output: 1 << 20, label: "gh" };
@@ -232,6 +234,28 @@ pub struct PrCheck {
     pub completed_at: String,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatPullRequest {
+    pub number: u64,
+    pub state: String,
+    pub is_draft: bool,
+    pub url: String,
+    pub checks: ChecksSummary,
+}
+
+impl From<&PullRequest> for ChatPullRequest {
+    fn from(pull_request: &PullRequest) -> Self {
+        ChatPullRequest {
+            number: pull_request.number,
+            state: pull_request.state.clone(),
+            is_draft: pull_request.is_draft,
+            url: pull_request.url.clone(),
+            checks: pull_request.checks,
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PullRequestDraft {
@@ -241,6 +265,12 @@ pub struct PullRequestDraft {
     pub base: Option<String>,
     #[serde(default)]
     pub draft: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PrsUpdated<'a> {
+    project_id: &'a str,
 }
 
 struct Gh {
@@ -363,6 +393,7 @@ type CachedList = (Instant, Vec<PullRequest>);
 pub struct GitHub {
     executable: Mutex<Option<PathBuf>>,
     lists: Mutex<HashMap<ListKey, CachedList>>,
+    refreshing: Mutex<HashSet<String>>,
 }
 
 fn locked<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -391,6 +422,35 @@ impl GitHub {
 
     fn forget_project(&self, project_id: &str) {
         locked(&self.lists).retain(|(cached_project, _), _| cached_project != project_id);
+    }
+
+    pub fn chat_pull_request(&self, project_id: &str, branch: &str) -> Option<ChatPullRequest> {
+        let pull_requests = self.fresh_list(project_id, PrState::All)?;
+        pull_requests.iter().find(|pull_request| pull_request.head_ref_name == branch).map(ChatPullRequest::from)
+    }
+
+    pub fn refresh_stale(&self, app: &AppHandle, project_ids: HashSet<String>) {
+        for project_id in project_ids {
+            let is_fresh = self.fresh_list(&project_id, PrState::All).is_some();
+            if is_fresh || !locked(&self.refreshing).insert(project_id.clone()) {
+                continue;
+            }
+            let app = app.clone();
+            thread::spawn(move || refresh_project(&app, &project_id));
+        }
+    }
+}
+
+fn refresh_project(app: &AppHandle, project_id: &str) {
+    let github = app.state::<GitHub>();
+    let listed = project_root(&app.state::<Db>(), project_id)
+        .and_then(|root| github.gh(&root))
+        .and_then(|gh| gh.list(PrState::All));
+    let is_listed = listed.is_ok();
+    github.remember_list(project_id, PrState::All, listed.unwrap_or_default());
+    locked(&github.refreshing).remove(project_id);
+    if is_listed {
+        let _ = app.emit(PRS_UPDATED, PrsUpdated { project_id });
     }
 }
 
@@ -572,6 +632,18 @@ mod tests {
         let output = "Warning: 1 uncommitted change\nhttps://github.com/acme/geo/pull/43\n";
         assert_eq!(number_from_url(output).unwrap(), 43);
         assert!(number_from_url("something went wrong").is_err());
+    }
+
+    #[test]
+    fn caches_lists_per_project_and_finds_a_branch_pr() {
+        let github = GitHub::default();
+        assert!(github.chat_pull_request("p1", "onyx/fix-the-sort").is_none());
+        github.remember_list("p1", PrState::All, parsed(LIST).unwrap());
+        let found = github.chat_pull_request("p1", "onyx/fix-the-sort").unwrap();
+        assert_eq!((found.number, found.checks.failed), (42, 1));
+        assert!(github.fresh_list("p1", PrState::Open).is_none());
+        github.forget_project("p1");
+        assert!(github.chat_pull_request("p1", "onyx/fix-the-sort").is_none());
     }
 
     #[test]

@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
@@ -21,6 +21,10 @@ const MAX_PATH_LENGTH: usize = 4096;
 const MAX_COMMIT_FILES: usize = 1000;
 const MAX_MESSAGE_LENGTH: usize = 20_000;
 const PREFERRED_REMOTE: &str = "origin";
+const MAX_SLUG_LENGTH: usize = 40;
+const CHAT_BRANCH_PREFIX: &str = "onyx/";
+const FALLBACK_SLUG: &str = "chat";
+const SUFFIX_LENGTH: usize = 6;
 const BRANCH_FORMAT: &str = "%(refname)%09%(HEAD)%09%(committerdate:unix)%09%(upstream:short)";
 const LOCAL_PREFIX: &str = "refs/heads/";
 const REMOTE_PREFIX: &str = "refs/remotes/";
@@ -491,6 +495,41 @@ pub fn push(git: &Git) -> AppResult<()> {
     Ok(())
 }
 
+fn slug(title: &str) -> String {
+    let lowered: String = title
+        .to_lowercase()
+        .chars()
+        .map(|character| if character.is_ascii_alphanumeric() { character } else { '-' })
+        .collect();
+    let joined = lowered.split('-').filter(|part| !part.is_empty()).collect::<Vec<_>>().join("-");
+    let capped: String = joined.chars().take(MAX_SLUG_LENGTH).collect();
+    let trimmed = capped.trim_end_matches('-');
+    if trimmed.is_empty() { FALLBACK_SLUG.to_string() } else { trimmed.to_string() }
+}
+
+fn unused_chat_branch(git: &Git, title: &str) -> AppResult<String> {
+    let base = format!("{CHAT_BRANCH_PREFIX}{}", slug(title));
+    if !ref_exists(git, &format!("{LOCAL_PREFIX}{base}"))? {
+        return Ok(base);
+    }
+    let suffix: String = uuid::Uuid::new_v4().simple().to_string().chars().take(SUFFIX_LENGTH).collect();
+    Ok(format!("{base}-{suffix}"))
+}
+
+pub fn start_chat_branch(root: &Path, title: &str) -> AppResult<String> {
+    let git = Git::at(root);
+    if !is_repository(&git) {
+        return Err(AppError::Invalid("the project is not a git repository".into()));
+    }
+    let name = validated_branch(&git, &unused_chat_branch(&git, title)?)?;
+    create_branch(&git, &name, None)?;
+    Ok(name)
+}
+
+pub fn branch_at(root: &Path) -> Option<String> {
+    current_branch(&Git::at(root)).ok().flatten()
+}
+
 pub fn project_root(db: &Db, project_id: &str) -> AppResult<PathBuf> {
     validated_id(project_id, "project")?;
     Ok(PathBuf::from(project(&db.connection(), project_id)?.path))
@@ -599,7 +638,6 @@ pub async fn git_push(db: State<'_, Db>, project_id: String) -> AppResult<GitSta
 #[cfg(test)]
 pub mod testing {
     use super::*;
-    use std::path::Path;
 
     pub fn scratch_repo(name: &str) -> Option<(PathBuf, Git)> {
         let root = std::env::temp_dir().join(format!("onyx-hive-git-{name}-{}", uuid::Uuid::new_v4()));
@@ -699,6 +737,13 @@ mod tests {
     }
 
     #[test]
+    fn slugs_titles_into_branch_friendly_names() {
+        assert_eq!(slug("Fix the Nearby-stores sort!"), "fix-the-nearby-stores-sort");
+        assert_eq!(slug("ü"), FALLBACK_SLUG);
+        assert!(slug(&"word ".repeat(30)).len() <= MAX_SLUG_LENGTH);
+    }
+
+    #[test]
     fn reports_status_with_line_counts_in_a_real_repository() {
         let Some((root, git)) = scratch_repo("status") else { return };
         write(&root, "a.txt", "one\ntwo\n");
@@ -754,6 +799,17 @@ mod tests {
         let remaining = status(&git).unwrap();
         assert_eq!(remaining.files.len(), 1);
         assert_eq!(remaining.files[0].path, "b.txt");
+    }
+
+    #[test]
+    fn starts_a_chat_branch_from_the_current_branch() {
+        let Some((root, git)) = scratch_repo("chat-branch") else { return };
+        git.output(&["commit", "-q", "--allow-empty", "-m", "start"]).unwrap();
+        let first = start_chat_branch(&root, "Fix the sort").unwrap();
+        assert_eq!(first, "onyx/fix-the-sort");
+        assert_eq!(branch_at(&root).as_deref(), Some("onyx/fix-the-sort"));
+        let second = start_chat_branch(&root, "Fix the sort").unwrap();
+        assert!(second.starts_with("onyx/fix-the-sort-") && second != first);
     }
 
     #[test]

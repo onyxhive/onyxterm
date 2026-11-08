@@ -1,9 +1,16 @@
+use std::collections::HashSet;
+use std::path::Path;
+
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use serde::{Deserialize, Serialize};
-use tauri::State;
+use tauri::{AppHandle, State};
 
+use crate::branches::ProjectBranches;
 use crate::db::{Db, new_id, now_millis};
 use crate::error::{AppError, AppResult};
+use crate::git;
+use crate::prs::{ChatPullRequest, GitHub};
+use crate::subprocess::in_background;
 use crate::workspaces::project;
 
 const MAX_TITLE_LENGTH: usize = 200;
@@ -111,6 +118,15 @@ pub struct Chat {
     pub state: ChatState,
     pub created_at: i64,
     pub updated_at: i64,
+    pub branch: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ListedChat {
+    #[serde(flatten)]
+    pub chat: Chat,
+    pub pr: Option<ChatPullRequest>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -122,10 +138,12 @@ pub struct NewChat {
     pub model: String,
     pub effort: String,
     pub title: String,
+    #[serde(default)]
+    pub new_branch: bool,
 }
 
 const CHAT_COLUMNS: &str = "id, workspace_id, project_id, provider, command, model, effort, session_id, title, \
-    state, created_at, updated_at";
+    state, created_at, updated_at, branch";
 
 fn chat_from_row(row: &Row<'_>) -> rusqlite::Result<Chat> {
     Ok(Chat {
@@ -141,6 +159,7 @@ fn chat_from_row(row: &Row<'_>) -> rusqlite::Result<Chat> {
         state: ChatState::parse(&row.get::<_, String>(9)?),
         created_at: row.get(10)?,
         updated_at: row.get(11)?,
+        branch: row.get(12)?,
     })
 }
 
@@ -173,7 +192,7 @@ pub fn chats(connection: &Connection) -> AppResult<Vec<Chat>> {
     Ok(all)
 }
 
-pub fn insert_chat(connection: &Connection, draft: NewChat) -> AppResult<Chat> {
+pub fn insert_chat(connection: &Connection, draft: NewChat, branch: Option<String>) -> AppResult<Chat> {
     let draft = validated(draft)?;
     let owner = project(connection, &draft.project_id)?;
     let now = now_millis();
@@ -190,9 +209,10 @@ pub fn insert_chat(connection: &Connection, draft: NewChat) -> AppResult<Chat> {
         state: ChatState::Review,
         created_at: now,
         updated_at: now,
+        branch,
     };
     connection.execute(
-        &format!("INSERT INTO chats ({CHAT_COLUMNS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)"),
+        &format!("INSERT INTO chats ({CHAT_COLUMNS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)"),
         params![
             created.id,
             created.workspace_id,
@@ -205,7 +225,8 @@ pub fn insert_chat(connection: &Connection, draft: NewChat) -> AppResult<Chat> {
             created.title,
             created.state.as_str(),
             created.created_at,
-            created.updated_at
+            created.updated_at,
+            created.branch
         ],
     )?;
     Ok(created)
@@ -250,14 +271,37 @@ pub fn update_session_id(connection: &Connection, chat_id: &str, session_id: &st
     Ok(())
 }
 
-#[tauri::command]
-pub fn list_chats(db: State<'_, Db>) -> AppResult<Vec<Chat>> {
-    chats(&db.connection())
+fn with_pull_request(github: &GitHub, chat: Chat) -> ListedChat {
+    let pr = chat.branch.as_deref().and_then(|branch| github.chat_pull_request(&chat.project_id, branch));
+    ListedChat { chat, pr }
 }
 
 #[tauri::command]
-pub fn create_chat(db: State<'_, Db>, draft: NewChat) -> AppResult<Chat> {
-    insert_chat(&db.connection(), draft)
+pub fn list_chats(app: AppHandle, db: State<'_, Db>, github: State<'_, GitHub>) -> AppResult<Vec<ListedChat>> {
+    let all = chats(&db.connection())?;
+    let branched: HashSet<String> =
+        all.iter().filter(|chat| chat.branch.is_some()).map(|chat| chat.project_id.clone()).collect();
+    github.refresh_stale(&app, branched);
+    Ok(all.into_iter().map(|chat| with_pull_request(&github, chat)).collect())
+}
+
+#[tauri::command]
+pub async fn create_chat(
+    db: State<'_, Db>,
+    project_branches: State<'_, ProjectBranches>,
+    draft: NewChat,
+) -> AppResult<Chat> {
+    let draft = validated(draft)?;
+    let root = project(&db.connection(), &draft.project_id)?.path;
+    let title = draft.title.clone();
+    let branch = if draft.new_branch {
+        let created = in_background(move || git::start_chat_branch(Path::new(&root), &title)).await?;
+        project_branches.forget(&draft.project_id);
+        Some(created)
+    } else {
+        in_background(move || Ok(git::branch_at(Path::new(&root)))).await?
+    };
+    insert_chat(&db.connection(), draft, branch)
 }
 
 #[tauri::command]
@@ -292,6 +336,7 @@ mod tests {
             model: "default".into(),
             effort: "high".into(),
             title: " Fix the sort ".into(),
+            new_branch: false,
         }
     }
 
@@ -299,7 +344,7 @@ mod tests {
     fn creates_a_chat_with_its_own_session_and_round_trips_state() {
         let db = Db::open_in_memory().unwrap();
         let connection = db.connection();
-        let created = insert_chat(&connection, draft(project_id(&connection))).unwrap();
+        let created = insert_chat(&connection, draft(project_id(&connection)), None).unwrap();
         assert_eq!(created.title, "Fix the sort");
         assert!(uuid::Uuid::parse_str(&created.session_id).is_ok());
         update_state(&connection, &created.id, ChatState::Done).unwrap();
@@ -313,14 +358,14 @@ mod tests {
         let db = Db::open_in_memory().unwrap();
         let connection = db.connection();
         let bad = NewChat { model: "opus; echo pwned".into(), ..draft(project_id(&connection)) };
-        assert!(insert_chat(&connection, bad).is_err());
+        assert!(insert_chat(&connection, bad, None).is_err());
     }
 
     #[test]
     fn stores_a_cleaned_capped_title_and_reports_real_changes_only() {
         let db = Db::open_in_memory().unwrap();
         let connection = db.connection();
-        let created = insert_chat(&connection, draft(project_id(&connection))).unwrap();
+        let created = insert_chat(&connection, draft(project_id(&connection)), None).unwrap();
         assert!(update_title(&connection, &created.id, "  Nearby\u{0}stores\n sorting  ").unwrap());
         assert_eq!(chat(&connection, &created.id).unwrap().title, "Nearby stores sorting");
         assert!(!update_title(&connection, &created.id, "Nearby stores sorting").unwrap());
@@ -334,5 +379,26 @@ mod tests {
     fn rejects_unknown_commands_at_the_boundary() {
         let parsed: Result<AgentCommand, _> = serde_json::from_str("\"bash\"");
         assert!(parsed.is_err());
+    }
+
+    #[test]
+    fn stores_and_lists_the_branch_a_chat_runs_on() {
+        let db = Db::open_in_memory().unwrap();
+        let connection = db.connection();
+        let created =
+            insert_chat(&connection, draft(project_id(&connection)), Some("onyx/fix-the-sort".into())).unwrap();
+        assert_eq!(chat(&connection, &created.id).unwrap().branch.as_deref(), Some("onyx/fix-the-sort"));
+        let listed = with_pull_request(&GitHub::default(), created);
+        let wire = serde_json::to_value(&listed).unwrap();
+        assert_eq!(wire["branch"], "onyx/fix-the-sort");
+        assert!(wire["pr"].is_null());
+    }
+
+    #[test]
+    fn accepts_the_new_branch_flag_but_no_other_unknown_fields() {
+        let base = r#""projectId":"p1","provider":"Claude Code","command":"claude","model":"default","effort":"high""#;
+        let flagged: NewChat = serde_json::from_str(&format!(r#"{{{base},"title":"t","newBranch":true}}"#)).unwrap();
+        assert!(flagged.new_branch);
+        assert!(serde_json::from_str::<NewChat>(&format!(r#"{{{base},"title":"t","branch":"x"}}"#)).is_err());
     }
 }
