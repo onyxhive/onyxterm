@@ -1,0 +1,463 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: light;
+  --radius: 0.5rem;
+  --provider-claude: #d97757;
+  --control-radius: 0.5rem;
+  --topbar-height: 52px;
+  --traffic-light-inset: 5.25rem;
+  --sidebar-width: 16rem;
+  --chat-content-max-width: 46rem;
+  --changes-panel-width: clamp(20rem, 32vw, 28rem);
+  --glass-blur: 12px;
+  --glass-opacity: 80%;
+  --glass-saturation: 1.14;
+  --popup-opacity: 94%;
+  --scrollbar-thumb: rgb(217 217 217);
+  --scrollbar-thumb-hover: rgb(191 191 191);
+
+  --background: var(--color-zinc-25);
+  --foreground: var(--color-zinc-900);
+  --card: var(--color-white);
+  --popover: var(--color-white);
+  --surface-raised: var(--color-white);
+  --primary: oklch(0.488 0.217 264);
+  --primary-foreground: var(--color-white);
+  --secondary: var(--color-zinc-50);
+  --muted: var(--color-zinc-50);
+  --muted-foreground: var(--color-zinc-500);
+  --secondary-label: var(--color-zinc-500);
+  --icon-muted: var(--color-zinc-500);
+  --placeholder: var(--color-zinc-500);
+  --accent: var(--color-zinc-100);
+  --accent-foreground: var(--color-zinc-900);
+  --message: color-mix(in srgb, var(--color-zinc-200) 55%, var(--color-zinc-100));
+  --message-foreground: var(--foreground);
+  --message-action: var(--primary);
+  --message-action-foreground: var(--primary-foreground);
+  --message-action-hover: color-mix(in srgb, var(--primary) 90%, var(--background));
+  --border: var(--color-zinc-200);
+  --input: var(--color-zinc-300);
+  --ring: var(--primary);
+  --error: var(--color-red-500);
+  --error-foreground: var(--color-red-700);
+  --destructive: var(--error);
+  --info: var(--color-blue-500);
+  --info-foreground: var(--color-blue-700);
+  --success: var(--color-emerald-500);
+  --success-foreground: var(--color-emerald-700);
+  --warning: var(--color-amber-500);
+  --warning-foreground: var(--color-amber-700);
+  --approval: var(--color-amber-600);
+  --approval-dot: var(--color-amber-500);
+  --input-request: var(--color-indigo-600);
+  --input-request-dot: var(--color-indigo-500);
+  --working: var(--color-sky-600);
+  --working-dot: var(--color-sky-500);
+  --failed: var(--color-red-600);
+  --failed-dot: var(--color-red-500);
+  --diff-addition: var(--color-emerald-700);
+  --diff-deletion: var(--color-red-700);
+  --code-background: var(--color-zinc-50);
+  --sidebar: var(--color-zinc-50);
+  --sidebar-foreground: var(--color-zinc-900);
+  --sidebar-muted-foreground: var(--color-zinc-500);
+  --sidebar-row-hover: var(--color-zinc-25);
+  --sidebar-row-active: var(--color-white);
+  --sidebar-border: var(--color-zinc-200);
+  --composer-surface: var(--card);
+  --composer-outline: rgb(0 0 0 / 8%);
+  --composer-highlight: transparent;
+  --composer-shadow: 0 1px 2px rgb(0 0 0 / 5%);
+  --popover-shadow: 0 16px 40px -18px rgb(0 0 0 / 55%);
+  --popover-outline: color-mix(in srgb, var(--foreground) 10%, transparent);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --glass-blur: 16px;
+    --glass-saturation: 1.08;
+    --scrollbar-thumb: rgb(255 255 255 / 8%);
+    --scrollbar-thumb-hover: rgb(255 255 255 / 12%);
+
+    --background: #000;
+    --foreground: var(--color-neutral-100);
+    --card: color-mix(in srgb, var(--color-neutral-950) 97%, var(--color-white));
+    --popover: color-mix(in srgb, var(--color-neutral-950) 97%, var(--color-white));
+    --surface-raised: color-mix(in srgb, var(--color-neutral-950) 97%, var(--color-white));
+    --primary: oklch(0.571 0.21 264);
+    --secondary: rgb(255 255 255 / 3%);
+    --muted: rgb(255 255 255 / 3%);
+    --muted-foreground: var(--color-neutral-400);
+    --secondary-label: #8f8f8f;
+    --icon-muted: var(--color-neutral-400);
+    --placeholder: var(--color-neutral-500);
+    --accent: rgb(255 255 255 / 4%);
+    --accent-foreground: var(--color-neutral-100);
+    --message: color-mix(in srgb, var(--color-neutral-950) 92%, var(--color-white));
+    --border: rgb(255 255 255 / 8%);
+    --input: rgb(255 255 255 / 11%);
+    --error: color-mix(in srgb, var(--color-red-500) 90%, var(--color-white));
+    --error-foreground: var(--color-red-400);
+    --info-foreground: var(--color-blue-400);
+    --success-foreground: var(--color-emerald-400);
+    --warning-foreground: var(--color-amber-400);
+    --approval: color-mix(in srgb, var(--color-amber-300) 90%, transparent);
+    --approval-dot: var(--approval);
+    --input-request: color-mix(in srgb, var(--color-indigo-300) 90%, transparent);
+    --input-request-dot: var(--input-request);
+    --working: color-mix(in srgb, var(--color-sky-300) 80%, transparent);
+    --working-dot: var(--working);
+    --failed: color-mix(in srgb, var(--color-red-300) 90%, transparent);
+    --failed-dot: var(--failed);
+    --diff-addition: var(--color-emerald-400);
+    --diff-deletion: var(--color-red-400);
+    --code-background: rgb(255 255 255 / 3.5%);
+    --sidebar: #000;
+    --sidebar-foreground: #f1f3f7;
+    --sidebar-muted-foreground: #a3a3a3;
+    --sidebar-row-hover: color-mix(in srgb, #f1f3f7 8%, transparent);
+    --sidebar-row-active: color-mix(in srgb, #f1f3f7 11%, transparent);
+    --sidebar-border: rgb(255 255 255 / 8%);
+    --composer-surface: var(--surface-raised);
+    --composer-outline: color-mix(in srgb, var(--color-white) 5%, transparent);
+    --composer-highlight: rgb(255 255 255 / 3%);
+    --composer-shadow: none;
+    --popover-shadow: 0 18px 44px -18px rgb(0 0 0 / 80%);
+    --popover-outline: color-mix(in srgb, var(--color-white) 10%, transparent);
+  }
+}
+
+@theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Inter Variable", "Segoe UI", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  --color-zinc-25: oklch(99.2% 0 0);
+}
+
+@theme inline {
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: calc(1 / 0.6875);
+  --text-3xs: 0.625rem;
+  --text-3xs--line-height: calc(0.875 / 0.625);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-popover: var(--popover);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-secondary-label: var(--secondary-label);
+  --color-icon-muted: var(--icon-muted);
+  --color-placeholder: var(--placeholder);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-message: var(--message);
+  --color-message-foreground: var(--message-foreground);
+  --color-message-action: var(--message-action);
+  --color-message-action-foreground: var(--message-action-foreground);
+  --color-message-action-hover: var(--message-action-hover);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-destructive: var(--destructive);
+  --color-error: var(--error);
+  --color-error-foreground: var(--error-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-approval: var(--approval);
+  --color-approval-dot: var(--approval-dot);
+  --color-input-request: var(--input-request);
+  --color-input-request-dot: var(--input-request-dot);
+  --color-working: var(--working);
+  --color-working-dot: var(--working-dot);
+  --color-failed: var(--failed);
+  --color-failed-dot: var(--failed-dot);
+  --color-diff-addition: var(--diff-addition);
+  --color-diff-deletion: var(--diff-deletion);
+  --color-code: var(--code-background);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-muted-foreground: var(--sidebar-muted-foreground);
+  --color-sidebar-row-hover: var(--sidebar-row-hover);
+  --color-sidebar-row-active: var(--sidebar-row-active);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-composer: var(--composer-surface);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+  --shadow-composer: var(--composer-shadow);
+  --shadow-popover: var(--popover-shadow);
+  --animate-status-pulse: status-pulse 2s infinite;
+  @keyframes status-pulse {
+    0%,
+    40% {
+      opacity: 1;
+      animation-timing-function: steps(6);
+    }
+    50%,
+    90% {
+      opacity: 0.5;
+      animation-timing-function: steps(6);
+    }
+    100% {
+      opacity: 1;
+    }
+  }
+}
+
+@utility glass {
+  background: color-mix(in srgb, var(--composer-surface) var(--glass-opacity), transparent);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+}
+
+@utility dropdown-glass {
+  background: color-mix(in srgb, var(--popover) var(--popup-opacity), transparent);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  border: 1px solid var(--popover-outline);
+  box-shadow: var(--popover-shadow);
+}
+
+@utility composer-outline {
+  border: 1px solid var(--composer-outline);
+  box-shadow:
+    var(--composer-shadow),
+    inset 0 1px var(--composer-highlight);
+}
+
+@keyframes live-tool-shine {
+  from {
+    background-position:
+      -4.5rem 0,
+      0 0;
+  }
+  to {
+    background-position:
+      calc(100% + 4.5rem) 0,
+      0 0;
+  }
+}
+
+@utility live-tool-shine {
+  @media (prefers-reduced-motion: no-preference) {
+    color: transparent;
+    background-image:
+      linear-gradient(to right, transparent, var(--foreground), transparent),
+      linear-gradient(var(--secondary-label), var(--secondary-label));
+    background-size:
+      4.5rem 100%,
+      100% 100%;
+    background-repeat: no-repeat;
+    background-clip: text;
+    animation: live-tool-shine 2.2s steps(30) infinite;
+  }
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    overflow: hidden;
+    overscroll-behavior: none;
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  :where(svg.lucide) {
+    stroke-width: 1.75;
+  }
+
+  pre,
+  code,
+  kbd {
+    font-family: var(--font-mono);
+  }
+
+  ::selection {
+    background: color-mix(in srgb, var(--primary) 24%, transparent);
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover);
+  }
+}
+
+.chat-markdown > :first-child {
+  margin-top: 0;
+}
+
+.chat-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.chat-markdown :is(p, ul, ol, blockquote, pre, table) {
+  margin: 0.65rem 0;
+}
+
+.chat-markdown :is(h1, h2, h3, h4, h5, h6) {
+  margin: 1.25rem 0 0.5rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--foreground);
+}
+
+.chat-markdown h1 {
+  font-size: 1.25rem;
+}
+
+.chat-markdown h2 {
+  font-size: 1.125rem;
+}
+
+.chat-markdown h3 {
+  font-size: 1rem;
+}
+
+.chat-markdown :is(h4, h5, h6) {
+  font-size: 0.875rem;
+}
+
+.chat-markdown ul {
+  padding-inline-start: 1.25rem;
+  list-style-type: disc;
+}
+
+.chat-markdown ol {
+  padding-inline-start: 1.25rem;
+  list-style-type: decimal;
+}
+
+.chat-markdown ol > li::marker {
+  font-variant-numeric: tabular-nums;
+}
+
+.chat-markdown li + li {
+  margin-top: 0.25rem;
+}
+
+.chat-markdown a {
+  color: var(--info-foreground);
+  text-decoration: none;
+}
+
+.chat-markdown a:hover {
+  text-decoration: underline dotted;
+}
+
+.chat-markdown blockquote {
+  border-inline-start: 2px solid color-mix(in srgb, currentcolor 35%, transparent);
+  padding-inline-start: 0.8rem;
+}
+
+.chat-markdown hr {
+  border-color: var(--border);
+  margin: 1rem 0;
+}
+
+.chat-markdown strong {
+  font-weight: 700;
+}
+
+.chat-markdown :not(pre) > code {
+  border-radius: 0.25rem;
+  background: color-mix(in srgb, var(--foreground) 10%, transparent);
+  padding: 0.1em 0.35em;
+  color: var(--foreground);
+  font-size: 0.85em;
+}
+
+.chat-markdown pre {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: 0.5rem;
+  background: var(--secondary);
+  padding: 0.8rem 0.9rem;
+  font-size: 0.8125rem;
+  line-height: 1.375;
+}
+
+@media (prefers-color-scheme: dark) {
+  .chat-markdown pre {
+    border-color: transparent;
+    background: color-mix(in srgb, var(--input) 32%, transparent);
+  }
+}
+
+.chat-markdown pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.chat-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.chat-markdown :is(th, td) {
+  padding: 0.45rem 0.75rem;
+  text-align: start;
+  vertical-align: top;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+
+.chat-markdown :is(th, td):first-child {
+  padding-inline-start: 0;
+}
+
+.chat-markdown :is(th, td):last-child {
+  padding-inline-end: 0;
+}
+
+.chat-markdown thead th {
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .chat-markdown[data-streaming] > * {
+    transition: opacity 600ms ease-out;
+
+    @starting-style {
+      opacity: 0;
+    }
+  }
+}
+
+@utility scroll-fade-top {
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, black 1.5rem);
+  mask-image: linear-gradient(to bottom, transparent 0, black 1.5rem);
+}
