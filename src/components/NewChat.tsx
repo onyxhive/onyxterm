@@ -58,7 +58,11 @@ function ProjectPicker({ project, projects, onPick, onAddProject }: ProjectPicke
         <ChevronDown className="-me-1 size-3.5" />
       </button>
       {popup.isOpen && (
-        <div role="menu" aria-label="Projects" className={cn(MENU_POPUP, "absolute top-full left-0 mt-2 w-72")}>
+        <div
+          role="menu"
+          aria-label="Projects"
+          className={cn(MENU_POPUP, "absolute top-full left-0 mt-2 w-72 [--popup-opacity:100%]")}
+        >
           <MenuLabel>Project</MenuLabel>
           {projects.map((candidate) => (
             <button
