@@ -171,7 +171,7 @@ mod tests {
         std::fs::write(&transcript, lines.join("\n")).unwrap();
         let events = history(&transcript).unwrap();
         assert_eq!(events.len(), 4, "{events:?}");
-        assert_eq!(events[0], AgentEvent::UserText { text: "hi".into() });
+        assert_eq!(events[0], AgentEvent::UserText { text: "hi".into(), images: Vec::new() });
         assert_eq!(events[1], AgentEvent::Text { message_id: "m1".into(), text: "ok".into() });
         assert!(matches!(&events[2], AgentEvent::ToolStarted { tool_use_id, .. } if tool_use_id == "t1"));
         assert_eq!(events[3], AgentEvent::ToolFinished { tool_use_id: "t1".into(), is_error: false });

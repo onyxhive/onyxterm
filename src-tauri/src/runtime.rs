@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 
+use crate::attachments::{self, Attachment};
 use crate::branches::ProjectBranches;
 use crate::chats::{self, AgentCommand, Chat, ChatOptions, ChatState, PermissionMode, Provider};
 use crate::checkpoints;
@@ -499,6 +500,16 @@ fn chat_and_cwd(db: &Db, chat_id: &str) -> AppResult<(Chat, String)> {
     Ok((chat, cwd))
 }
 
+fn validated_message(text: &str, attachments: &[Attachment]) -> AppResult<()> {
+    if text.len() > MAX_MESSAGE_LENGTH {
+        return Err(AppError::Invalid("message must be under 200 KB".into()));
+    }
+    if text.trim().is_empty() && attachments.is_empty() {
+        return Err(AppError::Invalid("message needs text or an image".into()));
+    }
+    attachments::validated(attachments)
+}
+
 fn resume_running(app: &AppHandle, chat_id: &str) {
     change_state(app, chat_id, ChatState::Running);
 }
@@ -510,10 +521,11 @@ pub async fn send_message(
     runtime: State<'_, AgentRuntime>,
     chat_id: String,
     text: String,
+    attachments: Option<Vec<Attachment>>,
 ) -> AppResult<()> {
-    if text.trim().is_empty() || text.len() > MAX_MESSAGE_LENGTH {
-        return Err(AppError::Invalid("message must be non-empty and under 200 KB".into()));
-    }
+    let attachments = attachments.unwrap_or_default();
+    validated_message(&text, &attachments)?;
+    let has_text = !text.trim().is_empty();
     let (chat, cwd) = chat_and_cwd(&db, &chat_id)?;
     if chat.provider == Provider::Codex {
         return Err(AppError::Agent(CODEX_UNSUPPORTED.into()));
@@ -523,13 +535,13 @@ pub async fn send_message(
         let mut activity = locked(&process.activity);
         let is_new_turn = !std::mem::replace(&mut activity.is_turn_active, true);
         activity.last_seen = Instant::now();
-        (!std::mem::replace(&mut activity.has_requested_title, true), is_new_turn)
+        (has_text && !std::mem::replace(&mut activity.has_requested_title, true), is_new_turn)
     };
     if is_new_turn {
         let turn = start_checkpoint(&chat_id, &cwd).await;
         locked(&process.activity).checkpoint_turn = turn;
     }
-    process.write_line(&protocol::user_message(&text))?;
+    process.write_line(&protocol::user_message(&text, &attachments))?;
     if is_first_message {
         let description: String = text.chars().take(MAX_TITLE_DESCRIPTION_LENGTH).collect();
         process.write_line(&protocol::title_request(&new_id(), &description))?;
@@ -745,6 +757,20 @@ mod tests {
     }
 
     #[test]
+    fn accepts_text_images_or_both_but_not_an_empty_message() {
+        let image: Attachment =
+            serde_json::from_value(serde_json::json!({"mediaType": "image/png", "dataBase64": "aGk="})).unwrap();
+        assert!(validated_message("hi", &[]).is_ok());
+        assert!(validated_message("  ", std::slice::from_ref(&image)).is_ok());
+        assert!(validated_message("look", &[image]).is_ok());
+        assert!(validated_message(" \n ", &[]).is_err());
+        assert!(validated_message(&"a".repeat(MAX_MESSAGE_LENGTH + 1), &[]).is_err());
+        let broken: Attachment =
+            serde_json::from_value(serde_json::json!({"mediaType": "image/gif", "dataBase64": "%%"})).unwrap();
+        assert!(validated_message("hi", &[broken]).is_err());
+    }
+
+    #[test]
     fn treats_any_waiting_state_as_a_running_turn() {
         let runtime = AgentRuntime::default();
         let mut chat = chat_with(AgentCommand::Claude, "sonnet", "high");
@@ -796,7 +822,7 @@ mod live_tests {
         text: &str,
         mut on_permission: impl FnMut(&PermissionRequest) -> String,
     ) -> Vec<AgentEvent> {
-        chat.process.write_line(&protocol::user_message(text)).unwrap();
+        chat.process.write_line(&protocol::user_message(text, &[])).unwrap();
         let mut seen = Vec::new();
         let deadline = Instant::now() + TURN_TIMEOUT;
         while Instant::now() < deadline {
@@ -879,7 +905,7 @@ mod live_tests {
     fn live_interrupt_ends_the_turn() {
         let cwd = scratch_dir();
         let chat = start(AgentCommand::Claude, SessionFlag::Start(new_id()), &cwd);
-        chat.process.write_line(&protocol::user_message("Count from 1 to 300, one number per line.")).unwrap();
+        chat.process.write_line(&protocol::user_message("Count from 1 to 300, one number per line.", &[])).unwrap();
         let mut seen = Vec::new();
         while let Ok((event, _)) = chat.events.recv_timeout(TURN_TIMEOUT) {
             eprintln!("event: {}", serde_json::to_string(&event).unwrap());

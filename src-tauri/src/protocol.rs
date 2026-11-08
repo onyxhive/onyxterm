@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+use crate::attachments::Attachment;
 use crate::chats::PermissionMode;
 
 const ASK_USER_QUESTION: &str = "AskUserQuestion";
@@ -109,10 +110,17 @@ pub struct ToolSummary {
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct UserImage {
+    pub media_type: String,
+    pub data_base64: String,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum AgentEvent {
     Session { session_id: String },
-    UserText { text: String },
+    UserText { text: String, images: Vec<UserImage> },
     TextDelta { message_id: String, index: u32, text: String },
     Text { message_id: String, text: String },
     ToolStarted { tool_use_id: String, parent_tool_use_id: Option<String>, summary: ToolSummary },
@@ -243,8 +251,19 @@ enum ContentBlock {
         #[serde(default)]
         content: Value,
     },
+    Image {
+        source: ImageSourceLine,
+    },
     #[serde(other)]
     Other,
+}
+
+#[derive(Debug, Deserialize)]
+struct ImageSourceLine {
+    #[serde(default)]
+    media_type: String,
+    #[serde(default)]
+    data: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -465,6 +484,21 @@ pub fn describe_tool(name: &str, input: &Value) -> ToolSummary {
     }
 }
 
+fn with_images(mut events: Vec<AgentEvent>, images: Vec<UserImage>) -> Vec<AgentEvent> {
+    if images.is_empty() {
+        return events;
+    }
+    let first_text = events.iter_mut().find_map(|event| match event {
+        AgentEvent::UserText { images, .. } => Some(images),
+        _ => None,
+    });
+    match first_text {
+        Some(slot) => *slot = images,
+        None => events.push(AgentEvent::UserText { text: String::new(), images }),
+    }
+    events
+}
+
 fn questions_of(input: &Value) -> Vec<Question> {
     input.get("questions").cloned().and_then(|questions| serde_json::from_value(questions).ok()).unwrap_or_default()
 }
@@ -656,25 +690,33 @@ impl StreamParser {
             && !user.is_meta
             && !user.is_sidechain;
         match user.message.content {
-            UserContent::Text(text) if shows_text => vec![AgentEvent::UserText { text }],
+            UserContent::Text(text) if shows_text => vec![AgentEvent::UserText { text, images: Vec::new() }],
             UserContent::Text(_) => Vec::new(),
-            UserContent::Blocks(blocks) => {
-                let mut events = Vec::new();
-                for block in blocks {
-                    match block {
-                        ContentBlock::ToolResult { tool_use_id, is_error, content } => {
-                            let is_error = is_error.unwrap_or(false);
-                            let finished = self.finish_by_result(&tool_use_id, is_error, &content);
-                            events.push(AgentEvent::ToolFinished { tool_use_id, is_error });
-                            events.extend(finished);
-                        }
-                        ContentBlock::Text { text } if shows_text => events.push(AgentEvent::UserText { text }),
-                        _ => {}
-                    }
+            UserContent::Blocks(blocks) => self.user_block_events(blocks, shows_text),
+        }
+    }
+
+    fn user_block_events(&mut self, blocks: Vec<ContentBlock>, shows_text: bool) -> Vec<AgentEvent> {
+        let mut events = Vec::new();
+        let mut images = Vec::new();
+        for block in blocks {
+            match block {
+                ContentBlock::ToolResult { tool_use_id, is_error, content } => {
+                    let is_error = is_error.unwrap_or(false);
+                    let finished = self.finish_by_result(&tool_use_id, is_error, &content);
+                    events.push(AgentEvent::ToolFinished { tool_use_id, is_error });
+                    events.extend(finished);
                 }
-                events
+                ContentBlock::Text { text } if shows_text => {
+                    events.push(AgentEvent::UserText { text, images: Vec::new() })
+                }
+                ContentBlock::Image { source } if shows_text && !source.data.is_empty() => {
+                    images.push(UserImage { media_type: source.media_type, data_base64: source.data })
+                }
+                _ => {}
             }
         }
+        with_images(events, images)
     }
 
     fn turn_end(result: ResultLine) -> AgentEvent {
@@ -777,8 +819,11 @@ pub fn interrupt_request(request_id: &str) -> String {
     json!({"type": "control_request", "request_id": request_id, "request": {"subtype": "interrupt"}}).to_string()
 }
 
-pub fn user_message(text: &str) -> String {
-    json!({"type": "user", "message": {"role": "user", "content": [{"type": "text", "text": text}]}}).to_string()
+pub fn user_message(text: &str, attachments: &[Attachment]) -> String {
+    let images = attachments.iter().map(Attachment::content_block);
+    let text_block = (!text.trim().is_empty()).then(|| json!({"type": "text", "text": text}));
+    let content: Vec<Value> = images.chain(text_block).collect();
+    json!({"type": "user", "message": {"role": "user", "content": content}}).to_string()
 }
 
 fn control_success(request_id: &str, response: Value) -> String {
@@ -939,7 +984,7 @@ mod tests {
         let (live, _) = parse_all(Source::Live, PROBE_TWO);
         assert!(!live.iter().any(|event| matches!(event, AgentEvent::UserText { .. })));
         let (transcript, _) = parse_all(Source::Transcript, PROBE_TWO);
-        assert!(transcript.contains(&AgentEvent::UserText { text: "Now just say bye.".into() }));
+        assert!(transcript.contains(&AgentEvent::UserText { text: "Now just say bye.".into(), images: Vec::new() }));
     }
 
     #[test]
@@ -1051,6 +1096,48 @@ mod tests {
                 message: "Cannot set permission mode to bypassPermissions".into()
             }]
         );
+    }
+
+    #[test]
+    fn sends_images_before_the_text_and_drops_an_empty_text_block() {
+        let image: Attachment =
+            serde_json::from_value(json!({"mediaType": "image/jpeg", "dataBase64": "aGk=", "name": "a.jpg"})).unwrap();
+        let message: Value =
+            serde_json::from_str(&user_message("what is this?", std::slice::from_ref(&image))).unwrap();
+        assert_eq!(
+            message["message"]["content"],
+            json!([
+                {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": "aGk="}},
+                {"type": "text", "text": "what is this?"},
+            ])
+        );
+        let only_image: Value = serde_json::from_str(&user_message(" ", &[image])).unwrap();
+        assert_eq!(only_image["message"]["content"].as_array().unwrap().len(), 1);
+        let only_text: Value = serde_json::from_str(&user_message("hi", &[])).unwrap();
+        assert_eq!(only_text["message"]["content"], json!([{"type": "text", "text": "hi"}]));
+    }
+
+    #[test]
+    fn surfaces_images_the_user_sent_from_the_transcript() {
+        let line = r#"{"type":"user","message":{"role":"user","content":[
+            {"type":"text","text":"what is this?"},
+            {"type":"image","source":{"type":"base64","media_type":"image/png","data":"aGk="}},
+            {"type":"image","source":{"type":"url","url":"https://example.com/a.png"}}]}}"#;
+        let mut transcript = StreamParser::new(Source::Transcript);
+        let image = UserImage { media_type: "image/png".into(), data_base64: "aGk=".into() };
+        assert_eq!(
+            transcript.parse_line(&line.replace('\n', "")),
+            vec![AgentEvent::UserText { text: "what is this?".into(), images: vec![image.clone()] }]
+        );
+        let image_only = r#"{"type":"user","message":{"role":"user","content":[
+            {"type":"image","source":{"type":"base64","media_type":"image/png","data":"aGk="}}]}}"#;
+        assert_eq!(
+            transcript.parse_line(&image_only.replace('\n', "")),
+            vec![AgentEvent::UserText { text: String::new(), images: vec![image] }]
+        );
+        assert!(StreamParser::new(Source::Live).parse_line(&line.replace('\n', "")).is_empty());
+        let wire = serde_json::to_value(AgentEvent::UserText { text: "t".into(), images: Vec::new() }).unwrap();
+        assert_eq!(wire, json!({"kind": "userText", "text": "t", "images": []}));
     }
 
     #[test]
