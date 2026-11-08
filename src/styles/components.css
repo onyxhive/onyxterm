@@ -1592,6 +1592,13 @@
   font-size: var(--text-xs);
 }
 
+.board-card__label {
+  overflow: hidden;
+  min-width: 0;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 .board-card__time {
   font-variant-numeric: tabular-nums;
 }

@@ -34,7 +34,7 @@ export function Board({ tasks, projectName, onOpen }: BoardProps) {
                       </span>
                       <span className="board-card__project">{projectName(task.projectId)}</span>
                       <span className="board-card__footer">
-                        <span>{taskLabel(task)}</span>
+                        <span className="board-card__label">{taskLabel(task)}</span>
                         <span className="board-card__time">{task.elapsed}</span>
                       </span>
                     </button>
