@@ -11,10 +11,6 @@ interface BoardProps {
 export function Board({ tasks, projectName, onOpen }: BoardProps) {
   return (
     <div className="board">
-      <header className="board__header">
-        <h1 className="board__title">Board</h1>
-        <span className="board__count">{tasks.length} chats</span>
-      </header>
       <div className="board__lanes">
         {STATUS_GROUPS.map((group) => {
           const laneTasks = tasksInGroup(tasks, group);

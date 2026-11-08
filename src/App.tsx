@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { DEFAULT_EFFORT, DEFAULT_MODEL } from "./agentOptions";
 import { Board } from "./components/Board";
+import { ChatHeader, type ChatHeaderActions } from "./components/ChatHeader";
 import { ChatView, type ChatActions } from "./components/ChatView";
 import { NewChat, type ChatChoice, type ChatStart } from "./components/NewChat";
 import { Sidebar } from "./components/Sidebar";
-import { TitleBar, type View } from "./components/TitleBar";
+import { TitleBar, TitleBarHeading, type View } from "./components/TitleBar";
 import { Toasts } from "./components/Toasts";
 import { WorkPanel } from "./components/WorkPanel";
+import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher";
 import { EMPTY_FEED } from "./feed";
-import { isWaiting } from "./status";
 import { toTask } from "./tasks";
 import type { Chat, Provider, TaskStatus, Toast } from "./types";
 import { useChats } from "./useChats";
@@ -79,7 +80,6 @@ export default function App() {
   const workspaceChatIds = new Set(chats.filter((chat) => chat.workspaceId === workspace?.id).map((chat) => chat.id));
   const workspaceTasks = tasks.filter((task) => workspaceChatIds.has(task.id));
   const selectedTask = workspaceTasks.find((task) => task.id === selectedTaskId) ?? null;
-  const waitingTasks = workspaceTasks.filter((task) => isWaiting(task.status));
   const projects = workspaces.flatMap((candidate) => candidate.projects);
 
   useEffect(() => {
@@ -138,11 +138,20 @@ export default function App() {
     onReply: (text) => withSelectedChat((chatId) => chatState.send(chatId, text)),
     onDecide: (requestId, decision) => withSelectedChat((chatId) => chatState.decide(chatId, requestId, decision)),
     onAnswer: (requestId, answers) => withSelectedChat((chatId) => chatState.answer(chatId, requestId, answers)),
+    onStop: () => withSelectedChat(chatState.stop),
+  };
+
+  const chatHeaderActions: ChatHeaderActions = {
     onMarkDone: () => withSelectedChat((chatId) => chatState.setState(chatId, "done")),
     onReopen: () => withSelectedChat((chatId) => chatState.setState(chatId, "review")),
-    onStop: () => withSelectedChat(chatState.stop),
     onToggleWorkPanel: () => setIsWorkPanelOpen(!isWorkPanelOpen),
   };
+
+  function renderHeading() {
+    if (view === "board") return <TitleBarHeading title="Board" meta={`${workspaceTasks.length} chats`} />;
+    if (!selectedTask) return null;
+    return <ChatHeader task={selectedTask} isWorkPanelOpen={isWorkPanelOpen} actions={chatHeaderActions} />;
+  }
 
   function renderMain() {
     if (!workspace || !settings) return null;
@@ -159,14 +168,7 @@ export default function App() {
         />
       );
     }
-    return (
-      <ChatView
-        task={selectedTask}
-        projectName={projectName(selectedTask.projectId)}
-        isWorkPanelOpen={isWorkPanelOpen}
-        actions={chatActions}
-      />
-    );
+    return <ChatView task={selectedTask} actions={chatActions} />;
   }
 
   const isWorkPanelVisible = view === "chat" && selectedTask !== null && isWorkPanelOpen;
@@ -176,22 +178,16 @@ export default function App() {
   return (
     <div className="app">
       <TitleBar
-        workspaces={workspaces}
-        workspace={workspace}
-        tasks={tasks}
-        waitingCount={waitingTasks.length}
+        isSidebarOpen={isSidebarOpen}
         view={view}
-        onViewChange={setView}
-        workspaceActions={{
-          ...workspaceActions,
-          onSelect: (workspaceId) => {
-            workspaceActions.onSelect(workspaceId);
-            setSelectedTaskId(null);
-          },
+        actions={{
+          onToggleSidebar: () => setIsSidebarOpen(!isSidebarOpen),
+          onToggleBoard: () => setView(view === "board" ? "chat" : "board"),
+          onNewChat: openNewChat,
         }}
-        onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
-        onOpenWaiting={() => waitingTasks[0] && openTask(waitingTasks[0].id)}
-      />
+      >
+        {renderHeading()}
+      </TitleBar>
       <div className="app__body">
         <Sidebar
           tasks={workspaceTasks}
@@ -200,6 +196,20 @@ export default function App() {
           isOpen={isSidebarOpen}
           onSelect={openTask}
           onNewChat={openNewChat}
+          footer={
+            <WorkspaceSwitcher
+              workspaces={workspaces}
+              current={workspace}
+              tasks={tasks}
+              actions={{
+                ...workspaceActions,
+                onSelect: (workspaceId) => {
+                  workspaceActions.onSelect(workspaceId);
+                  setSelectedTaskId(null);
+                },
+              }}
+            />
+          }
         />
         <main className="app__main">
           {renderMain()}

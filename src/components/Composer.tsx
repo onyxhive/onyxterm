@@ -120,9 +120,6 @@ export function Composer(props: ComposerProps) {
       />
       <div className="composer__footer">
         <div className="composer__toolbar">{toolbar}</div>
-        <span className="composer__hint">
-          <kbd>/</kbd> commands <kbd>@</kbd> files
-        </span>
         <span className="send-button__wrap" title={sendBlockedReason}>
           <button
             type="button"
@@ -131,7 +128,7 @@ export function Composer(props: ComposerProps) {
             disabled={!text.trim() || sendBlockedReason !== undefined}
             onClick={submit}
           >
-            <ArrowUp size={15} strokeWidth={2.4} />
+            <ArrowUp size={18} strokeWidth={2.25} />
           </button>
         </span>
       </div>

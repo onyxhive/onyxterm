@@ -1,60 +1,58 @@
 import { CheckCheck, PanelRight, RotateCcw, SquareTerminal } from "lucide-react";
 import type { Task } from "../types";
-import { STATUS_LABEL } from "../status";
-import { StatusGlyph } from "./StatusGlyph";
+import { TitleBarHeading } from "./TitleBar";
 
 const RAW_TERMINAL_COMING = "Raw terminal coming later";
 
-interface ChatHeaderProps {
-  task: Task;
-  projectName: string;
-  isWorkPanelOpen: boolean;
+export interface ChatHeaderActions {
   onMarkDone: () => void;
   onReopen: () => void;
   onToggleWorkPanel: () => void;
 }
 
-export function ChatHeader(props: ChatHeaderProps) {
-  const { task, projectName, isWorkPanelOpen, onMarkDone, onReopen, onToggleWorkPanel } = props;
+interface ChatHeaderProps {
+  task: Task;
+  isWorkPanelOpen: boolean;
+  actions: ChatHeaderActions;
+}
+
+function DoneToggle({ task, actions }: Omit<ChatHeaderProps, "isWorkPanelOpen">) {
+  if (task.status === "done") {
+    return (
+      <button type="button" className="icon-button" aria-label="Reopen" title="Reopen" onClick={actions.onReopen}>
+        <RotateCcw size={17} strokeWidth={1.75} />
+      </button>
+    );
+  }
   return (
-    <header className="chat-header">
-      <div className="chat-header__heading">
-        <span className={`status-badge status-badge--${task.status}`}>
-          <StatusGlyph status={task.status} size={9} />
-          {STATUS_LABEL[task.status]}
-        </span>
-        <h1 className="chat-header__title">{task.title}</h1>
-        <span className="chat-header__meta">
-          {task.provider} · {task.command} · {projectName}
-        </span>
-      </div>
-      <div className="chat-header__actions">
-        {task.status === "done" ? (
-          <button type="button" className="button button--small" onClick={onReopen}>
-            <RotateCcw size={14} />
-            Reopen
+    <button type="button" className="icon-button" aria-label="Mark done" title="Mark done" onClick={actions.onMarkDone}>
+      <CheckCheck size={18} strokeWidth={1.75} />
+    </button>
+  );
+}
+
+export function ChatHeader({ task, isWorkPanelOpen, actions }: ChatHeaderProps) {
+  return (
+    <>
+      <TitleBarHeading title={task.title} meta={task.model} />
+      <div className="titlebar__actions">
+        <DoneToggle task={task} actions={actions} />
+        <span title={RAW_TERMINAL_COMING}>
+          <button type="button" className="icon-button" aria-label="Open raw terminal" disabled>
+            <SquareTerminal size={18} strokeWidth={1.75} />
           </button>
-        ) : (
-          <button type="button" className="button button--small" onClick={onMarkDone}>
-            <CheckCheck size={14} />
-            Mark done
-          </button>
-        )}
+        </span>
         <button
           type="button"
           className="icon-button"
           aria-label="Toggle work panel"
+          title="Work panel"
           aria-pressed={isWorkPanelOpen}
-          onClick={onToggleWorkPanel}
+          onClick={actions.onToggleWorkPanel}
         >
-          <PanelRight size={16} />
+          <PanelRight size={18} strokeWidth={1.75} />
         </button>
-        <span title={RAW_TERMINAL_COMING}>
-          <button type="button" className="icon-button" aria-label="Open raw terminal" disabled>
-            <SquareTerminal size={16} />
-          </button>
-        </span>
       </div>
-    </header>
+    </>
   );
 }

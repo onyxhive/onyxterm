@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ChevronRight, SquarePen } from "lucide-react";
 import type { Task } from "../types";
-import { STATUS_GROUPS, tasksInGroup, taskLabel } from "../status";
+import { STATUS_GROUPS, tasksInGroup } from "../status";
 import { StatusGlyph } from "./StatusGlyph";
 
 interface SidebarProps {
@@ -11,9 +11,11 @@ interface SidebarProps {
   isOpen: boolean;
   onSelect: (taskId: string) => void;
   onNewChat: () => void;
+  footer: ReactNode;
 }
 
-export function Sidebar({ tasks, selectedTaskId, isNewChatActive, isOpen, onSelect, onNewChat }: SidebarProps) {
+export function Sidebar(props: SidebarProps) {
+  const { tasks, selectedTaskId, isNewChatActive, isOpen, onSelect, onNewChat, footer } = props;
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set(["done"]));
 
   function toggleGroup(groupId: string) {
@@ -28,11 +30,11 @@ export function Sidebar({ tasks, selectedTaskId, isNewChatActive, isOpen, onSele
       <div className="sidebar__inner">
         <button
           type="button"
-          className="new-chat-button"
+          className="sidebar__new-chat"
           aria-current={isNewChatActive}
           onClick={onNewChat}
         >
-          <SquarePen size={14} />
+          <SquarePen size={16} strokeWidth={1.75} />
           New chat
           <kbd>⌘N</kbd>
         </button>
@@ -53,8 +55,8 @@ export function Sidebar({ tasks, selectedTaskId, isNewChatActive, isOpen, onSele
                   aria-expanded={!isCollapsed}
                   onClick={() => toggleGroup(group.id)}
                 >
-                  <ChevronRight size={12} className="task-group__chevron" />
                   <span>{group.title}</span>
+                  <ChevronRight size={12} className="task-group__chevron" />
                   <span className="task-group__count">{groupTasks.length}</span>
                 </button>
                 {!isCollapsed && (
@@ -67,11 +69,8 @@ export function Sidebar({ tasks, selectedTaskId, isNewChatActive, isOpen, onSele
                           aria-current={task.id === selectedTaskId}
                           onClick={() => onSelect(task.id)}
                         >
-                          <StatusGlyph status={task.status} />
-                          <span className="task-row__text">
-                            <span className="task-row__title">{task.title}</span>
-                            <span className="task-row__label">{taskLabel(task)}</span>
-                          </span>
+                          <StatusGlyph status={task.status} size={8} />
+                          <span className="task-row__title">{task.title}</span>
                           <span className="task-row__time">{task.elapsed}</span>
                         </button>
                       </li>
@@ -82,6 +81,7 @@ export function Sidebar({ tasks, selectedTaskId, isNewChatActive, isOpen, onSele
             );
           })}
         </nav>
+        <div className="sidebar__footer">{footer}</div>
       </div>
     </aside>
   );

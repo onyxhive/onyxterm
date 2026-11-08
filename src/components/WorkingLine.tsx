@@ -36,7 +36,7 @@ export function WorkingLine({ since, activity, onStop }: WorkingLineProps) {
       <span className="working__label">Working…</span>
       <span className="working__time">{formatDuration(seconds)}</span>
       {activity && <code className="working__activity">{activity}</code>}
-      <button type="button" className="button button--small" onClick={onStop}>
+      <button type="button" className="button button--quiet button--small" onClick={onStop}>
         <Square size={10} fill="currentColor" />
         Stop
       </button>

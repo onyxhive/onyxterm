@@ -11,11 +11,10 @@ export interface FeedActions {
 
 interface FeedItemViewProps {
   item: FeedItem;
-  providerMark: string;
   actions: FeedActions;
 }
 
-export function FeedItemView({ item, providerMark, actions }: FeedItemViewProps) {
+export function FeedItemView({ item, actions }: FeedItemViewProps) {
   switch (item.kind) {
     case "user":
       return (
@@ -27,9 +26,6 @@ export function FeedItemView({ item, providerMark, actions }: FeedItemViewProps)
     case "agent":
       return (
         <div className="message message--agent">
-          <span className="agent-mark" aria-hidden="true">
-            {providerMark}
-          </span>
           <Markdown source={item.markdown} />
         </div>
       );

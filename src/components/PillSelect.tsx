@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 
 interface PillSelectProps {
   label: string;
-  icon: ReactNode;
+  icon?: ReactNode;
   value: string;
   options: string[];
   onChange: (value: string) => void;
@@ -20,7 +20,7 @@ export function PillSelect({ label, icon, value, options, onChange }: PillSelect
           </option>
         ))}
       </select>
-      <ChevronDown size={12} className="pill-select__chevron" />
+      <ChevronDown size={13} className="pill-select__chevron" />
     </label>
   );
 }
