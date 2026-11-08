@@ -1,4 +1,6 @@
 import { useState } from "react";
+import remarkGfm from "remark-gfm";
+import { remarkMentions } from "../remarkMentions";
 import type { FeedItem, Subagent } from "../types";
 import { ApprovalRow, type PermissionDecision } from "./ApprovalRow";
 import { CopyButton } from "./CopyButton";
@@ -26,6 +28,7 @@ const MAX_COLLAPSED_USER_MESSAGE_LINES = 8;
 const MAX_COLLAPSED_USER_MESSAGE_LENGTH = 600;
 const COLLAPSED_USER_MESSAGE_FADE_MASK = "linear-gradient(to bottom, black calc(100% - 1.75rem), transparent)";
 const COPY_MESSAGE_LABEL = "Copy message";
+const USER_MESSAGE_PLUGINS = [remarkGfm, remarkMentions];
 
 const ACTIONS_REVEAL = cn(
   "items-center text-xs tabular-nums opacity-0 transition-opacity duration-200 pointer-coarse:opacity-100",
@@ -59,7 +62,11 @@ function UserMessageBody({ text }: { text: string }) {
   return (
     <div>
       <div className={cn("relative", isCollapsed && "max-h-44 overflow-hidden")} style={fade}>
-        <Markdown source={text} className="chat-markdown-line-breaks text-foreground" />
+        <Markdown
+          source={text}
+          className="chat-markdown-line-breaks text-foreground"
+          remarkPlugins={USER_MESSAGE_PLUGINS}
+        />
       </div>
       {canCollapse && (
         <div className="mt-1.5 flex items-center justify-end gap-2">

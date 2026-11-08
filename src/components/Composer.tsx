@@ -3,6 +3,7 @@ import { useComposerInsertions, withInsertion } from "../composerInsertions";
 import type { Suggestion } from "../types";
 import { findTrigger, matchSuggestions, type SuggestionSources } from "./composerTrigger";
 import { SuggestionList, suggestionOptionId } from "./SuggestionPopup";
+import { MentionText } from "./MentionText";
 import { cn } from "./ui";
 
 interface ComposerProps {
@@ -21,6 +22,7 @@ interface ComposerProps {
 
 const DEFAULT_SUBMIT_LABEL = "Send message";
 
+const COMPOSER_TEXT = "text-sm leading-relaxed whitespace-pre-wrap break-words";
 export const COMPOSER_PLACEHOLDER = "Ask anything. @ files, / commands";
 export const QUESTION_PLACEHOLDER = "Type your own answer, or leave this blank to use the selected option";
 
@@ -188,30 +190,36 @@ export function Composer(props: ComposerProps) {
       {drawerContent && <AttachedDrawer>{drawerContent}</AttachedDrawer>}
       <div className="glass composer-outline relative z-10 rounded-2xl">
         <div className={cn("relative px-4 pb-2", variant === "hero" ? "pt-4" : "pt-3.5")}>
-          <textarea
-            ref={inputRef}
-            rows={variant === "hero" ? 2 : 1}
-            value={text}
-            placeholder={placeholder}
-            aria-label={placeholder}
-            role="combobox"
-            aria-expanded={isListOpen}
-            aria-controls={listId}
-            aria-autocomplete="list"
-            aria-activedescendant={isListOpen ? suggestionOptionId(listId, highlighted) : undefined}
-            autoFocus
-            onChange={(event) => {
-              setText(event.target.value);
-              setCaret(event.target.selectionStart);
-              setActiveIndex(0);
-            }}
-            onSelect={syncCaret}
-            onKeyDown={handleKeyDown}
-            className={cn(
-              "block max-h-[40vh] w-full resize-none overflow-y-auto bg-transparent text-sm leading-relaxed",
-              "text-foreground outline-none placeholder:text-placeholder",
-            )}
-          />
+          <div className="relative max-h-[40vh] overflow-y-auto">
+            <div aria-hidden className={cn(COMPOSER_TEXT, "pointer-events-none absolute inset-0 text-foreground")}>
+              <MentionText text={text} />
+            </div>
+            <textarea
+              ref={inputRef}
+              rows={variant === "hero" ? 2 : 1}
+              value={text}
+              placeholder={placeholder}
+              aria-label={placeholder}
+              role="combobox"
+              aria-expanded={isListOpen}
+              aria-controls={listId}
+              aria-autocomplete="list"
+              aria-activedescendant={isListOpen ? suggestionOptionId(listId, highlighted) : undefined}
+              autoFocus
+              onChange={(event) => {
+                setText(event.target.value);
+                setCaret(event.target.selectionStart);
+                setActiveIndex(0);
+              }}
+              onSelect={syncCaret}
+              onKeyDown={handleKeyDown}
+              className={cn(
+                COMPOSER_TEXT,
+                "relative block w-full resize-none overflow-hidden bg-transparent text-transparent caret-foreground",
+                "outline-none placeholder:text-placeholder",
+              )}
+            />
+          </div>
         </div>
         <div className="flex min-w-0 items-center gap-2 px-2 pb-2">
           <div className="flex min-w-0 flex-1 items-center gap-0.5">{controls}</div>

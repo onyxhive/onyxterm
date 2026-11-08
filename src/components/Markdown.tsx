@@ -1,4 +1,4 @@
-import ReactMarkdown, { type Components } from "react-markdown";
+import ReactMarkdown, { type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { MarkdownCodeBlock } from "./MarkdownCodeBlock";
 import { cn } from "./ui";
@@ -10,9 +10,10 @@ interface MarkdownProps {
   source: string;
   isStreaming?: boolean;
   className?: string;
+  remarkPlugins?: Options["remarkPlugins"];
 }
 
-export function Markdown({ source, isStreaming = false, className }: MarkdownProps) {
+export function Markdown({ source, isStreaming = false, className, remarkPlugins = REMARK_PLUGINS }: MarkdownProps) {
   return (
     <div
       data-streaming={isStreaming ? "" : undefined}
@@ -21,7 +22,7 @@ export function Markdown({ source, isStreaming = false, className }: MarkdownPro
         className,
       )}
     >
-      <ReactMarkdown remarkPlugins={REMARK_PLUGINS} components={COMPONENTS}>
+      <ReactMarkdown remarkPlugins={remarkPlugins} components={COMPONENTS}>
         {source}
       </ReactMarkdown>
     </div>
