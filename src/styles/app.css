@@ -6,7 +6,7 @@
   --provider-claude: #d97757;
   --control-radius: 0.5rem;
   --topbar-height: 52px;
-  --traffic-light-inset: 5.25rem;
+  --traffic-light-inset: 5rem;
   --sidebar-width: 16rem;
   --chat-content-max-width: 46rem;
   --changes-panel-width: clamp(20rem, 32vw, 28rem);
