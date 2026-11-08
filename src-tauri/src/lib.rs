@@ -2,6 +2,7 @@ mod chats;
 mod db;
 mod error;
 mod process;
+mod project_files;
 mod protocol;
 mod runtime;
 mod settings;
@@ -30,6 +31,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(AgentRuntime::default())
+        .manage(project_files::ProjectFiles::default())
         .setup(|app| {
             let db = open_database(app)?;
             app.manage(db);
@@ -53,6 +55,7 @@ pub fn run() {
             runtime::answer_question,
             runtime::discover_capabilities,
             transcripts::load_chat_history,
+            project_files::list_project_files,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
