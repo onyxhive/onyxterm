@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState, type ReactNode } from "react";
-import { Asterisk, Box, Check, ChevronDown, Gauge, SquareTerminal } from "lucide-react";
+import { Asterisk, Box, Check, ChevronDown, Gauge, GitBranchPlus, SquareTerminal } from "lucide-react";
 import { CLAUDE_COMMANDS } from "../agentOptions";
 import type { Provider } from "../types";
 import { cn, MENU_ITEM, MENU_POPUP, MenuLabel } from "./ui";
@@ -222,6 +222,26 @@ export function EffortPicker({ effort, levels, onChange }: EffortPickerProps) {
         </div>
       )}
     </div>
+  );
+}
+
+interface NewBranchToggleProps {
+  isOn: boolean;
+  onChange: (isOn: boolean) => void;
+}
+
+export function NewBranchToggle({ isOn, onChange }: NewBranchToggleProps) {
+  return (
+    <button
+      type="button"
+      aria-pressed={isOn}
+      title={isOn ? "This chat starts on its own new branch" : "Start this chat on a new branch"}
+      className={cn(CONTROL_CLASS, "aria-pressed:bg-accent aria-pressed:text-foreground")}
+      onClick={() => onChange(!isOn)}
+    >
+      <GitBranchPlus className={cn(isOn && "text-primary")} />
+      <span>New branch</span>
+    </button>
   );
 }
 

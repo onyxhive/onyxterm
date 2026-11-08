@@ -6,13 +6,20 @@ import type { Project, Workspace } from "../types";
 import { suggestionSources, useCapabilities } from "../useCapabilities";
 import { useProjectFiles } from "../useProjectFiles";
 import { Composer, COMPOSER_PLACEHOLDER } from "./Composer";
-import { EffortPicker, ModelPicker, type AgentChoice, type ModelChoice } from "./ComposerControls";
+import {
+  EffortPicker,
+  ModelPicker,
+  NewBranchToggle,
+  type AgentChoice,
+  type ModelChoice,
+} from "./ComposerControls";
 import { cn, INLINE_BUTTON, MENU_ITEM, MENU_POPUP, MenuSeparator, OUTLINE_BUTTON } from "./ui";
 import { useDismiss } from "./useDismiss";
 
 export interface ChatStart extends AgentChoice {
   text: string;
   projectId: string;
+  newBranch: boolean;
 }
 
 interface NewChatProps {
@@ -112,6 +119,7 @@ function ProjectPicker({ project, projects, onPick, onAddProject }: ProjectPicke
 export function NewChat({ workspace, initialChoice, initialProjectId, onStart, onAddProject }: NewChatProps) {
   const [projectId, setProjectId] = useState(initialProjectId ?? workspace.projects[0]?.id ?? "");
   const [choice, setChoice] = useState<AgentChoice>(initialChoice);
+  const [isNewBranch, setIsNewBranch] = useState(false);
 
   const project = workspace.projects.find((candidate) => candidate.id === projectId) ?? workspace.projects[0];
   const isCodex = choice.provider === "Codex";
@@ -132,7 +140,7 @@ export function NewChat({ workspace, initialChoice, initialProjectId, onStart, o
 
   function start(text: string) {
     if (!project) return;
-    onStart({ ...resolvedChoice, text, projectId: project.id });
+    onStart({ ...resolvedChoice, text, projectId: project.id, newBranch: isNewBranch });
   }
 
   function sendBlockedReason(): string | undefined {
@@ -155,6 +163,7 @@ export function NewChat({ workspace, initialChoice, initialProjectId, onStart, o
           onChange={(next) => setChoice({ ...choice, effort: next })}
         />
       )}
+      <NewBranchToggle isOn={isNewBranch} onChange={setIsNewBranch} />
     </>
   );
 
