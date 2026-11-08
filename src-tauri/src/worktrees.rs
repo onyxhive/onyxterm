@@ -14,6 +14,13 @@ const MANAGED_DEPTH: usize = 2;
 const DIRTY_WORKTREE: &str = "the worktree has uncommitted changes; commit or discard them before removing it";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorktreeRequest {
+    pub title: String,
+    pub branch_prefix: String,
+    pub starts_from_remote: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Worktree {
     pub path: PathBuf,
     pub branch: String,
@@ -60,13 +67,21 @@ fn add_worktree(project: &Git, path: &Path, branch: &str) -> AppResult<()> {
     Ok(())
 }
 
-pub fn create(project_root: &Path, worktrees_root: &Path, title: &str) -> AppResult<Worktree> {
+fn base_revision(project: &Git, starts_from_remote: bool) -> AppResult<String> {
+    if starts_from_remote && let Some(remote_base) = git::fresh_remote_base(project)? {
+        return Ok(remote_base);
+    }
+    git::validated_revision(project, CURRENT_BRANCH)
+}
+
+pub fn create(project_root: &Path, worktrees_root: &Path, request: &WorktreeRequest) -> AppResult<Worktree> {
     let project = Git::at(project_root);
     if !git::is_repository(&project) {
         return Err(AppError::Invalid("the project is not a git repository".into()));
     }
-    let base = git::validated_revision(&project, CURRENT_BRANCH)?;
-    let branch = git::validated_branch(&project, &git::unused_chat_branch(&project, title)?)?;
+    let base = base_revision(&project, request.starts_from_remote)?;
+    let chat_branch = git::unused_chat_branch(&project, &request.branch_prefix, &request.title)?;
+    let branch = git::validated_branch(&project, &chat_branch)?;
     let path = worktree_path(worktrees_root, project_root, &branch)?;
     if path.exists() {
         return Err(AppError::Invalid(format!("{} already exists", path.display())));
@@ -104,6 +119,14 @@ mod tests {
     use super::*;
     use crate::checkpoints;
     use crate::git::testing::{identified, scratch_repo, write};
+
+    fn request(title: &str) -> WorktreeRequest {
+        WorktreeRequest {
+            title: title.into(),
+            branch_prefix: git::DEFAULT_CHAT_BRANCH_PREFIX.into(),
+            starts_from_remote: false,
+        }
+    }
 
     fn scratch_worktrees_root() -> PathBuf {
         std::env::temp_dir().join(format!("onyx-hive-worktrees-{}", uuid::Uuid::new_v4()))
@@ -168,7 +191,7 @@ mod tests {
         write(&root, "a.txt", "dirty in the user's checkout\n");
         let before = observe(&root, &git);
         let worktrees = scratch_worktrees_root();
-        let created = create(&root, &worktrees, "Fix the sort").unwrap();
+        let created = create(&root, &worktrees, &request("Fix the sort")).unwrap();
         assert_eq!(created.branch, "onyx/fix-the-sort");
         assert!(created.path.starts_with(&worktrees) && created.path.join("a.txt").is_file());
         assert_eq!(git::current_branch(&Git::at(&created.path)).unwrap().as_deref(), Some("onyx/fix-the-sort"));
@@ -183,7 +206,7 @@ mod tests {
         let Some((root, git)) = committed_repo("worktree-ops") else { return };
         let before = observe(&root, &git);
         let worktrees = scratch_worktrees_root();
-        let created = create(&root, &worktrees, "Add limits").unwrap();
+        let created = create(&root, &worktrees, &request("Add limits")).unwrap();
         let tree = identified(&Git::at(&created.path));
         let chat_id = "6a1f0a3e-0000-4000-8000-000000000001";
         assert_eq!(checkpoints::begin_turn(&created.path, chat_id), Some(1));
@@ -205,7 +228,7 @@ mod tests {
         let Some((root, git)) = committed_repo("worktree-remove") else { return };
         let before = observe(&root, &git);
         let worktrees = scratch_worktrees_root();
-        let created = create(&root, &worktrees, "Tidy").unwrap();
+        let created = create(&root, &worktrees, &request("Tidy")).unwrap();
         remove(&root, &worktrees, &created.path).unwrap();
         assert!(!created.path.exists());
         assert!(git.succeeds(&["show-ref", "--verify", "--quiet", "refs/heads/onyx/tidy"]).unwrap());
@@ -218,7 +241,7 @@ mod tests {
     fn refuses_to_remove_a_worktree_with_uncommitted_or_untracked_work() {
         let Some((root, _)) = committed_repo("worktree-dirty") else { return };
         let worktrees = scratch_worktrees_root();
-        let created = create(&root, &worktrees, "Keep my work").unwrap();
+        let created = create(&root, &worktrees, &request("Keep my work")).unwrap();
         write(&created.path, "notes.txt", "unsaved idea\n");
         let refused = remove(&root, &worktrees, &created.path);
         assert!(matches!(refused, Err(AppError::Invalid(reason)) if reason == DIRTY_WORKTREE));
@@ -227,6 +250,26 @@ mod tests {
         write(&created.path, "a.txt", "edited\n");
         assert!(remove(&root, &worktrees, &created.path).is_err());
         assert!(created.path.join("a.txt").is_file());
+    }
+
+    #[test]
+    fn starts_from_the_fetched_remote_branch_when_asked() {
+        let Some((remote_root, remote)) = committed_repo("worktree-remote-origin") else { return };
+        let Some((root, git)) = scratch_repo("worktree-remote-project") else { return };
+        let branch = remote.output(&["symbolic-ref", "--short", "HEAD"]).unwrap().trim().to_string();
+        git.output(&["remote", "add", "origin", &remote_root.to_string_lossy()]).unwrap();
+        git.output(&["fetch", "-q", "origin"]).unwrap();
+        git.output(&["checkout", "-q", "-b", &branch, "--track", &format!("origin/{branch}")]).unwrap();
+        write(&remote_root, "b.txt", "from the remote\n");
+        remote.output(&["add", "b.txt"]).unwrap();
+        remote.output(&["commit", "-q", "-m", "remote only"]).unwrap();
+        let worktrees = scratch_worktrees_root();
+        let local = create(&root, &worktrees, &request("Local base")).unwrap();
+        assert!(!local.path.join("b.txt").exists());
+        let from_remote = WorktreeRequest { starts_from_remote: true, ..request("Remote base") };
+        let created = create(&root, &worktrees, &from_remote).unwrap();
+        assert!(created.path.join("b.txt").is_file());
+        assert!(!root.join("b.txt").exists());
     }
 
     #[test]

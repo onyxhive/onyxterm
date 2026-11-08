@@ -10,9 +10,10 @@ use crate::db::{Db, new_id, now_millis};
 use crate::error::{AppError, AppResult};
 use crate::git;
 use crate::prs::{ChatPullRequest, GitHub};
+use crate::settings::{BRANCH_PREFIX_SETTING, START_FROM_REMOTE_SETTING, stored_setting};
 use crate::subprocess::in_background;
 use crate::workspaces::project;
-use crate::worktrees::{self, WORK_IN_WORKTREES_SETTING, Worktree};
+use crate::worktrees::{self, WORK_IN_WORKTREES_SETTING, Worktree, WorktreeRequest};
 
 const MAX_TITLE_LENGTH: usize = 200;
 const MAX_OPTION_LENGTH: usize = 64;
@@ -349,10 +350,17 @@ pub fn list_chats(app: AppHandle, db: State<'_, Db>, github: State<'_, GitHub>) 
 }
 
 fn works_in_worktrees(connection: &Connection) -> AppResult<bool> {
-    let value: Option<String> = connection
-        .query_row("SELECT value FROM settings WHERE key = ?1", [WORK_IN_WORKTREES_SETTING], |row| row.get(0))
-        .optional()?;
-    Ok(value.as_deref() == Some("true"))
+    Ok(stored_setting(connection, WORK_IN_WORKTREES_SETTING)?.as_deref() == Some("true"))
+}
+
+fn worktree_request(connection: &Connection, title: &str) -> AppResult<Option<WorktreeRequest>> {
+    if !works_in_worktrees(connection)? {
+        return Ok(None);
+    }
+    let branch_prefix =
+        stored_setting(connection, BRANCH_PREFIX_SETTING)?.unwrap_or_else(|| git::DEFAULT_CHAT_BRANCH_PREFIX.into());
+    let starts_from_remote = stored_setting(connection, START_FROM_REMOTE_SETTING)?.as_deref() == Some("true");
+    Ok(Some(WorktreeRequest { title: title.into(), branch_prefix, starts_from_remote }))
 }
 
 fn worktrees_root(app: &AppHandle) -> AppResult<PathBuf> {
@@ -360,24 +368,24 @@ fn worktrees_root(app: &AppHandle) -> AppResult<PathBuf> {
     Ok(worktrees::worktrees_root(&data_dir))
 }
 
-async fn checkout_for(app: &AppHandle, root: PathBuf, title: String, in_worktree: bool) -> AppResult<ChatCheckout> {
-    if !in_worktree {
+async fn checkout_for(app: &AppHandle, root: PathBuf, request: Option<WorktreeRequest>) -> AppResult<ChatCheckout> {
+    let Some(request) = request else {
         let branch = in_background(move || Ok(git::branch_at(&root))).await?;
         return Ok(ChatCheckout { branch, worktree_path: None });
-    }
+    };
     let worktrees_root = worktrees_root(app)?;
-    let created = in_background(move || worktrees::create(&root, &worktrees_root, &title)).await?;
+    let created = in_background(move || worktrees::create(&root, &worktrees_root, &request)).await?;
     Ok(created.into())
 }
 
 #[tauri::command]
 pub async fn create_chat(app: AppHandle, db: State<'_, Db>, draft: NewChat) -> AppResult<Chat> {
     let draft = validated(draft)?;
-    let (root, in_worktree) = {
+    let (root, request) = {
         let connection = db.connection();
-        (PathBuf::from(project(&connection, &draft.project_id)?.path), works_in_worktrees(&connection)?)
+        (PathBuf::from(project(&connection, &draft.project_id)?.path), worktree_request(&connection, &draft.title)?)
     };
-    let checkout = checkout_for(&app, root, draft.title.clone(), in_worktree).await?;
+    let checkout = checkout_for(&app, root, request).await?;
     insert_chat(&db.connection(), draft, checkout)
 }
 
@@ -548,5 +556,19 @@ mod tests {
         assert!(!works_in_worktrees(&connection).unwrap());
         crate::settings::store_setting(&connection, WORK_IN_WORKTREES_SETTING, "true").unwrap();
         assert!(works_in_worktrees(&connection).unwrap());
+    }
+
+    #[test]
+    fn builds_the_worktree_request_from_the_worktree_settings() {
+        let db = Db::open_in_memory().unwrap();
+        let connection = db.connection();
+        assert_eq!(worktree_request(&connection, "Fix").unwrap(), None);
+        crate::settings::store_setting(&connection, WORK_IN_WORKTREES_SETTING, "true").unwrap();
+        let defaults = worktree_request(&connection, "Fix").unwrap().unwrap();
+        assert_eq!((defaults.branch_prefix.as_str(), defaults.starts_from_remote), ("onyx/", false));
+        crate::settings::store_setting(&connection, BRANCH_PREFIX_SETTING, "julius").unwrap();
+        crate::settings::store_setting(&connection, START_FROM_REMOTE_SETTING, "true").unwrap();
+        let custom = worktree_request(&connection, "Fix").unwrap().unwrap();
+        assert_eq!((custom.branch_prefix.as_str(), custom.starts_from_remote), ("julius", true));
     }
 }

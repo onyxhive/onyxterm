@@ -16,6 +16,7 @@ use crate::workspaces::project;
 pub const READ_LIMITS: Limits = Limits { timeout: Duration::from_secs(10), max_output: 8 << 20, label: "git" };
 pub const DIFF_LIMITS: Limits = Limits { timeout: Duration::from_secs(15), max_output: 1 << 20, label: "git diff" };
 const WRITE_LIMITS: Limits = Limits { timeout: Duration::from_secs(120), max_output: 1 << 20, label: "git" };
+const FETCH_LIMITS: Limits = Limits { timeout: Duration::from_secs(20), max_output: 1 << 20, label: "git fetch" };
 const MAX_ID_LENGTH: usize = 64;
 const MAX_REF_LENGTH: usize = 255;
 const MAX_PATH_LENGTH: usize = 4096;
@@ -24,7 +25,7 @@ const MAX_MESSAGE_LENGTH: usize = 20_000;
 const PREFERRED_REMOTE: &str = "origin";
 const DEFAULT_BRANCH_CANDIDATES: [&str; 2] = ["main", "master"];
 const MAX_SLUG_LENGTH: usize = 40;
-const CHAT_BRANCH_PREFIX: &str = "onyx/";
+pub const DEFAULT_CHAT_BRANCH_PREFIX: &str = "onyx/";
 const FALLBACK_SLUG: &str = "chat";
 const SUFFIX_LENGTH: usize = 6;
 const BRANCH_FORMAT: &str = "%(refname)%09%(HEAD)%09%(committerdate:unix)%09%(upstream:short)";
@@ -547,13 +548,44 @@ fn slug(title: &str) -> String {
     if trimmed.is_empty() { FALLBACK_SLUG.to_string() } else { trimmed.to_string() }
 }
 
-pub fn unused_chat_branch(git: &Git, title: &str) -> AppResult<String> {
-    let base = format!("{CHAT_BRANCH_PREFIX}{}", slug(title));
+fn branch_prefix(prefix: &str) -> String {
+    let trimmed = prefix.trim().trim_end_matches('/');
+    if trimmed.is_empty() { String::new() } else { format!("{trimmed}/") }
+}
+
+pub fn unused_chat_branch(git: &Git, prefix: &str, title: &str) -> AppResult<String> {
+    let base = format!("{}{}", branch_prefix(prefix), slug(title));
     if !ref_exists(git, &format!("{LOCAL_PREFIX}{base}"))? {
         return Ok(base);
     }
     let suffix: String = uuid::Uuid::new_v4().simple().to_string().chars().take(SUFFIX_LENGTH).collect();
     Ok(format!("{base}-{suffix}"))
+}
+
+fn tracked_remote_branch(git: &Git, branch: &str) -> AppResult<String> {
+    let upstream = git.run(&["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"], READ_LIMITS)?;
+    let tracked = upstream.stdout.trim();
+    if upstream.is_success && !tracked.is_empty() {
+        return Ok(tracked.to_string());
+    }
+    Ok(format!("{PREFERRED_REMOTE}/{branch}"))
+}
+
+fn refresh_remote_branch(git: &Git, remote_branch: &str) {
+    let Some((remote, name)) = remote_branch.split_once('/') else { return };
+    if is_option_safe(remote, MAX_REF_LENGTH) && is_option_safe(name, MAX_REF_LENGTH) {
+        let _ = git.run(&["fetch", "--quiet", "--no-tags", remote, name], FETCH_LIMITS);
+    }
+}
+
+pub fn fresh_remote_base(git: &Git) -> AppResult<Option<String>> {
+    let Some(branch) = current_branch(git)? else { return Ok(None) };
+    let remote_branch = tracked_remote_branch(git, &branch)?;
+    refresh_remote_branch(git, &remote_branch);
+    if ref_exists(git, &format!("{REMOTE_PREFIX}{remote_branch}"))? {
+        return Ok(Some(validated_revision(git, &format!("{REMOTE_PREFIX}{remote_branch}"))?));
+    }
+    Ok(None)
 }
 
 pub fn branch_at(root: &Path) -> Option<String> {
@@ -865,11 +897,20 @@ mod tests {
     fn names_an_unused_chat_branch_from_the_title() {
         let Some((_, git)) = scratch_repo("chat-branch") else { return };
         git.output(&["commit", "-q", "--allow-empty", "-m", "start"]).unwrap();
-        let first = unused_chat_branch(&git, "Fix the sort").unwrap();
+        let first = unused_chat_branch(&git, DEFAULT_CHAT_BRANCH_PREFIX, "Fix the sort").unwrap();
         assert_eq!(first, "onyx/fix-the-sort");
         git.output(&["branch", &first]).unwrap();
-        let second = unused_chat_branch(&git, "Fix the sort").unwrap();
+        let second = unused_chat_branch(&git, DEFAULT_CHAT_BRANCH_PREFIX, "Fix the sort").unwrap();
         assert!(second.starts_with("onyx/fix-the-sort-") && second != first);
+    }
+
+    #[test]
+    fn prefixes_chat_branches_with_a_slash_or_nothing() {
+        let Some((_, git)) = scratch_repo("chat-branch-prefix") else { return };
+        git.output(&["commit", "-q", "--allow-empty", "-m", "start"]).unwrap();
+        assert_eq!(unused_chat_branch(&git, "julius", "Add search").unwrap(), "julius/add-search");
+        assert_eq!(unused_chat_branch(&git, "julius/", "Add search").unwrap(), "julius/add-search");
+        assert_eq!(unused_chat_branch(&git, "", "Add search").unwrap(), "add-search");
     }
 
     #[test]
