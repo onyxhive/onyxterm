@@ -35,6 +35,8 @@ pub struct Subagent {
     pub status: SubagentStatus,
     pub last_tool: Option<String>,
     pub summary: Option<String>,
+    pub started_at: Option<String>,
+    pub last_activity_at: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -51,6 +53,8 @@ struct SidechainMeta {
 struct SidechainActivity {
     last_tool: Option<String>,
     last_text: Option<String>,
+    started_at: Option<String>,
+    last_activity_at: Option<String>,
 }
 
 #[derive(Default)]
@@ -74,6 +78,8 @@ impl Roster {
             status: SubagentStatus::Running,
             last_tool: None,
             summary: None,
+            started_at: None,
+            last_activity_at: None,
         });
     }
 
@@ -102,6 +108,8 @@ impl Roster {
         let Some(subagent) = self.find(&meta.tool_use_id) else { return };
         subagent.last_tool = activity.last_tool.or(subagent.last_tool.take());
         subagent.summary = activity.last_text.map(|text| clipped(&text, SUMMARY_LENGTH)).or(subagent.summary.take());
+        subagent.started_at = activity.started_at;
+        subagent.last_activity_at = activity.last_activity_at;
     }
 }
 
@@ -139,6 +147,12 @@ fn notification_events(line: &str) -> Vec<AgentEvent> {
     events
 }
 
+fn record_timestamp(value: &Value, activity: &mut SidechainActivity) {
+    let Some(timestamp) = value.get("timestamp").and_then(Value::as_str) else { return };
+    activity.started_at.get_or_insert_with(|| timestamp.to_string());
+    activity.last_activity_at = Some(timestamp.to_string());
+}
+
 fn record_assistant_blocks(value: &Value, activity: &mut SidechainActivity) {
     if value.get("type").and_then(Value::as_str) != Some("assistant") {
         return;
@@ -162,6 +176,7 @@ fn sidechain_activity(transcript: &Path) -> SidechainActivity {
     let mut activity = SidechainActivity::default();
     let _ = for_each_line(transcript, |line| {
         if let Ok(value) = serde_json::from_str::<Value>(line) {
+            record_timestamp(&value, &mut activity);
             record_assistant_blocks(&value, &mut activity);
         }
     });
@@ -263,6 +278,8 @@ mod tests {
         assert_eq!(listed[0].status, SubagentStatus::Completed);
         assert_eq!(listed[0].last_tool.as_deref(), Some("Edit"));
         assert_eq!(listed[0].summary.as_deref(), Some("Built and tested."));
+        assert_eq!(listed[0].started_at.as_deref(), Some("2026-10-10T20:46:01.085Z"));
+        assert_eq!(listed[0].last_activity_at.as_deref(), Some("2026-10-10T20:49:30.000Z"));
         assert_eq!((listed[1].agent_type.as_str(), listed[1].status), ("Explore", SubagentStatus::Running));
     }
 
