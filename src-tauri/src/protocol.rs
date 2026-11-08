@@ -8,7 +8,8 @@ use crate::chats::PermissionMode;
 
 const ASK_USER_QUESTION: &str = "AskUserQuestion";
 const DETAIL_LENGTH: usize = 160;
-const SESSION_DESTINATION: &str = "session";
+const RULE_LABEL_LENGTH: usize = 120;
+const PERSISTABLE_RULE_TYPES: [&str; 2] = ["addRules", "addDirectories"];
 const TITLE_FIELD: &str = "title";
 const SUBAGENT_TOOLS: [&str; 2] = ["Task", "Agent"];
 const AGENT_TASK_TYPE: &str = "local_agent";
@@ -120,30 +121,108 @@ pub struct UserImage {
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum AgentEvent {
-    Session { session_id: String },
-    UserText { text: String, images: Vec<UserImage> },
-    TextDelta { message_id: String, index: u32, text: String },
-    Text { message_id: String, text: String },
-    ToolStarted { tool_use_id: String, parent_tool_use_id: Option<String>, summary: ToolSummary },
-    ToolFinished { tool_use_id: String, is_error: bool },
-    PermissionRequested { request_id: String, tool_use_id: Option<String>, summary: ToolSummary, reason: String },
-    QuestionAsked { request_id: String, questions: Vec<Question> },
-    PermissionCancelled { request_id: String },
-    TurnEnded { is_error: bool, cost_usd: Option<f64>, message: Option<String> },
-    Initialized { capabilities: Capabilities },
-    TitleChanged { title: String },
-    ProcessExited { message: String },
-    SubagentStarted { tool_use_id: String, agent_type: String, description: String },
-    SubagentProgress { tool_use_id: String, last_tool: Option<String>, text: String },
-    SubagentFinished { tool_use_id: String, is_error: bool, summary: String },
+    Session {
+        session_id: String,
+    },
+    UserText {
+        text: String,
+        images: Vec<UserImage>,
+    },
+    TextDelta {
+        message_id: String,
+        index: u32,
+        text: String,
+    },
+    Text {
+        message_id: String,
+        text: String,
+    },
+    ToolStarted {
+        tool_use_id: String,
+        parent_tool_use_id: Option<String>,
+        summary: ToolSummary,
+    },
+    ToolFinished {
+        tool_use_id: String,
+        is_error: bool,
+    },
+    PermissionRequested {
+        request_id: String,
+        tool_use_id: Option<String>,
+        summary: ToolSummary,
+        reason: String,
+        suggestions: Vec<RuleChoice>,
+    },
+    QuestionAsked {
+        request_id: String,
+        questions: Vec<Question>,
+    },
+    PermissionCancelled {
+        request_id: String,
+    },
+    TurnEnded {
+        is_error: bool,
+        cost_usd: Option<f64>,
+        message: Option<String>,
+    },
+    Initialized {
+        capabilities: Capabilities,
+    },
+    TitleChanged {
+        title: String,
+    },
+    ProcessExited {
+        message: String,
+    },
+    SubagentStarted {
+        tool_use_id: String,
+        agent_type: String,
+        description: String,
+    },
+    SubagentProgress {
+        tool_use_id: String,
+        last_tool: Option<String>,
+        text: String,
+    },
+    SubagentFinished {
+        tool_use_id: String,
+        is_error: bool,
+        summary: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PermissionRequest {
     pub request_id: String,
     pub tool_use_id: Option<String>,
+    pub tool_name: String,
     pub input: Value,
     pub suggestions: Vec<Value>,
+    pub is_rule_suppressed: bool,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum RuleScope {
+    #[serde(rename = "session")]
+    Session,
+    #[serde(rename = "localSettings")]
+    LocalSettings,
+}
+
+impl RuleScope {
+    fn destination(self) -> &'static str {
+        match self {
+            RuleScope::Session => "session",
+            RuleScope::LocalSettings => "localSettings",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct RuleChoice {
+    pub label: String,
+    pub value: RuleScope,
 }
 
 #[derive(Debug, Deserialize)]
@@ -319,6 +398,8 @@ enum ControlRequestBody {
         tool_use_id: Option<String>,
         description: Option<String>,
         decision_reason: Option<String>,
+        #[serde(default)]
+        suppress_always_allow_rule: bool,
     },
     #[serde(other)]
     Other,
@@ -752,10 +833,12 @@ impl StreamParser {
             tool_use_id,
             description,
             decision_reason,
+            suppress_always_allow_rule,
         } = request.request
         else {
             return Vec::new();
         };
+        let suggestions = if suppress_always_allow_rule { Vec::new() } else { permission_suggestions };
         let event = if tool_name == ASK_USER_QUESTION {
             AgentEvent::QuestionAsked { request_id: request.request_id.clone(), questions: questions_of(&input) }
         } else {
@@ -764,13 +847,16 @@ impl StreamParser {
                 tool_use_id: tool_use_id.clone(),
                 summary: describe_tool(&tool_name, &input),
                 reason: description.or(decision_reason).unwrap_or_default(),
+                suggestions: rule_choices(&tool_name, &suggestions, suppress_always_allow_rule),
             }
         };
         self.pending_permissions.push(PermissionRequest {
             request_id: request.request_id,
             tool_use_id,
+            tool_name,
             input,
-            suggestions: permission_suggestions,
+            suggestions,
+            is_rule_suppressed: suppress_always_allow_rule,
         });
         vec![event]
     }
@@ -842,15 +928,68 @@ fn control_success(request_id: &str, response: Value) -> String {
         .to_string()
 }
 
-fn session_scoped(suggestions: &[Value]) -> Vec<Value> {
-    suggestions
-        .iter()
-        .cloned()
-        .map(|mut suggestion| {
-            if let Some(fields) = suggestion.as_object_mut() {
-                fields.insert("destination".into(), Value::from(SESSION_DESTINATION));
+fn rule_type(suggestion: &Value) -> &str {
+    suggestion.get("type").and_then(Value::as_str).unwrap_or_default()
+}
+
+fn persistable(suggestions: &[Value]) -> Vec<Value> {
+    suggestions.iter().filter(|suggestion| PERSISTABLE_RULE_TYPES.contains(&rule_type(suggestion))).cloned().collect()
+}
+
+fn rule_text(suggestion: &Value) -> Vec<String> {
+    let rules = suggestion.get("rules").and_then(Value::as_array).into_iter().flatten().filter_map(|rule| {
+        let tool = rule.get("toolName").and_then(Value::as_str)?;
+        Some(match rule.get("ruleContent").and_then(Value::as_str) {
+            Some(content) => format!("{tool}({content})"),
+            None => tool.to_string(),
+        })
+    });
+    let directories = suggestion.get("directories").and_then(Value::as_array).into_iter().flatten();
+    rules.chain(directories.filter_map(|directory| directory.as_str().map(String::from))).collect()
+}
+
+fn rules_label(tool_name: &str, suggestions: &[Value]) -> String {
+    let texts: Vec<String> = suggestions.iter().flat_map(rule_text).collect();
+    let joined = if texts.is_empty() { tool_name.to_string() } else { texts.join(", ") };
+    clipped(&joined, RULE_LABEL_LENGTH)
+}
+
+fn rule_choices(tool_name: &str, suggestions: &[Value], is_suppressed: bool) -> Vec<RuleChoice> {
+    if is_suppressed {
+        return Vec::new();
+    }
+    let for_chat = RuleChoice {
+        label: format!("Allow {} for this chat", rules_label(tool_name, suggestions)),
+        value: RuleScope::Session,
+    };
+    let saved = persistable(suggestions);
+    let for_project = (!saved.is_empty()).then(|| RuleChoice {
+        label: format!("Always allow {} in this project", rules_label(tool_name, &saved)),
+        value: RuleScope::LocalSettings,
+    });
+    std::iter::once(for_chat).chain(for_project).collect()
+}
+
+fn scoped_rules(request: &PermissionRequest, scope: RuleScope) -> Vec<Value> {
+    let chosen = match scope {
+        RuleScope::Session => request.suggestions.clone(),
+        RuleScope::LocalSettings => persistable(&request.suggestions),
+    };
+    if chosen.is_empty() {
+        let fallback = json!({"type": "addRules", "rules": [{"toolName": request.tool_name}], "behavior": "allow"});
+        return scoped(vec![fallback], scope);
+    }
+    scoped(chosen, scope)
+}
+
+fn scoped(rules: Vec<Value>, scope: RuleScope) -> Vec<Value> {
+    rules
+        .into_iter()
+        .map(|mut rule| {
+            if let Some(fields) = rule.as_object_mut() {
+                fields.insert("destination".into(), Value::from(scope.destination()));
             }
-            suggestion
+            rule
         })
         .collect()
 }
@@ -858,24 +997,41 @@ fn session_scoped(suggestions: &[Value]) -> Vec<Value> {
 pub fn allow_once(request: &PermissionRequest) -> String {
     control_success(
         &request.request_id,
-        json!({"behavior": "allow", "updatedInput": request.input, "toolUseID": request.tool_use_id}),
+        json!({
+            "behavior": "allow",
+            "updatedInput": request.input,
+            "toolUseID": request.tool_use_id,
+            "decisionClassification": "user_temporary",
+        }),
     )
 }
 
-pub fn allow_for_session(request: &PermissionRequest) -> String {
+pub fn allow_with_rules(request: &PermissionRequest, scope: RuleScope) -> String {
+    if request.is_rule_suppressed {
+        return allow_once(request);
+    }
     control_success(
         &request.request_id,
         json!({
             "behavior": "allow",
             "updatedInput": request.input,
             "toolUseID": request.tool_use_id,
-            "updatedPermissions": session_scoped(&request.suggestions),
+            "updatedPermissions": scoped_rules(request, scope),
+            "decisionClassification": "user_permanent",
         }),
     )
 }
 
 pub fn deny(request: &PermissionRequest, message: &str) -> String {
-    control_success(&request.request_id, json!({"behavior": "deny", "message": message}))
+    control_success(
+        &request.request_id,
+        json!({
+            "behavior": "deny",
+            "message": message,
+            "toolUseID": request.tool_use_id,
+            "decisionClassification": "user_reject",
+        }),
+    )
 }
 
 pub fn answer_questions(request: &PermissionRequest, answers: &HashMap<String, String>) -> String {
@@ -1034,15 +1190,111 @@ mod tests {
     #[test]
     fn always_allow_scopes_every_suggestion_to_the_session() {
         let (_, permissions) = parse_all(Source::Live, PROBE_TWO);
-        let reply: Value = serde_json::from_str(&allow_for_session(&permissions[0])).unwrap();
+        let reply: Value = serde_json::from_str(&allow_with_rules(&permissions[0], RuleScope::Session)).unwrap();
         let body = &reply["response"]["response"];
         assert_eq!(body["behavior"], "allow");
         assert_eq!(body["updatedInput"]["command"], "echo hi > f.txt");
         let destinations: Vec<_> =
             body["updatedPermissions"].as_array().unwrap().iter().map(|rule| &rule["destination"]).collect();
         assert!(destinations.iter().all(|destination| *destination == "session"));
+        assert_eq!(body["decisionClassification"], "user_permanent");
         let denied: Value = serde_json::from_str(&deny(&permissions[0], "no")).unwrap();
         assert_eq!(denied["response"]["response"]["behavior"], "deny");
+        assert_eq!(denied["response"]["response"]["decisionClassification"], "user_reject");
+        let once: Value = serde_json::from_str(&allow_once(&permissions[0])).unwrap();
+        assert_eq!(once["response"]["response"]["decisionClassification"], "user_temporary");
+    }
+
+    fn bash_request(extra: &str) -> String {
+        format!(
+            r#"{{"type":"control_request","request_id":"b1","request":{{"subtype":"can_use_tool","tool_name":"Bash",
+            "input":{{"command":"cd order && ls src"}},"tool_use_id":"t1","permission_suggestions":[
+            {{"type":"addRules","rules":[{{"toolName":"Bash","ruleContent":"ls:*"}}],"behavior":"allow",
+            "destination":"localSettings"}},
+            {{"type":"setMode","mode":"acceptEdits","destination":"session"}}]{extra}}}}}"#
+        )
+        .replace('\n', "")
+    }
+
+    #[test]
+    fn offers_chat_and_project_rules_from_the_suggestions() {
+        let mut parser = StreamParser::new(Source::Live);
+        let events = parser.parse_line(&bash_request(""));
+        let AgentEvent::PermissionRequested { suggestions, .. } = &events[0] else { panic!("{events:?}") };
+        assert_eq!(
+            suggestions,
+            &vec![
+                RuleChoice { label: "Allow Bash(ls:*) for this chat".into(), value: RuleScope::Session },
+                RuleChoice { label: "Always allow Bash(ls:*) in this project".into(), value: RuleScope::LocalSettings },
+            ]
+        );
+        let wire = serde_json::to_value(&suggestions[1]).unwrap();
+        assert_eq!(wire, json!({"label": "Always allow Bash(ls:*) in this project", "value": "localSettings"}));
+        let request = parser.take_permission_requests().remove(0);
+        let project: Value = serde_json::from_str(&allow_with_rules(&request, RuleScope::LocalSettings)).unwrap();
+        assert_eq!(
+            project["response"]["response"]["updatedPermissions"],
+            json!([{"type": "addRules", "rules": [{"toolName": "Bash", "ruleContent": "ls:*"}], "behavior": "allow",
+                "destination": "localSettings"}])
+        );
+        let chat: Value = serde_json::from_str(&allow_with_rules(&request, RuleScope::Session)).unwrap();
+        let destinations: Vec<_> = chat["response"]["response"]["updatedPermissions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|rule| rule["destination"].clone())
+            .collect();
+        assert_eq!(destinations, vec![json!("session"), json!("session")]);
+    }
+
+    #[test]
+    fn grants_the_whole_tool_for_the_chat_when_claude_suggests_nothing() {
+        let line = r#"{"type":"control_request","request_id":"w1","request":{"subtype":"can_use_tool",
+            "tool_name":"WebFetch","input":{"url":"https://example.com"},"tool_use_id":"t2"}}"#
+            .replace('\n', "");
+        let mut parser = StreamParser::new(Source::Live);
+        let events = parser.parse_line(&line);
+        let AgentEvent::PermissionRequested { suggestions, .. } = &events[0] else { panic!("{events:?}") };
+        assert_eq!(
+            suggestions,
+            &vec![RuleChoice { label: "Allow WebFetch for this chat".into(), value: RuleScope::Session }]
+        );
+        let request = parser.take_permission_requests().remove(0);
+        let reply: Value = serde_json::from_str(&allow_with_rules(&request, RuleScope::Session)).unwrap();
+        assert_eq!(
+            reply["response"]["response"]["updatedPermissions"],
+            json!([
+                {"type": "addRules", "rules": [{"toolName": "WebFetch"}], "behavior": "allow", "destination": "session"}
+            ])
+        );
+    }
+
+    #[test]
+    fn offers_no_standing_rule_when_claude_suppresses_it() {
+        let mut parser = StreamParser::new(Source::Live);
+        let events = parser.parse_line(&bash_request(r#","suppress_always_allow_rule":true"#));
+        let AgentEvent::PermissionRequested { suggestions, .. } = &events[0] else { panic!("{events:?}") };
+        assert!(suggestions.is_empty());
+        let request = parser.take_permission_requests().remove(0);
+        let reply: Value = serde_json::from_str(&allow_with_rules(&request, RuleScope::Session)).unwrap();
+        assert!(reply["response"]["response"].get("updatedPermissions").is_none());
+        assert_eq!(reply["response"]["response"]["decisionClassification"], "user_temporary");
+    }
+
+    #[test]
+    fn treats_subagent_approvals_like_main_agent_ones() {
+        let mut parser = StreamParser::new(Source::Live);
+        let launch = r#"{"type":"assistant","message":{"id":"m1","content":[{"type":"tool_use","id":"agent1",
+            "name":"Task","input":{"description":"Scout","subagent_type":"scout","prompt":"look"}}]}}"#;
+        parser.parse_line(&launch.replace('\n', ""));
+        let inner = bash_request("").replace(r#""tool_use_id":"t1""#, r#""tool_use_id":"inner1""#);
+        let events = parser.parse_line(&inner);
+        let AgentEvent::PermissionRequested { suggestions, .. } = &events[0] else { panic!("{events:?}") };
+        assert_eq!(suggestions.len(), 2);
+        let request = parser.take_permission_requests().remove(0);
+        let reply: Value = serde_json::from_str(&allow_with_rules(&request, RuleScope::Session)).unwrap();
+        assert_eq!(reply["response"]["response"]["toolUseID"], "inner1");
+        assert_eq!(reply["response"]["response"]["updatedPermissions"][0]["destination"], "session");
     }
 
     #[test]

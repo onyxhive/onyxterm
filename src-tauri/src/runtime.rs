@@ -17,7 +17,9 @@ use crate::checkpoints;
 use crate::db::{Db, new_id};
 use crate::error::{AppError, AppResult};
 use crate::process::{self, Launch, SessionFlag};
-use crate::protocol::{self, AgentEvent, Capabilities, ControlNotice, PermissionRequest, Source, StreamParser};
+use crate::protocol::{
+    self, AgentEvent, Capabilities, ControlNotice, PermissionRequest, RuleScope, Source, StreamParser,
+};
 use crate::subprocess::in_background;
 use crate::transcripts;
 use crate::workspaces::project;
@@ -34,6 +36,7 @@ const STDERR_TAIL_LENGTH: usize = 2000;
 const MAX_MESSAGE_LENGTH: usize = 200_000;
 const MAX_TITLE_DESCRIPTION_LENGTH: usize = 2_000;
 const DENY_MESSAGE: &str = "The user denied this tool use.";
+const RULE_NEEDS_ALWAYS: &str = "a rule scope only applies to an always-allow answer";
 const CODEX_UNSUPPORTED: &str = "Codex support coming next";
 const TURN_IS_RUNNING: &str = "the agent is working; wait for this turn to finish or stop it before changing settings";
 
@@ -602,6 +605,14 @@ pub fn interrupt_chat(runtime: State<'_, AgentRuntime>, chat_id: String) -> AppR
     process.write_line(&protocol::interrupt_request(&new_id()))
 }
 
+fn rule_scope(decision: PermissionDecision, suggestion: Option<RuleScope>) -> AppResult<Option<RuleScope>> {
+    match (decision, suggestion) {
+        (PermissionDecision::Always, scope) => Ok(Some(scope.unwrap_or(RuleScope::Session))),
+        (_, None) => Ok(None),
+        (_, Some(_)) => Err(AppError::Invalid(RULE_NEEDS_ALWAYS.into())),
+    }
+}
+
 #[tauri::command]
 pub fn answer_permission(
     app: AppHandle,
@@ -609,13 +620,15 @@ pub fn answer_permission(
     chat_id: String,
     request_id: String,
     decision: PermissionDecision,
+    suggestion: Option<RuleScope>,
 ) -> AppResult<()> {
+    let scope = rule_scope(decision, suggestion)?;
     let process = runtime.running_process(&chat_id)?;
     let request = process.take_permission(&request_id)?;
-    let reply = match decision {
-        PermissionDecision::Once => protocol::allow_once(&request),
-        PermissionDecision::Always => protocol::allow_for_session(&request),
-        PermissionDecision::Deny => protocol::deny(&request, DENY_MESSAGE),
+    let reply = match (decision, scope) {
+        (PermissionDecision::Always, Some(scope)) => protocol::allow_with_rules(&request, scope),
+        (PermissionDecision::Deny, _) => protocol::deny(&request, DENY_MESSAGE),
+        _ => protocol::allow_once(&request),
     };
     process.write_line(&reply)?;
     resume_running(&app, &chat_id);
@@ -781,6 +794,17 @@ mod tests {
         let broken: Attachment =
             serde_json::from_value(serde_json::json!({"mediaType": "image/gif", "dataBase64": "%%"})).unwrap();
         assert!(validated_message("hi", &[broken]).is_err());
+    }
+
+    #[test]
+    fn scopes_always_allow_answers_and_rejects_scopes_on_other_answers() {
+        assert_eq!(rule_scope(PermissionDecision::Always, None).unwrap(), Some(RuleScope::Session));
+        let project = rule_scope(PermissionDecision::Always, Some(RuleScope::LocalSettings)).unwrap();
+        assert_eq!(project, Some(RuleScope::LocalSettings));
+        assert_eq!(rule_scope(PermissionDecision::Once, None).unwrap(), None);
+        assert!(rule_scope(PermissionDecision::Deny, Some(RuleScope::Session)).is_err());
+        assert!(serde_json::from_str::<RuleScope>("\"userSettings\"").is_err());
+        assert!(serde_json::from_str::<RuleScope>("\"localSettings\"").is_ok());
     }
 
     #[test]
