@@ -10,6 +10,7 @@ mod protocol;
 mod prs;
 mod runtime;
 mod settings;
+mod subagents;
 mod subprocess;
 mod transcripts;
 mod workspaces;
@@ -79,6 +80,7 @@ pub fn run() {
             prs::pr_checks,
             prs::pr_create,
             prs::pr_merge,
+            subagents::list_subagents,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

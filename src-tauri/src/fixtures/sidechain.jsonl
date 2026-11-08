@@ -1,0 +1,2 @@
+{"type":"assistant","isSidechain":true,"message":{"content":[{"type":"tool_use","id":"t","name":"Edit","input":{}}]}}
+{"type":"assistant","isSidechain":true,"message":{"content":[{"type":"text","text":"Built and tested."}]}}

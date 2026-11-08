@@ -88,7 +88,7 @@ pub fn find(session_id: &str) -> Option<PathBuf> {
     find_in(&dirs::home_dir()?, session_id)
 }
 
-fn for_each_line(transcript: &Path, mut on_line: impl FnMut(&str)) -> AppResult<()> {
+pub fn for_each_line(transcript: &Path, mut on_line: impl FnMut(&str)) -> AppResult<()> {
     let mut reader = BufReader::new(std::fs::File::open(transcript)?);
     let mut buffer = Vec::new();
     while reader.read_until(b'\n', &mut buffer)? > 0 {

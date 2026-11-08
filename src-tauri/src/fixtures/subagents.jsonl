@@ -1,0 +1,18 @@
+{"type":"assistant","message":{"id":"msg_1","content":[{"type":"tool_use","id":"toolu_fg","name":"Agent","input":{"subagent_type":"Explore","description":"Find the sort","prompt":"Find where stores are sorted","run_in_background":false}}]},"parent_tool_use_id":null}
+{"type":"system","subtype":"task_started","task_id":"a1","tool_use_id":"toolu_fg","description":"Find the sort","subagent_type":"Explore","is_backgrounded":false,"spawn_depth":1,"task_type":"local_agent","prompt":"Find where stores are sorted"}
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Find where stores are sorted"}]},"parent_tool_use_id":"toolu_fg"}
+{"type":"assistant","message":{"id":"msg_2","content":[{"type":"tool_use","id":"toolu_grep","name":"Grep","input":{"pattern":"sortStores"}}]},"parent_tool_use_id":"toolu_fg"}
+{"type":"system","subtype":"task_progress","task_id":"a1","tool_use_id":"toolu_fg","description":"Searching sortStores","subagent_type":"Explore","usage":{"total_tokens":100,"tool_uses":1,"duration_ms":900},"last_tool_name":"Grep"}
+{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_grep","content":"src/order.ts"}]},"parent_tool_use_id":"toolu_fg"}
+{"type":"assistant","message":{"id":"msg_3","content":[{"type":"text","text":"It lives in src/order.ts"}]},"parent_tool_use_id":"toolu_fg"}
+{"type":"system","subtype":"task_started","task_id":"b1","tool_use_id":"toolu_bash_bg","description":"sleep 5","task_type":"local_bash"}
+{"type":"system","subtype":"task_notification","task_id":"a1","tool_use_id":"toolu_fg","status":"completed","output_file":"","summary":"It lives in src/order.ts"}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_fg","type":"tool_result","content":[{"type":"text","text":"[Subagent hand-back] Notes. The report follows:\n  It lives in src/order.ts\nagentId: a1"}]}]},"parent_tool_use_id":null}
+{"type":"assistant","message":{"id":"msg_4","content":[{"type":"tool_use","id":"toolu_bg","name":"Agent","input":{"subagent_type":"coding","description":"Fix the sort","prompt":"Fix it","run_in_background":true}}]},"parent_tool_use_id":null}
+{"type":"system","subtype":"task_started","task_id":"a2","tool_use_id":"toolu_bg","description":"Fix the sort","subagent_type":"coding","is_backgrounded":true,"spawn_depth":1,"task_type":"local_agent","prompt":"Fix it"}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_bg","type":"tool_result","content":[{"type":"text","text":"Async agent launched successfully.\nagentId: a2"}]}]},"parent_tool_use_id":null}
+{"type":"system","subtype":"background_tasks_changed","tasks":[{"task_id":"a2","task_type":"local_agent","description":"Fix the sort"}]}
+{"type":"system","subtype":"task_notification","task_id":"b1","tool_use_id":"toolu_bash_bg","status":"completed","summary":"Background command finished"}
+{"type":"system","subtype":"task_notification","task_id":"a2","tool_use_id":"toolu_bg","status":"failed","summary":"Agent \"Fix the sort\" failed"}
+{"type":"assistant","message":{"id":"msg_5","content":[{"type":"tool_use","id":"toolu_late","name":"Task","input":{"description":"Review"}}]},"parent_tool_use_id":null}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_late","type":"tool_result","is_error":true,"content":"Agent type not found"}]},"parent_tool_use_id":null}

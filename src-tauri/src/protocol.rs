@@ -7,6 +7,14 @@ const ASK_USER_QUESTION: &str = "AskUserQuestion";
 const DETAIL_LENGTH: usize = 160;
 const SESSION_DESTINATION: &str = "session";
 const TITLE_FIELD: &str = "title";
+const SUBAGENT_TOOLS: [&str; 2] = ["Task", "Agent"];
+const AGENT_TASK_TYPE: &str = "local_agent";
+const DEFAULT_AGENT_TYPE: &str = "general-purpose";
+const COMPLETED_STATUS: &str = "completed";
+const ASYNC_LAUNCH_PREFIX: &str = "Async agent launched";
+const REPORT_MARKER: &str = "The report follows:";
+const AGENT_ID_TRAILER: &str = "\nagentId:";
+pub const SUMMARY_LENGTH: usize = 400;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -112,6 +120,9 @@ pub enum AgentEvent {
     Initialized { capabilities: Capabilities },
     TitleChanged { title: String },
     ProcessExited { message: String },
+    SubagentStarted { tool_use_id: String, agent_type: String, description: String },
+    SubagentProgress { tool_use_id: String, last_tool: Option<String>, text: String },
+    SubagentFinished { tool_use_id: String, is_error: bool, summary: String },
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -143,6 +154,17 @@ struct SystemLine {
     subtype: String,
     session_id: Option<String>,
     title: Option<String>,
+    tool_use_id: Option<String>,
+    #[serde(default)]
+    description: String,
+    subagent_type: Option<String>,
+    task_type: Option<String>,
+    last_tool_name: Option<String>,
+    #[serde(default)]
+    summary: String,
+    status: Option<String>,
+    #[serde(default)]
+    is_backgrounded: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -212,6 +234,8 @@ enum ContentBlock {
         tool_use_id: String,
         #[serde(default)]
         is_error: Option<bool>,
+        #[serde(default)]
+        content: Value,
     },
     #[serde(other)]
     Other,
@@ -295,10 +319,23 @@ pub enum Source {
     Transcript,
 }
 
+struct SubagentTrack {
+    is_background: bool,
+    is_finished: bool,
+}
+
+struct SubagentLaunch {
+    tool_use_id: String,
+    agent_type: Option<String>,
+    description: String,
+    is_background: bool,
+}
+
 pub struct StreamParser {
     source: Source,
     current_message_id: Option<String>,
     pending_permissions: Vec<PermissionRequest>,
+    subagents: HashMap<String, SubagentTrack>,
 }
 
 fn json_start(line: &str) -> Option<&str> {
@@ -312,6 +349,41 @@ fn truncated(text: &str) -> String {
     }
     let cut: String = first_line.chars().take(DETAIL_LENGTH).collect();
     format!("{cut}…")
+}
+
+pub fn clipped(text: &str, max_length: usize) -> String {
+    let trimmed = text.trim();
+    if trimmed.chars().count() <= max_length {
+        return trimmed.to_string();
+    }
+    let cut: String = trimmed.chars().take(max_length).collect();
+    format!("{}…", cut.trim_end())
+}
+
+fn result_text(content: &Value) -> String {
+    match content {
+        Value::String(text) => text.clone(),
+        Value::Array(blocks) => {
+            blocks.iter().filter_map(|block| block.get("text").and_then(Value::as_str)).collect::<Vec<_>>().join("\n")
+        }
+        _ => String::new(),
+    }
+}
+
+fn report_summary(text: &str) -> String {
+    let report = text.split_once(REPORT_MARKER).map_or(text, |(_, report)| report);
+    let report = report.split_once(AGENT_ID_TRAILER).map_or(report, |(report, _)| report);
+    let lines: Vec<&str> = report.lines().map(str::trim).filter(|line| !line.is_empty()).collect();
+    clipped(&lines.join("\n"), SUMMARY_LENGTH)
+}
+
+fn tool_progress(parent: &str, name: &str, input: &Value) -> AgentEvent {
+    let summary = describe_tool(name, input);
+    AgentEvent::SubagentProgress {
+        tool_use_id: parent.to_string(),
+        last_tool: Some(name.to_string()),
+        text: format!("{} {}", summary.verb, summary.detail).trim().to_string(),
+    }
 }
 
 fn text_field<'a>(input: &'a Value, key: &str) -> &'a str {
@@ -382,7 +454,7 @@ fn questions_of(input: &Value) -> Vec<Question> {
 
 impl StreamParser {
     pub fn new(source: Source) -> Self {
-        StreamParser { source, current_message_id: None, pending_permissions: Vec::new() }
+        StreamParser { source, current_message_id: None, pending_permissions: Vec::new(), subagents: HashMap::new() }
     }
 
     pub fn take_permission_requests(&mut self) -> Vec<PermissionRequest> {
@@ -401,9 +473,9 @@ impl StreamParser {
 
     fn events_of(&mut self, incoming: Incoming) -> Vec<AgentEvent> {
         match incoming {
-            Incoming::System(system) => Self::system_events(system),
+            Incoming::System(system) => self.system_events(system),
             Incoming::StreamEvent(stream) => self.stream_events(stream),
-            Incoming::Assistant(assistant) => Self::assistant_events(assistant),
+            Incoming::Assistant(assistant) => self.assistant_events(assistant),
             Incoming::User(user) => self.user_events(user),
             Incoming::Result(result) => vec![Self::turn_end(result)],
             Incoming::ControlRequest(request) => self.control_request_events(request),
@@ -415,12 +487,73 @@ impl StreamParser {
         }
     }
 
-    fn system_events(system: SystemLine) -> Vec<AgentEvent> {
-        match (system.subtype.as_str(), system.session_id, system.title) {
-            ("init", Some(session_id), _) => vec![AgentEvent::Session { session_id }],
-            ("session_title_changed", _, Some(title)) => vec![AgentEvent::TitleChanged { title }],
-            _ => Vec::new(),
+    fn system_events(&mut self, system: SystemLine) -> Vec<AgentEvent> {
+        let event = match system.subtype.as_str() {
+            "init" => system.session_id.map(|session_id| AgentEvent::Session { session_id }),
+            "session_title_changed" => system.title.map(|title| AgentEvent::TitleChanged { title }),
+            "task_started" => self.task_started(system),
+            "task_progress" => self.task_progress(system),
+            "task_notification" => self.task_notification(system),
+            _ => None,
+        };
+        event.into_iter().collect()
+    }
+
+    fn start_subagent(&mut self, launch: SubagentLaunch) -> Option<AgentEvent> {
+        if let Some(track) = self.subagents.get_mut(&launch.tool_use_id) {
+            track.is_background |= launch.is_background;
+            return None;
         }
+        let track = SubagentTrack { is_background: launch.is_background, is_finished: false };
+        self.subagents.insert(launch.tool_use_id.clone(), track);
+        Some(AgentEvent::SubagentStarted {
+            tool_use_id: launch.tool_use_id,
+            agent_type: launch.agent_type.filter(|kind| !kind.is_empty()).unwrap_or(DEFAULT_AGENT_TYPE.into()),
+            description: launch.description,
+        })
+    }
+
+    fn task_started(&mut self, system: SystemLine) -> Option<AgentEvent> {
+        if system.task_type.as_deref() != Some(AGENT_TASK_TYPE) {
+            return None;
+        }
+        self.start_subagent(SubagentLaunch {
+            tool_use_id: system.tool_use_id?,
+            agent_type: system.subagent_type,
+            description: system.description,
+            is_background: system.is_backgrounded,
+        })
+    }
+
+    fn task_progress(&self, system: SystemLine) -> Option<AgentEvent> {
+        let tool_use_id = system.tool_use_id.filter(|id| self.subagents.contains_key(id))?;
+        Some(AgentEvent::SubagentProgress { tool_use_id, last_tool: system.last_tool_name, text: system.description })
+    }
+
+    fn task_notification(&mut self, system: SystemLine) -> Option<AgentEvent> {
+        let tool_use_id = system.tool_use_id?;
+        let track = self.subagents.get_mut(&tool_use_id).filter(|track| !track.is_finished)?;
+        track.is_finished = true;
+        Some(AgentEvent::SubagentFinished {
+            tool_use_id,
+            is_error: system.status.as_deref() != Some(COMPLETED_STATUS),
+            summary: clipped(&system.summary, SUMMARY_LENGTH),
+        })
+    }
+
+    fn finish_by_result(&mut self, tool_use_id: &str, is_error: bool, content: &Value) -> Option<AgentEvent> {
+        let track = self.subagents.get_mut(tool_use_id).filter(|track| !track.is_finished)?;
+        let text = result_text(content);
+        if !is_error && (track.is_background || text.starts_with(ASYNC_LAUNCH_PREFIX)) {
+            track.is_background = true;
+            return None;
+        }
+        track.is_finished = true;
+        Some(AgentEvent::SubagentFinished {
+            tool_use_id: tool_use_id.to_string(),
+            is_error,
+            summary: report_summary(&text),
+        })
     }
 
     fn stream_events(&mut self, stream: StreamEventLine) -> Vec<AgentEvent> {
@@ -442,29 +575,51 @@ impl StreamParser {
         }
     }
 
-    fn assistant_events(assistant: AssistantLine) -> Vec<AgentEvent> {
+    fn assistant_events(&mut self, assistant: AssistantLine) -> Vec<AgentEvent> {
         let parent = assistant.parent_tool_use_id;
         let is_nested = parent.is_some() || assistant.is_sidechain;
         let message_id = assistant.message.id;
-        assistant
-            .message
-            .content
-            .into_iter()
-            .filter_map(|block| match block {
+        let mut events = Vec::new();
+        for block in assistant.message.content {
+            match block {
                 ContentBlock::Text { text } if !is_nested => {
-                    Some(AgentEvent::Text { message_id: message_id.clone(), text })
+                    events.push(AgentEvent::Text { message_id: message_id.clone(), text })
                 }
-                ContentBlock::ToolUse { id, name, input } => Some(AgentEvent::ToolStarted {
-                    tool_use_id: id,
-                    parent_tool_use_id: parent.clone(),
-                    summary: describe_tool(&name, &input),
-                }),
-                _ => None,
-            })
-            .collect()
+                ContentBlock::Text { text } => {
+                    events.extend(parent.as_ref().map(|parent| AgentEvent::SubagentProgress {
+                        tool_use_id: parent.clone(),
+                        last_tool: None,
+                        text: clipped(&text, SUMMARY_LENGTH),
+                    }))
+                }
+                ContentBlock::ToolUse { id, name, input } => {
+                    events.push(AgentEvent::ToolStarted {
+                        tool_use_id: id.clone(),
+                        parent_tool_use_id: parent.clone(),
+                        summary: describe_tool(&name, &input),
+                    });
+                    events.extend(parent.as_deref().map(|parent| tool_progress(parent, &name, &input)));
+                    events.extend(self.subagent_launch(id, &name, &input));
+                }
+                _ => {}
+            }
+        }
+        events
     }
 
-    fn user_events(&self, user: UserLine) -> Vec<AgentEvent> {
+    fn subagent_launch(&mut self, tool_use_id: String, name: &str, input: &Value) -> Option<AgentEvent> {
+        if !SUBAGENT_TOOLS.contains(&name) {
+            return None;
+        }
+        self.start_subagent(SubagentLaunch {
+            tool_use_id,
+            agent_type: input.get("subagent_type").and_then(Value::as_str).map(String::from),
+            description: text_field(input, "description").to_string(),
+            is_background: input.get("run_in_background").and_then(Value::as_bool).unwrap_or(false),
+        })
+    }
+
+    fn user_events(&mut self, user: UserLine) -> Vec<AgentEvent> {
         let shows_text = self.source == Source::Transcript
             && user.parent_tool_use_id.is_none()
             && !user.is_meta
@@ -472,16 +627,22 @@ impl StreamParser {
         match user.message.content {
             UserContent::Text(text) if shows_text => vec![AgentEvent::UserText { text }],
             UserContent::Text(_) => Vec::new(),
-            UserContent::Blocks(blocks) => blocks
-                .into_iter()
-                .filter_map(|block| match block {
-                    ContentBlock::ToolResult { tool_use_id, is_error } => {
-                        Some(AgentEvent::ToolFinished { tool_use_id, is_error: is_error.unwrap_or(false) })
+            UserContent::Blocks(blocks) => {
+                let mut events = Vec::new();
+                for block in blocks {
+                    match block {
+                        ContentBlock::ToolResult { tool_use_id, is_error, content } => {
+                            let is_error = is_error.unwrap_or(false);
+                            let finished = self.finish_by_result(&tool_use_id, is_error, &content);
+                            events.push(AgentEvent::ToolFinished { tool_use_id, is_error });
+                            events.extend(finished);
+                        }
+                        ContentBlock::Text { text } if shows_text => events.push(AgentEvent::UserText { text }),
+                        _ => {}
                     }
-                    ContentBlock::Text { text } if shows_text => Some(AgentEvent::UserText { text }),
-                    _ => None,
-                })
-                .collect(),
+                }
+                events
+            }
         }
     }
 
@@ -624,6 +785,22 @@ mod tests {
     const PROBE_ONE: &str = include_str!("fixtures/probe1.jsonl");
     const PROBE_TWO: &str = include_str!("fixtures/probe2.jsonl");
     const TITLES: &str = include_str!("fixtures/titles.jsonl");
+    const SUBAGENTS: &str = include_str!("fixtures/subagents.jsonl");
+
+    fn subagent_events(source: Source) -> Vec<AgentEvent> {
+        let (events, _) = parse_all(source, SUBAGENTS);
+        events
+            .into_iter()
+            .filter(|event| {
+                matches!(
+                    event,
+                    AgentEvent::SubagentStarted { .. }
+                        | AgentEvent::SubagentProgress { .. }
+                        | AgentEvent::SubagentFinished { .. }
+                )
+            })
+            .collect()
+    }
 
     fn parse_all(source: Source, capture: &str) -> (Vec<AgentEvent>, Vec<PermissionRequest>) {
         let mut parser = StreamParser::new(source);
@@ -784,5 +961,74 @@ mod tests {
         assert_eq!((summary.verb.as_str(), summary.detail.as_str()), ("Edited", "nearby.rs"));
         assert_eq!((summary.added, summary.removed), (3, 2));
         assert_eq!(describe_tool("mcp__github__create_pr", &json!({})).detail, "github create_pr");
+    }
+
+    #[test]
+    fn starts_each_subagent_once_from_its_tool_use_or_task_started() {
+        let started: Vec<_> = subagent_events(Source::Live)
+            .into_iter()
+            .filter_map(|event| match event {
+                AgentEvent::SubagentStarted { tool_use_id, agent_type, description } => {
+                    Some((tool_use_id, agent_type, description))
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            started,
+            vec![
+                ("toolu_fg".into(), "Explore".into(), "Find the sort".into()),
+                ("toolu_bg".into(), "coding".into(), "Fix the sort".into()),
+                ("toolu_late".into(), DEFAULT_AGENT_TYPE.into(), "Review".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn reports_subagent_progress_from_nested_messages_and_task_progress() {
+        let progress: Vec<_> = subagent_events(Source::Live)
+            .into_iter()
+            .filter_map(|event| match event {
+                AgentEvent::SubagentProgress { tool_use_id, last_tool, text } => Some((tool_use_id, last_tool, text)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            progress,
+            vec![
+                ("toolu_fg".into(), Some("Grep".into()), "Searched sortStores".into()),
+                ("toolu_fg".into(), Some("Grep".into()), "Searching sortStores".into()),
+                ("toolu_fg".into(), None, "It lives in src/order.ts".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn finishes_foreground_on_first_signal_and_background_only_on_notification() {
+        let finished: Vec<_> = subagent_events(Source::Live)
+            .into_iter()
+            .filter_map(|event| match event {
+                AgentEvent::SubagentFinished { tool_use_id, is_error, summary } => {
+                    Some((tool_use_id, is_error, summary))
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            finished,
+            vec![
+                ("toolu_fg".into(), false, "It lives in src/order.ts".into()),
+                ("toolu_bg".into(), true, "Agent \"Fix the sort\" failed".into()),
+                ("toolu_late".into(), true, "Agent type not found".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn takes_the_hand_back_report_as_the_summary_without_the_trailer() {
+        let content =
+            json!([{"type": "text", "text": "[Subagent hand-back] x. The report follows:\n  Done.\nagentId: a1"}]);
+        assert_eq!(report_summary(&result_text(&content)), "Done.");
+        assert_eq!(clipped("abcdef", 3), "abc…");
     }
 }
