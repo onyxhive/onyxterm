@@ -7,6 +7,7 @@ mod git;
 mod process;
 mod project_files;
 mod protocol;
+mod prs;
 mod runtime;
 mod settings;
 mod subprocess;
@@ -37,6 +38,7 @@ pub fn run() {
         .manage(AgentRuntime::default())
         .manage(project_files::ProjectFiles::default())
         .manage(branches::ProjectBranches::default())
+        .manage(prs::GitHub::default())
         .setup(|app| {
             let db = open_database(app)?;
             app.manage(db);
@@ -71,6 +73,12 @@ pub fn run() {
             git::git_push,
             checkpoints::git_turn_diff,
             checkpoints::git_checkpoint_turns,
+            prs::pr_list,
+            prs::pr_view,
+            prs::pr_for_branch,
+            prs::pr_checks,
+            prs::pr_create,
+            prs::pr_merge,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

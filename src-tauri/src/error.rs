@@ -1,5 +1,8 @@
 use serde::{Serialize, Serializer};
 
+pub const GH_NOT_INSTALLED: &str = "gh-not-installed: install the GitHub CLI (gh) to see pull requests";
+pub const GH_NOT_LOGGED_IN: &str = "gh-not-logged-in: run `gh auth login` in a terminal first";
+
 #[derive(Debug)]
 pub enum AppError {
     Database(rusqlite::Error),
@@ -8,6 +11,9 @@ pub enum AppError {
     Invalid(String),
     Agent(String),
     Git(String),
+    GitHub(String),
+    GhNotInstalled,
+    GhNotLoggedIn,
     TimedOut(&'static str),
 }
 
@@ -20,6 +26,9 @@ impl std::fmt::Display for AppError {
             AppError::Invalid(reason) => write!(formatter, "invalid input: {reason}"),
             AppError::Agent(reason) => write!(formatter, "{reason}"),
             AppError::Git(reason) => write!(formatter, "git: {reason}"),
+            AppError::GitHub(reason) => write!(formatter, "gh: {reason}"),
+            AppError::GhNotInstalled => write!(formatter, "{GH_NOT_INSTALLED}"),
+            AppError::GhNotLoggedIn => write!(formatter, "{GH_NOT_LOGGED_IN}"),
             AppError::TimedOut(what) => write!(formatter, "{what} timed out"),
         }
     }

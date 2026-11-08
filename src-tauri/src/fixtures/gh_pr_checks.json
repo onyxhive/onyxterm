@@ -1,0 +1,4 @@
+[
+  {"bucket": "pass", "completedAt": "2026-11-08T10:05:00Z", "description": "", "event": "pull_request", "link": "https://github.com/acme/geo/actions/runs/1", "name": "test", "startedAt": "2026-11-08T10:00:00Z", "state": "SUCCESS", "workflow": "CI"},
+  {"bucket": "pending", "completedAt": "0001-01-01T00:00:00Z", "description": "", "link": "", "name": "build", "startedAt": "2026-11-08T10:00:00Z", "state": "IN_PROGRESS", "workflow": "CI"}
+]

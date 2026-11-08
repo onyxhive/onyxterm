@@ -1,0 +1,34 @@
+[
+  {
+    "author": {"id": "U_1", "is_bot": false, "login": "mhmd-zbib", "name": "Mohammad"},
+    "baseRefName": "main",
+    "headRefName": "onyx/fix-the-sort",
+    "isDraft": false,
+    "number": 42,
+    "reviewDecision": "REVIEW_REQUIRED",
+    "state": "OPEN",
+    "statusCheckRollup": [
+      {"__typename": "CheckRun", "name": "test", "status": "COMPLETED", "conclusion": "SUCCESS", "workflowName": "CI"},
+      {"__typename": "CheckRun", "name": "lint", "status": "COMPLETED", "conclusion": "FAILURE", "workflowName": "CI"},
+      {"__typename": "CheckRun", "name": "build", "status": "IN_PROGRESS", "conclusion": "", "workflowName": "CI"},
+      {"__typename": "StatusContext", "context": "vercel", "state": "SUCCESS", "targetUrl": "https://example.com"}
+    ],
+    "title": "Fix the nearby stores sort",
+    "updatedAt": "2026-11-08T10:00:00Z",
+    "url": "https://github.com/acme/geo/pull/42"
+  },
+  {
+    "author": null,
+    "baseRefName": "main",
+    "headRefName": "chore/deps",
+    "isDraft": true,
+    "number": 41,
+    "reviewDecision": "",
+    "state": "MERGED",
+    "statusCheckRollup": [],
+    "title": "Bump deps",
+    "updatedAt": "2026-11-07T10:00:00Z",
+    "url": "https://github.com/acme/geo/pull/41",
+    "someFutureField": {"nested": true}
+  }
+]

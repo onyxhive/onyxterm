@@ -81,7 +81,7 @@ pub fn command_line(launch: &Launch<'_>) -> String {
     arguments(launch).iter().map(|argument| shell_quote(argument)).collect::<Vec<_>>().join(" ")
 }
 
-fn login_shell() -> String {
+pub fn login_shell() -> String {
     std::env::var("SHELL").ok().filter(|shell| shell.starts_with('/')).unwrap_or_else(|| FALLBACK_SHELL.to_string())
 }
 

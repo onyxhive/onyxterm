@@ -1,0 +1,18 @@
+{
+  "author": {"login": "mhmd-zbib"},
+  "baseRefName": "main",
+  "body": "Sorts stores by distance.",
+  "comments": [{"author": {"login": "reviewer"}, "authorAssociation": "MEMBER", "body": "Looks good", "createdAt": "2026-11-08T11:00:00Z", "id": "IC_1"}],
+  "files": [{"path": "src/order.ts", "additions": 12, "deletions": 3}],
+  "headRefName": "onyx/fix-the-sort",
+  "isDraft": false,
+  "mergeable": "MERGEABLE",
+  "number": 42,
+  "reviewDecision": "APPROVED",
+  "reviews": [{"author": {"login": "reviewer"}, "body": "", "state": "APPROVED", "submittedAt": "2026-11-08T11:05:00Z", "id": "PRR_1"}],
+  "state": "OPEN",
+  "statusCheckRollup": null,
+  "title": "Fix the nearby stores sort",
+  "updatedAt": "2026-11-08T11:05:00Z",
+  "url": "https://github.com/acme/geo/pull/42"
+}

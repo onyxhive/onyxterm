@@ -491,9 +491,13 @@ pub fn push(git: &Git) -> AppResult<()> {
     Ok(())
 }
 
-pub fn project_git(db: &Db, project_id: &str) -> AppResult<Git> {
+pub fn project_root(db: &Db, project_id: &str) -> AppResult<PathBuf> {
     validated_id(project_id, "project")?;
-    Ok(Git::at(project(&db.connection(), project_id)?.path))
+    Ok(PathBuf::from(project(&db.connection(), project_id)?.path))
+}
+
+pub fn project_git(db: &Db, project_id: &str) -> AppResult<Git> {
+    Ok(Git::at(project_root(db, project_id)?))
 }
 
 fn validated_files(files: Option<Vec<String>>) -> AppResult<Vec<String>> {
