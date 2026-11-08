@@ -14,6 +14,7 @@ const BRANCH_PREFIX_SYMBOLS: [char; 4] = ['-', '_', '.', '/'];
 pub const COLOR_SCHEME_SETTING: &str = "colorScheme";
 pub const BRANCH_PREFIX_SETTING: &str = "worktreeBranchPrefix";
 pub const START_FROM_REMOTE_SETTING: &str = "worktreesStartFromRemote";
+const PERMISSION_MODE_SETTING: &str = "permissionMode";
 const TOGGLE_VALUES: &[&str] = &["true", "false"];
 const CHOICES: &[(&str, &[&str])] = &[
     (COLOR_SCHEME_SETTING, &["system", "light", "dark"]),
@@ -26,6 +27,7 @@ const CHOICES: &[(&str, &[&str])] = &[
     ("inAppNotifications", TOGGLE_VALUES),
     (WORK_IN_WORKTREES_SETTING, TOGGLE_VALUES),
     (START_FROM_REMOTE_SETTING, TOGGLE_VALUES),
+    (PERMISSION_MODE_SETTING, &["default", "acceptEdits", "plan", "bypassPermissions"]),
 ];
 
 #[tauri::command]
@@ -109,9 +111,20 @@ mod tests {
         assert!(store_setting(&connection, WORK_IN_WORKTREES_SETTING, "yes").is_err());
         store_setting(&connection, "prAuthorFilter", "review-requested").unwrap();
         assert!(store_setting(&connection, "prAuthorFilter", "someone-else").is_err());
+        store_setting(&connection, PERMISSION_MODE_SETTING, "bypassPermissions").unwrap();
+        assert!(store_setting(&connection, PERMISSION_MODE_SETTING, "dontAsk").is_err());
         store_setting(&connection, "preferredEditor", "zed").unwrap();
         assert_eq!(stored_setting(&connection, COLOR_SCHEME_SETTING).unwrap().as_deref(), Some("dark"));
         assert_eq!(stored_setting(&connection, "missing").unwrap(), None);
+    }
+
+    #[test]
+    fn allows_exactly_the_permission_modes_a_chat_can_run_in() {
+        let (_, allowed) = CHOICES.iter().find(|(key, _)| *key == PERMISSION_MODE_SETTING).unwrap();
+        for value in *allowed {
+            let mode: crate::chats::PermissionMode = serde_json::from_value((*value).into()).unwrap();
+            assert_eq!(mode.as_str(), *value);
+        }
     }
 
     #[test]
