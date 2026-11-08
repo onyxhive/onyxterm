@@ -18,6 +18,7 @@ use crate::subprocess::{self, Limits, Output, in_background};
 pub const PRS_UPDATED: &str = "prs-updated";
 const LIST_LIFETIME: Duration = Duration::from_secs(30);
 const GH_LIMITS: Limits = Limits { timeout: Duration::from_secs(30), max_output: 8 << 20, label: "gh" };
+const DIFF_LIMITS: Limits = Limits { timeout: Duration::from_secs(30), max_output: 2 << 20, label: "gh" };
 const PUSH_LIMITS: Limits = Limits { timeout: Duration::from_secs(120), max_output: 1 << 20, label: "gh" };
 const SHELL_LIMITS: Limits = Limits { timeout: Duration::from_secs(15), max_output: 64 << 10, label: "login shell" };
 const COMMON_GH_PATHS: &[&str] = &["/opt/homebrew/bin/gh", "/usr/local/bin/gh"];
@@ -344,6 +345,14 @@ impl Gh {
         Err(self.failure(output))
     }
 
+    fn diff(&self, number: u64) -> AppResult<git::Diff> {
+        let output = self.run(&["pr", "diff", &number.to_string(), "--color=never"], DIFF_LIMITS)?;
+        if !output.is_success {
+            return Err(self.failure(output));
+        }
+        Ok(git::Diff { text: output.stdout, is_truncated: output.is_truncated })
+    }
+
     fn create(&self, branch: &str, draft: &PullRequestDraft) -> AppResult<u64> {
         let flags = [format!("--title={}", draft.title), format!("--body={}", draft.body), format!("--head={branch}")];
         let mut arguments: Vec<&str> = vec!["pr", "create"];
@@ -542,6 +551,18 @@ pub async fn pr_checks(
 }
 
 #[tauri::command]
+pub async fn pr_diff(
+    db: State<'_, Db>,
+    github: State<'_, GitHub>,
+    project_id: String,
+    number: u64,
+) -> AppResult<git::Diff> {
+    let number = validated_number(number)?;
+    let gh = github.gh(&project_root(&db, &project_id)?)?;
+    in_background(move || gh.diff(number)).await
+}
+
+#[tauri::command]
 pub async fn pr_create(
     db: State<'_, Db>,
     github: State<'_, GitHub>,
@@ -578,11 +599,44 @@ pub async fn pr_merge(
 
 #[cfg(test)]
 mod tests {
+    use std::os::unix::fs::PermissionsExt;
+
     use super::*;
 
     const LIST: &str = include_str!("fixtures/gh_pr_list.json");
     const VIEW: &str = include_str!("fixtures/gh_pr_view.json");
     const CHECKS: &str = include_str!("fixtures/gh_pr_checks.json");
+    const DIFF: &str = include_str!("fixtures/gh_pr_diff.patch");
+    const DIFF_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/fixtures/gh_pr_diff.patch");
+    const OVERSIZED_PR: u64 = 7;
+    const EXECUTABLE_MODE: u32 = 0o755;
+
+    fn fake_gh(name: &str) -> Gh {
+        let folder = std::env::temp_dir().join(format!("onyx-fake-gh-{name}-{}", std::process::id()));
+        std::fs::create_dir_all(&folder).unwrap();
+        let executable = folder.join("gh");
+        let script = format!(
+            "#!/bin/sh\n[ \"$1 $2 $4\" = \"pr diff --color=never\" ] || exit 1\n\
+             [ \"$3\" = {OVERSIZED_PR} ] && exec head -c 3000000 /dev/zero\ncat '{DIFF_PATH}'\n"
+        );
+        std::fs::write(&executable, script).unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(EXECUTABLE_MODE)).unwrap();
+        Gh { executable, root: folder }
+    }
+
+    #[test]
+    fn reads_the_patch_of_a_pr() {
+        let diff = fake_gh("patch").diff(42).unwrap();
+        assert_eq!(diff, git::Diff { text: DIFF.to_string(), is_truncated: false });
+        assert!(diff.text.contains("diff --git a/src/distance.ts b/src/distance.ts"));
+    }
+
+    #[test]
+    fn caps_the_patch_of_a_pr_at_two_megabytes() {
+        let diff = fake_gh("oversized").diff(OVERSIZED_PR).unwrap();
+        assert_eq!(diff.text.len(), DIFF_LIMITS.max_output);
+        assert!(diff.is_truncated);
+    }
 
     #[test]
     fn reads_a_pr_list_and_summarises_its_checks() {

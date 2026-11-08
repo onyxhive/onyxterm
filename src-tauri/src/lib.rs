@@ -82,6 +82,7 @@ pub fn run() {
             prs::pr_view,
             prs::pr_for_branch,
             prs::pr_checks,
+            prs::pr_diff,
             prs::pr_create,
             prs::pr_merge,
             subagents::list_subagents,
