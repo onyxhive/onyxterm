@@ -57,8 +57,8 @@ export const api = {
   answerQuestion: (chatId: string, requestId: string, answers: Record<string, string>) =>
     invoke<void>("answer_question", { chatId, requestId, answers }),
   loadChatHistory: (chatId: string) => invoke<AgentEvent[]>("load_chat_history", { chatId }),
-  discoverCapabilities: (command: string, projectId: string) =>
-    invoke<Capabilities>("discover_capabilities", { command, projectId }),
+  discoverCapabilities: (command: string, projectId: string, model?: string) =>
+    invoke<Capabilities>("discover_capabilities", { command, projectId, model }),
   listProjectFiles: (target: GitTarget) => invoke<string[]>("list_project_files", { target }),
   projectBranch: (projectId: string) => invoke<string | null>("project_branch", { projectId }),
 };

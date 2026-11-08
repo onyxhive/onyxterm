@@ -4,7 +4,7 @@ import { effortOptionsFor, modelChoices, pickOption } from "../agentChoices";
 import { CODEX_COMMAND, DEFAULT_EFFORT, DEFAULT_MODEL } from "../agentOptions";
 import type { PermissionMode } from "../permissionModes";
 import type { ImageAttachment, Project, Workspace } from "../types";
-import { suggestionSources, useCapabilities } from "../useCapabilities";
+import { suggestionSources, useCapabilities, useUltracodeAvailability } from "../useCapabilities";
 import { useProjectFiles } from "../useProjectFiles";
 import { Composer, COMPOSER_PLACEHOLDER } from "./Composer";
 import { AgentPicker } from "./AgentPicker";
@@ -119,6 +119,7 @@ export function NewChat(props: NewChatProps) {
     choice.model,
     DEFAULT_MODEL,
   );
+  const isUltracodeAvailable = useUltracodeAvailability(command, project?.id, model);
   const effortOptions = effortOptionsFor(models.find((candidate) => candidate.value === model));
   const effort = pickOption(effortOptions, choice.effort, DEFAULT_EFFORT);
   const resolvedChoice: AgentChoice = { ...choice, command, model, effort };
@@ -162,7 +163,7 @@ export function NewChat(props: NewChatProps) {
       onChange={(update) => setChoice({ ...choice, ...update })}
       onPermissionModeChange={pickPermissionMode}
       fastMode={{ isEnabled: fastMode, onChange: setFastMode }}
-      ultracode={capabilities?.ultracodeAvailable ? { isEnabled: ultracode, onChange: setUltracode } : undefined}
+      ultracode={isUltracodeAvailable ? { isEnabled: ultracode, onChange: setUltracode } : undefined}
     />
   );
 

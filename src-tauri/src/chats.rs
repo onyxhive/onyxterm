@@ -250,7 +250,7 @@ fn chat_from_row(row: &Row<'_>) -> rusqlite::Result<Chat> {
     })
 }
 
-fn is_option_value(value: &str) -> bool {
+pub fn is_option_value(value: &str) -> bool {
     value.len() <= MAX_OPTION_LENGTH
         && value.chars().all(|character| character.is_ascii_alphanumeric() || "-_.[]".contains(character))
 }

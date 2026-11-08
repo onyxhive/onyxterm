@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Capabilities } from "./agentEvents";
-import { CODEX_COMMAND } from "./agentOptions";
+import { CODEX_COMMAND, DEFAULT_MODEL } from "./agentOptions";
 import { api } from "./api";
 import type { Suggestion } from "./types";
 import { FOLDER_SUFFIX, type SuggestionSources } from "./components/composerTrigger";
@@ -13,11 +13,11 @@ interface CapabilityState {
 const EMPTY_STATE: CapabilityState = { capabilities: null, problem: null };
 const cache = new Map<string, Promise<Capabilities>>();
 
-function discover(command: string, projectId: string): Promise<Capabilities> {
-  const key = `${command}\u0000${projectId}`;
+function discover(command: string, projectId: string, model?: string): Promise<Capabilities> {
+  const key = `${command}\u0000${projectId}\u0000${model ?? DEFAULT_MODEL}`;
   const cached = cache.get(key);
   if (cached) return cached;
-  const pending = api.discoverCapabilities(command, projectId);
+  const pending = api.discoverCapabilities(command, projectId, model);
   cache.set(key, pending);
   pending.then(
     (capabilities) => {
@@ -53,6 +53,25 @@ export function useCapabilities(command: string, projectId: string | undefined):
   }, [command, projectId]);
 
   return state;
+}
+
+export function useUltracodeAvailability(command: string, projectId: string | undefined, model: string): boolean {
+  const [isAvailable, setIsAvailable] = useState(false);
+
+  useEffect(() => {
+    setIsAvailable(false);
+    if (!projectId || command === CODEX_COMMAND) return;
+    let isCurrent = true;
+    discover(command, projectId, model).then(
+      (capabilities) => isCurrent && setIsAvailable(capabilities.ultracodeAvailable),
+      () => isCurrent && setIsAvailable(false),
+    );
+    return () => {
+      isCurrent = false;
+    };
+  }, [command, projectId, model]);
+
+  return isAvailable;
 }
 
 function fileSuggestion(path: string): Suggestion {

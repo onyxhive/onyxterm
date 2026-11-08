@@ -24,7 +24,7 @@ pub const STRIPPED_ENV: &[&str] = &[
     "CLAUDE_CONFIG_DIR",
 ];
 const FALLBACK_SHELL: &str = "/bin/zsh";
-const DEFAULT_MODEL: &str = "default";
+pub const DEFAULT_MODEL: &str = "default";
 const GRACE_PERIOD: Duration = Duration::from_secs(3);
 const EXIT_POLL_INTERVAL: Duration = Duration::from_millis(50);
 const STREAM_FLAGS: &[&str] = &[

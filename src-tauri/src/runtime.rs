@@ -38,6 +38,7 @@ const STDERR_TAIL_LENGTH: usize = 2000;
 const MAX_MESSAGE_LENGTH: usize = 200_000;
 const MAX_TITLE_DESCRIPTION_LENGTH: usize = 2_000;
 const DENY_MESSAGE: &str = "The user denied this tool use.";
+const INVALID_MODEL: &str = "model may only hold letters, digits and -_.[]";
 const NO_PROJECT_RULES: &str = "Claude offered no rule that can be saved for this project";
 const RULE_NEEDS_ALWAYS: &str = "a rule scope only applies to an always-allow answer";
 const CODEX_UNSUPPORTED: &str = "Codex support coming next";
@@ -251,7 +252,7 @@ impl AgentProcess {
 #[derive(Default)]
 pub struct AgentRuntime {
     processes: Mutex<HashMap<String, Arc<AgentProcess>>>,
-    capabilities: Mutex<HashMap<(AgentCommand, String), Capabilities>>,
+    capabilities: Mutex<HashMap<(AgentCommand, String, String), Capabilities>>,
 }
 
 fn emit_event(app: &AppHandle, chat_id: &str, event: &AgentEvent) {
@@ -472,10 +473,10 @@ fn close_processes(processes: Vec<Arc<AgentProcess>>) {
     process::terminate_all(&mut handles);
 }
 
-fn discover(command: AgentCommand, cwd: &Path) -> AppResult<Capabilities> {
+fn discover(command: AgentCommand, cwd: &Path, model: &str) -> AppResult<Capabilities> {
     let launch = Launch {
         command,
-        model: "",
+        model,
         effort: "",
         permission_mode: PermissionMode::Default,
         is_fast_mode: false,
@@ -745,22 +746,32 @@ pub fn answer_question(
     Ok(())
 }
 
+fn discovery_model(model: Option<String>) -> AppResult<String> {
+    let model = model.filter(|model| model != process::DEFAULT_MODEL).unwrap_or_default();
+    if !chats::is_option_value(&model) {
+        return Err(AppError::Invalid(INVALID_MODEL.into()));
+    }
+    Ok(model)
+}
+
 #[tauri::command]
 pub async fn discover_capabilities(
     db: State<'_, Db>,
     runtime: State<'_, AgentRuntime>,
     command: AgentCommand,
     project_id: String,
+    model: Option<String>,
 ) -> AppResult<Capabilities> {
     if command == AgentCommand::Codex {
         return Err(AppError::Agent(CODEX_UNSUPPORTED.into()));
     }
+    let model = discovery_model(model)?;
     let cwd = project(&db.connection(), &project_id)?.path;
-    let key = (command, cwd.clone());
+    let key = (command, cwd.clone(), model.clone());
     if let Some(cached) = locked(&runtime.capabilities).get(&key) {
         return Ok(cached.clone());
     }
-    let capabilities = tauri::async_runtime::spawn_blocking(move || discover(command, Path::new(&cwd)))
+    let capabilities = tauri::async_runtime::spawn_blocking(move || discover(command, Path::new(&cwd), &model))
         .await
         .map_err(|error| AppError::Agent(error.to_string()))??;
     if capabilities.account.is_logged_in() {
@@ -809,6 +820,14 @@ mod tests {
 
     fn with_mode(options: ChatOptions, permission_mode: PermissionMode) -> ChatOptions {
         ChatOptions { permission_mode, ..options }
+    }
+
+    #[test]
+    fn discovers_each_model_once_and_rejects_odd_model_names() {
+        assert_eq!(discovery_model(None).unwrap(), "");
+        assert_eq!(discovery_model(Some("default".into())).unwrap(), "");
+        assert_eq!(discovery_model(Some("claude-opus-4-1[1m]".into())).unwrap(), "claude-opus-4-1[1m]");
+        assert!(discovery_model(Some("opus --dangerously-skip-permissions".into())).is_err());
     }
 
     #[test]
@@ -1029,7 +1048,7 @@ mod live_tests {
     #[ignore = "spawns real claude processes"]
     fn live_handshake_reports_a_subscription_account() {
         for command in [AgentCommand::Claude, AgentCommand::ClaudeLyxaTeam] {
-            let capabilities = discover(command, &scratch_dir()).unwrap();
+            let capabilities = discover(command, &scratch_dir(), "").unwrap();
             eprintln!("{} account: {:?}", command.as_str(), capabilities.account);
             eprintln!(
                 "{} models: {:?}",

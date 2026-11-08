@@ -12,7 +12,7 @@ import type {
   Task,
   TaskStatus,
 } from "../types";
-import { suggestionSources, useCapabilities } from "../useCapabilities";
+import { suggestionSources, useCapabilities, useUltracodeAvailability } from "../useCapabilities";
 import { useSubagents } from "../useGit";
 import { useProjectFiles } from "../useProjectFiles";
 import { ChangedFilesCard } from "./ChangesPanel";
@@ -162,6 +162,7 @@ export function ChatView({ task, projectPath, actions }: ChatViewProps) {
 
   const isTurnSettled = SETTLED_STATUSES.includes(task.status);
 
+  const isUltracodeAvailable = useUltracodeAvailability(task.command, task.projectId, task.model);
   const ultracodeToggle = { isEnabled: task.ultracode, onChange: actions.onChangeUltracode };
   const agentControls = (
     <AgentPicker
@@ -175,7 +176,7 @@ export function ChatView({ task, projectPath, actions }: ChatViewProps) {
       onChange={(update) => actions.onChangeChoice({ ...choice, ...update })}
       onPermissionModeChange={actions.onChangePermissionMode}
       fastMode={{ isEnabled: task.fastMode, onChange: actions.onChangeFastMode }}
-      ultracode={capabilities?.ultracodeAvailable ? ultracodeToggle : undefined}
+      ultracode={isUltracodeAvailable ? ultracodeToggle : undefined}
     />
   );
 
