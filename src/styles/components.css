@@ -492,11 +492,11 @@
   font-weight: 500;
 }
 
-.task-group[data-group="waiting"] .task-group__count {
+.task-group[data-group="waiting"][data-empty="false"] .task-group__count {
   color: var(--status-permission);
 }
 
-.task-group[data-group="failed"] .task-group__count {
+.task-group[data-group="failed"][data-empty="false"] .task-group__count {
   color: var(--status-failed);
 }
 
@@ -1069,7 +1069,7 @@
 }
 
 .steps {
-  margin-left: 34px;
+  margin-left: calc(34px - var(--space-2));
 }
 
 .steps__toggle {

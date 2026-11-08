@@ -41,7 +41,12 @@ export function Sidebar({ tasks, selectedTaskId, isNewChatActive, isOpen, onSele
             const groupTasks = tasksInGroup(tasks, group);
             const isCollapsed = collapsedGroups.has(group.id);
             return (
-              <section key={group.id} className="task-group" data-group={group.id}>
+              <section
+                key={group.id}
+                className="task-group"
+                data-group={group.id}
+                data-empty={groupTasks.length === 0}
+              >
                 <button
                   type="button"
                   className="task-group__header"
