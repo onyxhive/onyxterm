@@ -4,7 +4,7 @@ import { effortOptionsFor, modelChoices } from "../agentChoices";
 import { CLAUDE_COMMANDS, DEFAULT_EFFORT } from "../agentOptions";
 import type { Settings } from "../api";
 import { GH_NOT_INSTALLED, ghProblemOf, PREFERRED_EDITOR_SETTING, prApi, WORK_IN_WORKTREES_SETTING } from "../gitApi";
-import { comboKeys, KEYBINDINGS, SHORTCUT_COMMAND_TITLES } from "../keybindings";
+import { comboKeys, KEYBINDINGS, SHORTCUT_COMMAND_TITLES, type ShortcutCommand } from "../keybindings";
 import {
   BRANCH_PREFIX_SETTING,
   CHAT_WIDTH_SETTING,
@@ -196,15 +196,27 @@ function BranchPrefixRow({ settings, onRemember }: SettingsGroupProps) {
   );
 }
 
+const SHORTCUT_COMMANDS = Object.keys(SHORTCUT_COMMAND_TITLES) as ShortcutCommand[];
+
+function ComboKeys({ combo }: { combo: string }) {
+  return (
+    <span className="flex items-center gap-1">
+      {comboKeys(combo).map((key) => (
+        <Kbd key={key}>{key}</Kbd>
+      ))}
+    </span>
+  );
+}
+
 function KeybindingRows() {
-  return KEYBINDINGS.map(({ combo, command }) => (
+  return SHORTCUT_COMMANDS.map((command) => (
     <SettingsRow
-      key={combo}
+      key={command}
       title={SHORTCUT_COMMAND_TITLES[command]}
       control={
-        <span className="flex items-center gap-1">
-          {comboKeys(combo).map((key) => (
-            <Kbd key={key}>{key}</Kbd>
+        <span className="flex items-center gap-3">
+          {KEYBINDINGS.filter((binding) => binding.command === command).map(({ combo }) => (
+            <ComboKeys key={combo} combo={combo} />
           ))}
         </span>
       }
