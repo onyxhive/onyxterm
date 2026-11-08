@@ -2,13 +2,14 @@ import { useEffect, useState } from "react";
 import { Square } from "lucide-react";
 
 interface WorkingLineProps {
-  startSeconds: number;
+  since: number;
   activity: string;
   onStop: () => void;
 }
 
 const SECONDS_PER_MINUTE = 60;
 const TICK_MS = 1000;
+const MS_PER_SECOND = 1000;
 
 function formatDuration(totalSeconds: number): string {
   const minutes = Math.floor(totalSeconds / SECONDS_PER_MINUTE);
@@ -16,13 +17,18 @@ function formatDuration(totalSeconds: number): string {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
-export function WorkingLine({ startSeconds, activity, onStop }: WorkingLineProps) {
-  const [seconds, setSeconds] = useState(startSeconds);
+function secondsSince(since: number): number {
+  return Math.max(0, Math.floor((Date.now() - since) / MS_PER_SECOND));
+}
+
+export function WorkingLine({ since, activity, onStop }: WorkingLineProps) {
+  const [seconds, setSeconds] = useState(secondsSince(since));
 
   useEffect(() => {
-    const timer = window.setInterval(() => setSeconds((current) => current + 1), TICK_MS);
+    setSeconds(secondsSince(since));
+    const timer = window.setInterval(() => setSeconds(secondsSince(since)), TICK_MS);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [since]);
 
   return (
     <div className="working" role="status">

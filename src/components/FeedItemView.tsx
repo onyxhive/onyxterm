@@ -5,8 +5,8 @@ import { QuestionCard } from "./QuestionCard";
 import { StepsRow } from "./StepsRow";
 
 export interface FeedActions {
-  onDecide: (decision: PermissionDecision) => void;
-  onAnswer: (answer: string) => void;
+  onDecide: (requestId: string, decision: PermissionDecision) => void;
+  onAnswer: (requestId: string, answers: Record<string, string>) => void;
 }
 
 interface FeedItemViewProps {
@@ -21,7 +21,7 @@ export function FeedItemView({ item, providerMark, actions }: FeedItemViewProps)
       return (
         <div className="message message--user">
           <div className="bubble">{item.text}</div>
-          <span className="message__time">{item.time}</span>
+          {item.time && <span className="message__time">{item.time}</span>}
         </div>
       );
     case "agent":
@@ -40,6 +40,6 @@ export function FeedItemView({ item, providerMark, actions }: FeedItemViewProps)
     case "permission":
       return <PermissionCard request={item} onDecide={actions.onDecide} />;
     case "question":
-      return <QuestionCard question={item} onAnswer={actions.onAnswer} />;
+      return <QuestionCard request={item} onAnswer={actions.onAnswer} />;
   }
 }

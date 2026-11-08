@@ -30,10 +30,11 @@ export function StepsRow({ steps, files }: StepsRowProps) {
       </button>
       {isExpanded && (
         <ol className="steps__list">
-          {steps.map((step, index) => (
-            <li key={index}>
+          {steps.map((step) => (
+            <li key={step.id} data-failed={step.isFailed}>
               <span className="steps__verb">{step.verb}</span>
               <span className="steps__detail">{step.detail}</span>
+              {step.isNested && <span className="steps__origin">subagent</span>}
             </li>
           ))}
         </ol>

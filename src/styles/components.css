@@ -573,6 +573,13 @@
   text-align: center;
 }
 
+.new-chat__problem {
+  margin: 0 0 var(--space-3);
+  color: var(--status-failed);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+
 .composer {
   position: relative;
   border: 1px solid var(--border-strong);
@@ -1096,10 +1103,23 @@
 }
 
 .steps__detail {
+  overflow: hidden;
+  min-width: 0;
   color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: var(--font-mono);
   font-size: var(--text-xs);
   line-height: 1.7;
+}
+
+.steps__origin {
+  color: var(--text-tertiary);
+  font-size: var(--text-xs);
+}
+
+.steps__list li[data-failed="true"] .steps__verb {
+  color: var(--status-failed);
 }
 
 .feed-note {
@@ -1230,14 +1250,25 @@
   color: var(--status-question);
 }
 
+.question-card__question {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: var(--space-3);
+}
+
+.question-card__question .question-card__chips {
+  margin: var(--space-2) 0;
+}
+
 .question-card__answer {
   display: flex;
+  justify-content: flex-end;
   gap: var(--space-2);
 }
 
 .question-card__input {
   flex: 1;
-  height: 32px;
+  min-height: 32px;
   padding: 0 var(--space-3);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DEFAULT_EFFORT, DEFAULT_MODEL } from "./agentOptions";
 import { Board } from "./components/Board";
 import { ChatView, type ChatActions } from "./components/ChatView";
@@ -7,9 +7,10 @@ import { Sidebar } from "./components/Sidebar";
 import { TitleBar, type View } from "./components/TitleBar";
 import { Toasts } from "./components/Toasts";
 import { WorkPanel } from "./components/WorkPanel";
+import { EMPTY_FEED } from "./feed";
 import { isWaiting } from "./status";
 import { toTask } from "./tasks";
-import type { Provider, Toast } from "./types";
+import type { Chat, Provider, TaskStatus, Toast } from "./types";
 import { useChats } from "./useChats";
 import { useSettings } from "./useSettings";
 import { useWorkspaces } from "./useWorkspaces";
@@ -20,6 +21,13 @@ const DEFAULT_CHOICE: ChatChoice = {
   command: "claude-lyxa-team",
   model: DEFAULT_MODEL,
   effort: DEFAULT_EFFORT,
+};
+
+const ATTENTION_HEADLINES: Partial<Record<TaskStatus, string>> = {
+  permission: "needs your permission",
+  question: "asked you a question",
+  review: "is waiting for you",
+  failed: "failed",
 };
 
 function rememberedChoice(saved: string | undefined): ChatChoice {
@@ -46,10 +54,26 @@ export default function App() {
   const { settings, remember } = useSettings();
   const workspaceState = useWorkspaces({ settings, remember, onError: showError });
   const { workspaces, workspace, actions: workspaceActions } = workspaceState;
-  const { chats, feeds, startChat, setState, reply } = useChats(showError);
+  const selectedTaskIdRef = useRef(selectedTaskId);
+  selectedTaskIdRef.current = selectedTaskId;
+
+  function announce(chat: Chat) {
+    const headline = ATTENTION_HEADLINES[chat.state];
+    if (!headline || chat.id === selectedTaskIdRef.current) return;
+    const toast: Toast = {
+      id: `${chat.id}-${chat.state}`,
+      taskId: chat.id,
+      headline: `${chat.title} ${headline}`,
+      detail: "",
+    };
+    setToasts((current) => [...current.filter((candidate) => candidate.taskId !== chat.id), toast]);
+  }
+
+  const chatState = useChats({ onError: showError, onStateChange: announce });
+  const { chats, feeds, startChat } = chatState;
 
   const now = Date.now();
-  const tasks = chats.map((chat) => toTask(chat, feeds[chat.id] ?? [], now));
+  const tasks = chats.map((chat) => toTask(chat, feeds[chat.id] ?? EMPTY_FEED, now));
   const workspaceChatIds = new Set(chats.filter((chat) => chat.workspaceId === workspace?.id).map((chat) => chat.id));
   const workspaceTasks = tasks.filter((task) => workspaceChatIds.has(task.id));
   const selectedTask = workspaceTasks.find((task) => task.id === selectedTaskId) ?? null;
@@ -100,12 +124,16 @@ export default function App() {
     setToasts((current) => current.filter((toast) => toast.id !== toastId));
   }
 
+  function withSelectedChat(action: (chatId: string) => void) {
+    if (selectedTaskId) action(selectedTaskId);
+  }
+
   const chatActions: ChatActions = {
-    onReply: (text) => selectedTaskId && reply(selectedTaskId, text),
-    onDecide: () => undefined,
-    onAnswer: () => undefined,
-    onMarkDone: () => selectedTaskId && setState(selectedTaskId, "done"),
-    onStop: () => undefined,
+    onReply: (text) => withSelectedChat((chatId) => chatState.send(chatId, text)),
+    onDecide: (requestId, decision) => withSelectedChat((chatId) => chatState.decide(chatId, requestId, decision)),
+    onAnswer: (requestId, answers) => withSelectedChat((chatId) => chatState.answer(chatId, requestId, answers)),
+    onMarkDone: () => withSelectedChat((chatId) => chatState.setState(chatId, "done")),
+    onStop: () => withSelectedChat(chatState.stop),
     onToggleWorkPanel: () => setIsWorkPanelOpen(!isWorkPanelOpen),
   };
 

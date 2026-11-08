@@ -1,7 +1,17 @@
 import { useState } from "react";
 import { Bot, Cpu, FolderGit2, FolderPlus, Gauge, TerminalSquare } from "lucide-react";
-import { CLAUDE_COMMANDS, CODEX_COMMAND, FALLBACK_EFFORTS, FALLBACK_MODELS, PROVIDERS } from "../agentOptions";
+import {
+  CLAUDE_COMMANDS,
+  CODEX_COMMAND,
+  DEFAULT_EFFORT,
+  DEFAULT_MODEL,
+  FALLBACK_EFFORTS,
+  FALLBACK_MODELS,
+  PROVIDERS,
+} from "../agentOptions";
+import type { ModelOption } from "../agentEvents";
 import type { Provider, Workspace } from "../types";
+import { suggestionSources, useCapabilities } from "../useCapabilities";
 import { Composer } from "./Composer";
 import { PillSelect } from "./PillSelect";
 
@@ -26,7 +36,17 @@ interface NewChatProps {
 
 const ADD_PROJECT = "Add project…";
 const CODEX_COMING = "Codex support coming next";
-const NO_SUGGESTIONS = { commands: [], mentions: [] };
+
+function effortOptionsFor(model: ModelOption | undefined): string[] {
+  if (!model) return FALLBACK_EFFORTS;
+  return model.supportsEffort ? model.supportedEffortLevels : [];
+}
+
+function pickOption(options: string[], preferred: string, fallback: string): string {
+  if (options.includes(preferred)) return preferred;
+  if (options.includes(fallback)) return fallback;
+  return options[0] ?? "";
+}
 
 export function NewChat({ workspace, initialChoice, onStart, onAddProject }: NewChatProps) {
   const [projectId, setProjectId] = useState(workspace.projects[0]?.id ?? "");
@@ -35,6 +55,13 @@ export function NewChat({ workspace, initialChoice, onStart, onAddProject }: New
   const project = workspace.projects.find((candidate) => candidate.id === projectId) ?? workspace.projects[0];
   const isCodex = choice.provider === "Codex";
   const command = isCodex ? CODEX_COMMAND : choice.command;
+  const { capabilities, problem } = useCapabilities(command, project?.id);
+  const models = capabilities?.models ?? [];
+  const modelOptions = models.length > 0 ? models.map((model) => model.value) : FALLBACK_MODELS;
+  const model = pickOption(modelOptions, choice.model, DEFAULT_MODEL);
+  const modelDetails = models.find((candidate) => candidate.value === model);
+  const effortOptions = effortOptionsFor(modelDetails);
+  const effort = pickOption(effortOptions, choice.effort, DEFAULT_EFFORT);
 
   function choose(update: Partial<ChatChoice>) {
     setChoice({ ...choice, ...update });
@@ -51,7 +78,7 @@ export function NewChat({ workspace, initialChoice, onStart, onAddProject }: New
 
   function start(text: string) {
     if (!project) return;
-    onStart({ ...choice, command, text, projectId: project.id });
+    onStart({ ...choice, command, model, effort, text, projectId: project.id });
   }
 
   const projectPicker = project ? (
@@ -89,24 +116,26 @@ export function NewChat({ workspace, initialChoice, onStart, onAddProject }: New
       <PillSelect
         label="Model"
         icon={<Cpu size={13} />}
-        value={choice.model}
-        options={FALLBACK_MODELS}
+        value={model}
+        options={modelOptions}
         onChange={(value) => choose({ model: value })}
       />
-      <PillSelect
-        label="Effort"
-        icon={<Gauge size={13} />}
-        value={choice.effort}
-        options={FALLBACK_EFFORTS}
-        onChange={(value) => choose({ effort: value })}
-      />
+      {effortOptions.length > 0 && (
+        <PillSelect
+          label="Effort"
+          icon={<Gauge size={13} />}
+          value={effort}
+          options={effortOptions}
+          onChange={(value) => choose({ effort: value })}
+        />
+      )}
     </>
   );
 
   function sendBlockedReason(): string | undefined {
     if (!project) return "Add a project first";
     if (isCodex) return CODEX_COMING;
-    return undefined;
+    return problem ?? undefined;
   }
 
   return (
@@ -118,10 +147,11 @@ export function NewChat({ workspace, initialChoice, onStart, onAddProject }: New
             ? `It runs in ${project.path}. You can follow it here or on the board.`
             : "Add a project folder to start a chat in it."}
         </p>
+        {problem && <p className="new-chat__problem">{problem}</p>}
         <Composer
           variant="hero"
           placeholder="Describe the change, or type / for commands and @ for agents"
-          suggestionSources={NO_SUGGESTIONS}
+          suggestionSources={suggestionSources(capabilities)}
           onSubmit={start}
           toolbar={toolbar}
           sendBlockedReason={sendBlockedReason()}

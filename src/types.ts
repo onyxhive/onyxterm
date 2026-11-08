@@ -32,17 +32,41 @@ export interface Chat {
 }
 
 export interface Step {
+  id: string;
   verb: string;
   detail: string;
+  isNested: boolean;
+  isFailed: boolean;
+}
+
+export interface QuestionOption {
+  label: string;
+  description: string;
+}
+
+export interface Question {
+  question: string;
+  header: string;
+  options: QuestionOption[];
+  multiSelect: boolean;
 }
 
 export type FeedItem =
   | { kind: "user"; text: string; time: string }
-  | { kind: "agent"; markdown: string }
+  | { kind: "agent"; messageId: string; blockIndex: number; markdown: string; isFinal: boolean }
   | { kind: "steps"; files: number; steps: Step[] }
   | { kind: "note"; text: string }
-  | { kind: "permission"; requester: string; command: string; where: string; reason: string; waited: string }
-  | { kind: "question"; markdown: string; choices: string[]; waited: string };
+  | {
+      kind: "permission";
+      requestId: string;
+      requester: string;
+      action: string;
+      target: string;
+      isShell: boolean;
+      reason: string;
+      since: number;
+    }
+  | { kind: "question"; requestId: string; questions: Question[]; since: number };
 
 export interface ChangedFile {
   path: string;
@@ -66,7 +90,7 @@ export interface Task {
   model: string;
   effort: string;
   elapsed: string;
-  workingSeconds: number;
+  workingSince: number;
   feed: FeedItem[];
   work: Work;
 }

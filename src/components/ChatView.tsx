@@ -1,5 +1,7 @@
 import { useEffect, useRef } from "react";
+import { CODEX_COMMAND } from "../agentOptions";
 import type { Task } from "../types";
+import { suggestionSources, useCapabilities } from "../useCapabilities";
 import { ChatHeader } from "./ChatHeader";
 import { Composer } from "./Composer";
 import { FeedItemView, type FeedActions } from "./FeedItemView";
@@ -21,16 +23,19 @@ interface ChatViewProps {
 }
 
 const PROVIDER_MARK = { "Claude Code": "C", Codex: "X" } as const;
-const NO_SUGGESTIONS = { commands: [], mentions: [] };
+const CODEX_COMING = "Codex support coming next";
 
 export function ChatView({ task, projectName, isWorkPanelOpen, actions }: ChatViewProps) {
   const feedRef = useRef<HTMLDivElement>(null);
   const dockRef = useRef<HTMLDivElement>(null);
   useDockHeight(dockRef);
+  const { capabilities } = useCapabilities(task.command, task.projectId);
+  const lastItem = task.feed.at(-1);
+  const scrollKey = lastItem?.kind === "agent" ? lastItem.markdown.length : 0;
 
   useEffect(() => {
     feedRef.current?.scrollTo({ top: feedRef.current.scrollHeight });
-  }, [task.id, task.feed.length]);
+  }, [task.id, task.feed.length, scrollKey]);
 
   return (
     <div className="chat">
@@ -52,8 +57,8 @@ export function ChatView({ task, projectName, isWorkPanelOpen, actions }: ChatVi
         <div className="chat__column">
           {task.status === "running" && (
             <WorkingLine
-              key={`${task.id}-${task.feed.length}`}
-              startSeconds={task.workingSeconds}
+              key={task.id}
+              since={task.workingSince}
               activity={task.work.runningNow}
               onStop={actions.onStop}
             />
@@ -62,8 +67,9 @@ export function ChatView({ task, projectName, isWorkPanelOpen, actions }: ChatVi
             key={task.id}
             variant="reply"
             placeholder="Reply, or type / for commands and @ for agents"
-            suggestionSources={NO_SUGGESTIONS}
+            suggestionSources={suggestionSources(capabilities)}
             onSubmit={actions.onReply}
+            sendBlockedReason={task.command === CODEX_COMMAND ? CODEX_COMING : undefined}
           />
         </div>
       </div>

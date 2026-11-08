@@ -1,5 +1,7 @@
+import type { ChatFeed } from "./feed";
+import { runningActivity } from "./feed";
 import { STATUS_LABEL } from "./status";
-import type { Chat, FeedItem, Task } from "./types";
+import type { Chat, Task } from "./types";
 
 const TITLE_LENGTH = 60;
 const MS_PER_SECOND = 1000;
@@ -25,7 +27,7 @@ export function elapsedSince(timestamp: number, now: number): string {
   return `${Math.floor(hours / HOURS_PER_DAY)}d`;
 }
 
-export function toTask(chat: Chat, feed: FeedItem[], now: number): Task {
+export function toTask(chat: Chat, feed: ChatFeed, now: number): Task {
   return {
     id: chat.id,
     title: chat.title,
@@ -36,8 +38,8 @@ export function toTask(chat: Chat, feed: FeedItem[], now: number): Task {
     model: chat.model,
     effort: chat.effort,
     elapsed: elapsedSince(chat.updatedAt, now),
-    workingSeconds: 0,
-    feed,
-    work: { phase: STATUS_LABEL[chat.state], runningNow: "", files: [] },
+    workingSince: feed.turnStartedAt ?? chat.updatedAt,
+    feed: feed.items,
+    work: { phase: STATUS_LABEL[chat.state], runningNow: runningActivity(feed), files: Object.values(feed.files) },
   };
 }

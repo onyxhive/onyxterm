@@ -1,21 +1,29 @@
 import { useState, type KeyboardEvent } from "react";
 import { MessageCircleQuestion } from "lucide-react";
+import { elapsedSince } from "../tasks";
 import type { FeedItem } from "../types";
 import { Markdown } from "./Markdown";
 
-type Question = Extract<FeedItem, { kind: "question" }>;
+type QuestionRequest = Extract<FeedItem, { kind: "question" }>;
 
 interface QuestionCardProps {
-  question: Question;
-  onAnswer: (answer: string) => void;
+  request: QuestionRequest;
+  onAnswer: (requestId: string, answers: Record<string, string>) => void;
 }
 
-export function QuestionCard({ question, onAnswer }: QuestionCardProps) {
-  const [answer, setAnswer] = useState("");
+export function QuestionCard({ request, onAnswer }: QuestionCardProps) {
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+
+  const isComplete = request.questions.every((question) => answers[question.question]?.trim());
+
+  function answer(question: string, value: string) {
+    setAnswers({ ...answers, [question]: value });
+  }
 
   function submit() {
-    if (!answer.trim()) return;
-    onAnswer(answer.trim());
+    if (!isComplete) return;
+    const trimmed = Object.fromEntries(Object.entries(answers).map(([question, value]) => [question, value.trim()]));
+    onAnswer(request.requestId, trimmed);
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLInputElement>) {
@@ -29,32 +37,37 @@ export function QuestionCard({ question, onAnswer }: QuestionCardProps) {
       <header className="card__header">
         <MessageCircleQuestion size={15} className="question-card__icon" />
         <span className="card__title">Question for you</span>
-        <span className="card__meta">waiting {question.waited}</span>
+        <span className="card__meta">waiting {elapsedSince(request.since, Date.now())}</span>
       </header>
-      <Markdown source={question.markdown} />
-      <div className="question-card__chips">
-        {question.choices.map((choice) => (
-          <button
-            key={choice}
-            type="button"
-            className="chip"
-            aria-pressed={answer === choice}
-            onClick={() => setAnswer(choice)}
-          >
-            {choice}
-          </button>
-        ))}
-      </div>
+      {request.questions.map((question) => (
+        <div key={question.question} className="question-card__question">
+          <Markdown source={question.header ? `**${question.header}.** ${question.question}` : question.question} />
+          <div className="question-card__chips">
+            {question.options.map((option) => (
+              <button
+                key={option.label}
+                type="button"
+                className="chip"
+                title={option.description}
+                aria-pressed={answers[question.question] === option.label}
+                onClick={() => answer(question.question, option.label)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          <input
+            className="question-card__input"
+            value={answers[question.question] ?? ""}
+            placeholder="Or type your own answer"
+            aria-label={question.question}
+            onChange={(event) => answer(question.question, event.target.value)}
+            onKeyDown={handleKeyDown}
+          />
+        </div>
+      ))}
       <div className="question-card__answer">
-        <input
-          className="question-card__input"
-          value={answer}
-          placeholder="Type your answer"
-          aria-label="Your answer"
-          onChange={(event) => setAnswer(event.target.value)}
-          onKeyDown={handleKeyDown}
-        />
-        <button type="button" className="button button--primary" disabled={!answer.trim()} onClick={submit}>
+        <button type="button" className="button button--primary" disabled={!isComplete} onClick={submit}>
           Answer <kbd>↵</kbd>
         </button>
       </div>

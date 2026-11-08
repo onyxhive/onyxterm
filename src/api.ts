@@ -1,4 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { Capabilities } from "./agentEvents";
+import type { PermissionDecision } from "./components/PermissionCard";
 import type { Chat, Project, Provider, TaskStatus, Workspace } from "./types";
 
 export interface ChatDraft {
@@ -23,4 +25,12 @@ export const api = {
   setChatState: (chatId: string, state: TaskStatus) => invoke<Chat>("set_chat_state", { chatId, state }),
   getSettings: () => invoke<Settings>("get_settings"),
   setSetting: (key: string, value: string) => invoke<void>("set_setting", { key, value }),
+  sendMessage: (chatId: string, text: string) => invoke<void>("send_message", { chatId, text }),
+  interruptChat: (chatId: string) => invoke<void>("interrupt_chat", { chatId }),
+  answerPermission: (chatId: string, requestId: string, decision: PermissionDecision) =>
+    invoke<void>("answer_permission", { chatId, requestId, decision }),
+  answerQuestion: (chatId: string, requestId: string, answers: Record<string, string>) =>
+    invoke<void>("answer_question", { chatId, requestId, answers }),
+  discoverCapabilities: (command: string, projectId: string) =>
+    invoke<Capabilities>("discover_capabilities", { command, projectId }),
 };
