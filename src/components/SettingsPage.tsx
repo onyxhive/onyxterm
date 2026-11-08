@@ -1,16 +1,39 @@
-import type { ReactNode } from "react";
-import { Check, ChevronDown } from "lucide-react";
+import { useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import { effortOptionsFor, modelChoices } from "../agentChoices";
 import { CLAUDE_COMMANDS, DEFAULT_EFFORT } from "../agentOptions";
 import type { Settings } from "../api";
 import { GH_NOT_INSTALLED, ghProblemOf, PREFERRED_EDITOR_SETTING, prApi, WORK_IN_WORKTREES_SETTING } from "../gitApi";
+import { comboKeys, KEYBINDINGS, SHORTCUT_COMMAND_TITLES } from "../keybindings";
+import {
+  BRANCH_PREFIX_SETTING,
+  CHAT_WIDTH_SETTING,
+  type ChatWidth,
+  choiceOf,
+  COLOR_SCHEME_SETTING,
+  COLOR_SCHEMES,
+  type ColorScheme,
+  DEFAULT_BRANCH_PREFIX,
+  DIFF_COLOR_SCHEME_SETTING,
+  type DiffColorScheme,
+  IN_APP_NOTIFICATIONS_SETTING,
+  isToggleOn,
+  isValidBranchPrefix,
+  SEND_SHORTCUT_SETTING,
+  type SendShortcut,
+  START_FROM_REMOTE_SETTING,
+  TIMESTAMP_FORMAT_SETTING,
+  type TimestampFormat,
+} from "../preferences";
 import type { Project } from "../types";
 import { useCapabilities } from "../useCapabilities";
 import { useLoaded } from "../useLoaded";
+import { MERGE_METHOD_LABELS, MERGE_METHODS, useMergeMethod } from "../useMergeMethod";
 import { useEditors } from "../useProjectTools";
 import { EffortPicker, ModelPicker, type AgentChoice } from "./ComposerControls";
-import { cn, MENU_ITEM, MENU_POPUP } from "./ui";
-import { usePopup } from "./usePopup";
+import { Segmented } from "./Segmented";
+import { type SelectOption, SettingsRow, SettingsSection, SettingsSelect, Switch } from "./settingsControls";
+import { cn, Kbd, TEXT_INPUT } from "./ui";
 
 interface SettingsPageProps {
   settings: Settings;
@@ -20,43 +43,39 @@ interface SettingsPageProps {
   onRemember: (key: string, value: string) => void;
 }
 
-interface SettingsRowProps {
-  title: string;
-  description?: ReactNode;
-  control?: ReactNode;
-  children?: ReactNode;
+interface SettingsGroupProps {
+  settings: Settings;
+  onRemember: (key: string, value: string) => void;
 }
 
-const SECTION_CARD = cn(
-  "rounded-xl border border-border/60 bg-card/40 shadow-xs/5",
-  "[&>*+*]:border-t [&>*+*]:border-border/50",
-);
+const COLOR_SCHEME_LABELS: Record<ColorScheme, string> = { system: "System", light: "Light", dark: "Dark" };
 
-function SettingsSection({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section aria-label={title} className="flex flex-col gap-2.5">
-      <h2 className="flex min-h-7 items-center px-3 text-base font-semibold text-foreground sm:px-4">{title}</h2>
-      <div className={SECTION_CARD}>{children}</div>
-    </section>
-  );
-}
+const CHAT_WIDTH_OPTIONS: SelectOption<ChatWidth>[] = [
+  { value: "comfortable", label: "Comfortable (default)" },
+  { value: "wide", label: "Wide" },
+  { value: "full", label: "Full" },
+];
 
-function SettingsRow({ title, description, control, children }: SettingsRowProps) {
-  return (
-    <div className={cn("px-3 sm:px-4", children ? "pt-3 pb-3" : "py-3")}>
-      <div className="flex items-center gap-8">
-        <div className="min-w-0 flex-1 space-y-1">
-          <h3 className="text-sm font-medium text-foreground">{title}</h3>
-          {description && (
-            <p className="max-w-2xl text-xs leading-normal text-pretty text-muted-foreground">{description}</p>
-          )}
-        </div>
-        {control && <div className="flex shrink-0 items-center gap-2">{control}</div>}
-      </div>
-      {children}
-    </div>
-  );
-}
+const DIFF_COLOR_OPTIONS: SelectOption<DiffColorScheme>[] = [
+  { value: "red-green", label: "Red & green (default)" },
+  { value: "blue-orange", label: "Blue & orange" },
+];
+
+const TIMESTAMP_FORMAT_OPTIONS: SelectOption<TimestampFormat>[] = [
+  { value: "locale", label: "System default" },
+  { value: "12-hour", label: "12-hour" },
+  { value: "24-hour", label: "24-hour" },
+];
+
+const SEND_SHORTCUT_OPTIONS: SelectOption<SendShortcut>[] = [
+  { value: "enter", label: "Enter" },
+  { value: "mod-enter-multiline", label: "⌘ + Enter for multiline prompts" },
+  { value: "mod-enter", label: "⌘ + Enter always" },
+];
+
+const MERGE_METHOD_OPTIONS = MERGE_METHODS.map((method) => ({ value: method, label: MERGE_METHOD_LABELS[method] }));
+
+const BRANCH_PREFIX_RULE = "Use up to 32 letters, digits, dashes, underscores, dots or slashes.";
 
 interface DefaultAgentRowProps {
   choice: AgentChoice;
@@ -92,72 +111,22 @@ function DefaultAgentRow({ choice, projectId, onChange }: DefaultAgentRowProps) 
   );
 }
 
-interface CheckboxProps {
-  label: string;
-  isChecked: boolean;
-  onChange: (isChecked: boolean) => void;
-}
-
-function Checkbox({ label, isChecked, onChange }: CheckboxProps) {
-  return (
-    <input
-      type="checkbox"
-      aria-label={label}
-      checked={isChecked}
-      onChange={(event) => onChange(event.target.checked)}
-      className="size-4 cursor-pointer accent-primary"
-    />
-  );
-}
-
-interface EditorSelectProps {
-  preferred: string | undefined;
-  onChange: (editorId: string) => void;
-}
-
-function EditorSelect({ preferred, onChange }: EditorSelectProps) {
-  const popup = usePopup();
+function EditorRow({ settings, onRemember }: SettingsGroupProps) {
   const editors = useEditors().data ?? [];
-  const current = editors.find((editor) => editor.id === preferred) ?? editors[0];
   return (
-    <div className="relative" ref={popup.rootRef}>
-      <button
-        type="button"
-        aria-label="Preferred editor"
-        aria-haspopup="menu"
-        aria-expanded={popup.isOpen}
-        disabled={editors.length === 0}
-        onClick={popup.toggle}
-        className={cn(
-          "inline-flex h-8 min-w-40 cursor-pointer items-center justify-between gap-2 rounded-lg border",
-          "border-input bg-popover px-3 text-sm text-foreground shadow-xs/5 hover:bg-accent/50",
-          "disabled:opacity-64 dark:bg-input/32",
-        )}
-      >
-        {current?.name ?? "No editor found"}
-        <ChevronDown className="size-4 text-muted-foreground" />
-      </button>
-      {popup.isOpen && (
-        <div role="menu" aria-label="Editors" className={cn(MENU_POPUP, "absolute top-full right-0 mt-1 w-56")}>
-          {editors.map((editor) => (
-            <button
-              key={editor.id}
-              type="button"
-              role="menuitemradio"
-              aria-checked={editor.id === current?.id}
-              className={MENU_ITEM}
-              onClick={() => {
-                onChange(editor.id);
-                popup.close();
-              }}
-            >
-              {editor.name}
-              <Check className={cn("ms-auto size-3.5", editor.id !== current?.id && "invisible")} />
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+    <SettingsRow
+      title="Preferred editor"
+      description="Open in uses this editor. Picking another editor from a chat changes it too."
+      control={
+        <SettingsSelect
+          label="Preferred editor"
+          options={editors.map((editor) => ({ value: editor.id, label: editor.name }))}
+          value={settings[PREFERRED_EDITOR_SETTING]}
+          emptyLabel="No editor found"
+          onChange={(editorId) => onRemember(PREFERRED_EDITOR_SETTING, editorId)}
+        />
+      }
+    />
   );
 }
 
@@ -191,13 +160,238 @@ function GhStatusRow({ projectId }: { projectId: string | undefined }) {
   );
 }
 
+function BranchPrefixRow({ settings, onRemember }: SettingsGroupProps) {
+  const saved = settings[BRANCH_PREFIX_SETTING] ?? DEFAULT_BRANCH_PREFIX;
+  const [draft, setDraft] = useState(saved);
+  const isValid = isValidBranchPrefix(draft.trim());
+
+  function save() {
+    const prefix = draft.trim();
+    if (isValid && prefix !== saved) onRemember(BRANCH_PREFIX_SETTING, prefix);
+  }
+
+  return (
+    <SettingsRow
+      title="Branch prefix"
+      description={
+        isValid ? "For example, onyx or onyx/ produces onyx/add-search. Leave empty for no prefix." : BRANCH_PREFIX_RULE
+      }
+      control={
+        <input
+          type="text"
+          aria-label="Branch prefix"
+          aria-invalid={!isValid}
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          placeholder="No prefix"
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={save}
+          onKeyDown={(event) => event.key === "Enter" && event.currentTarget.blur()}
+          className={cn(TEXT_INPUT, "w-40 font-mono text-xs aria-invalid:border-error")}
+        />
+      }
+    />
+  );
+}
+
+function KeybindingRows() {
+  return KEYBINDINGS.map(({ combo, command }) => (
+    <SettingsRow
+      key={combo}
+      title={SHORTCUT_COMMAND_TITLES[command]}
+      control={
+        <span className="flex items-center gap-1">
+          {comboKeys(combo).map((key) => (
+            <Kbd key={key}>{key}</Kbd>
+          ))}
+        </span>
+      }
+    />
+  ));
+}
+
+function VersionRow() {
+  const version = useLoaded("app-version", getVersion);
+  return (
+    <SettingsRow
+      title={
+        <span className="inline-flex items-baseline gap-2">
+          <span>Version</span>
+          <code className="text-2xs font-medium text-muted-foreground">{version.data ?? "unknown"}</code>
+        </span>
+      }
+      description="Current version of the application."
+    />
+  );
+}
+
+function GeneralSections({ settings, onRemember }: SettingsGroupProps) {
+  return (
+    <>
+      <SettingsSection title="Notifications">
+        <SettingsRow
+          title="In-app notifications"
+          description={
+            "Show a toast when another chat finishes, fails, or needs input or approval while this app has focus."
+          }
+          control={
+            <Switch
+              label="In-app notifications"
+              isChecked={isToggleOn(settings, IN_APP_NOTIFICATIONS_SETTING, true)}
+              onChange={(isChecked) => onRemember(IN_APP_NOTIFICATIONS_SETTING, String(isChecked))}
+            />
+          }
+        />
+      </SettingsSection>
+      <SettingsSection title="Display">
+        <SettingsRow
+          title="Time format"
+          description="System default follows your browser or OS clock preference."
+          control={
+            <SettingsSelect
+              label="Timestamp format"
+              options={TIMESTAMP_FORMAT_OPTIONS}
+              value={settings[TIMESTAMP_FORMAT_SETTING]}
+              onChange={(format) => onRemember(TIMESTAMP_FORMAT_SETTING, format)}
+            />
+          }
+        />
+      </SettingsSection>
+    </>
+  );
+}
+
+function AppearanceSection({ settings, onRemember }: SettingsGroupProps) {
+  return (
+    <SettingsSection title="Appearance">
+      <SettingsRow
+        title="Color scheme"
+        description="Follow the system appearance, or always use light or dark."
+        control={
+          <Segmented
+            label="Color scheme"
+            options={COLOR_SCHEMES.map((scheme) => ({ value: scheme, label: COLOR_SCHEME_LABELS[scheme] }))}
+            value={choiceOf(COLOR_SCHEMES, settings[COLOR_SCHEME_SETTING])}
+            onChange={(scheme) => onRemember(COLOR_SCHEME_SETTING, scheme)}
+          />
+        }
+      />
+      <SettingsRow
+        title="Chat width"
+        description="Set how wide messages and the composer can grow on large screens."
+        control={
+          <SettingsSelect
+            label="Chat width"
+            options={CHAT_WIDTH_OPTIONS}
+            value={settings[CHAT_WIDTH_SETTING]}
+            onChange={(width) => onRemember(CHAT_WIDTH_SETTING, width)}
+          />
+        }
+      />
+      <SettingsRow
+        title="Diff colors"
+        description="Choose colors for additions and deletions, including change counts."
+        control={
+          <SettingsSelect
+            label="Diff colors"
+            options={DIFF_COLOR_OPTIONS}
+            value={settings[DIFF_COLOR_SCHEME_SETTING]}
+            onChange={(scheme) => onRemember(DIFF_COLOR_SCHEME_SETTING, scheme)}
+          />
+        }
+      />
+    </SettingsSection>
+  );
+}
+
+function WorktreeSections({ settings, onRemember }: SettingsGroupProps) {
+  return (
+    <>
+      <SettingsSection title="Worktrees">
+        <SettingsRow
+          title="Work in worktrees"
+          description={
+            "Each new chat gets its own git worktree on a new branch from the project's current branch, " +
+            "kept in the app data folder under worktrees/<repository>/<branch>. Off runs new chats in the " +
+            "project folder. Worktrees stay until you remove them from the chat's details, and a worktree " +
+            "with uncommitted work is never removed."
+          }
+          control={
+            <Switch
+              label="Work in worktrees"
+              isChecked={isToggleOn(settings, WORK_IN_WORKTREES_SETTING, false)}
+              onChange={(isChecked) => onRemember(WORK_IN_WORKTREES_SETTING, String(isChecked))}
+            />
+          }
+        />
+        <SettingsRow
+          title="Start from remote"
+          description={
+            "Uses the latest commit of the base branch’s tracked remote branch, even if its name differs. " +
+            "Otherwise uses the same-named branch on origin. Uses your local branch if that remote branch is missing."
+          }
+          control={
+            <Switch
+              label="Start new worktrees from remote by default"
+              isChecked={isToggleOn(settings, START_FROM_REMOTE_SETTING, false)}
+              onChange={(isChecked) => onRemember(START_FROM_REMOTE_SETTING, String(isChecked))}
+            />
+          }
+        />
+      </SettingsSection>
+      <SettingsSection title="Branches">
+        <BranchPrefixRow settings={settings} onRemember={onRemember} />
+      </SettingsSection>
+    </>
+  );
+}
+
+function SourceControlSection({ projectId }: { projectId: string | undefined }) {
+  const [mergeMethod, chooseMergeMethod] = useMergeMethod();
+  return (
+    <SettingsSection title="Source control">
+      <GhStatusRow projectId={projectId} />
+      <SettingsRow
+        title="Default merge method"
+        description="Merging a pull request uses this method. Picking another method when merging changes it too."
+        control={
+          <SettingsSelect
+            label="Default merge method"
+            options={MERGE_METHOD_OPTIONS}
+            value={mergeMethod}
+            onChange={chooseMergeMethod}
+          />
+        }
+      />
+    </SettingsSection>
+  );
+}
+
 export function SettingsPage(props: SettingsPageProps) {
   const { settings, projects, defaultChoice, onDefaultChoiceChange, onRemember } = props;
   const firstProjectId = projects[0]?.id;
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-8 px-5 pt-6 pb-12 sm:px-6">
-        <SettingsSection title="Chats">
+        <GeneralSections settings={settings} onRemember={onRemember} />
+        <AppearanceSection settings={settings} onRemember={onRemember} />
+        <SettingsSection title="Composer">
+          <SettingsRow
+            title="Send shortcut"
+            description="Choose when Enter sends a prompt or inserts a new line"
+            control={
+              <SettingsSelect
+                label="Send shortcut"
+                options={SEND_SHORTCUT_OPTIONS}
+                value={settings[SEND_SHORTCUT_SETTING]}
+                onChange={(shortcut) => onRemember(SEND_SHORTCUT_SETTING, shortcut)}
+              />
+            }
+          />
+        </SettingsSection>
+        <SettingsSection title="Providers">
           <DefaultAgentRow choice={defaultChoice} projectId={firstProjectId} onChange={onDefaultChoiceChange} />
           <SettingsRow
             title="Claude commands"
@@ -212,38 +406,16 @@ export function SettingsPage(props: SettingsPageProps) {
             </ul>
           </SettingsRow>
         </SettingsSection>
-        <SettingsSection title="Worktrees">
-          <SettingsRow
-            title="Work in worktrees"
-            description={
-              "Each new chat gets its own git worktree on a new onyx/ branch from the project's current branch, " +
-              "kept in the app data folder under worktrees/<repository>/<branch>. Off runs new chats in the " +
-              "project folder. Worktrees stay until you remove them from the chat's details, and a worktree " +
-              "with uncommitted work is never removed."
-            }
-            control={
-              <Checkbox
-                label="Work in worktrees"
-                isChecked={settings[WORK_IN_WORKTREES_SETTING] === "true"}
-                onChange={(isChecked) => onRemember(WORK_IN_WORKTREES_SETTING, String(isChecked))}
-              />
-            }
-          />
-        </SettingsSection>
+        <WorktreeSections settings={settings} onRemember={onRemember} />
         <SettingsSection title="Editor">
-          <SettingsRow
-            title="Preferred editor"
-            description="Open in uses this editor. Picking another editor from a chat changes it too."
-            control={
-              <EditorSelect
-                preferred={settings[PREFERRED_EDITOR_SETTING]}
-                onChange={(editorId) => onRemember(PREFERRED_EDITOR_SETTING, editorId)}
-              />
-            }
-          />
+          <EditorRow settings={settings} onRemember={onRemember} />
         </SettingsSection>
-        <SettingsSection title="GitHub">
-          <GhStatusRow projectId={firstProjectId} />
+        <SourceControlSection projectId={firstProjectId} />
+        <SettingsSection title="Keybindings">
+          <KeybindingRows />
+        </SettingsSection>
+        <SettingsSection title="App">
+          <VersionRow />
         </SettingsSection>
       </div>
     </div>
