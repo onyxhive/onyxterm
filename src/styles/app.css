@@ -7,8 +7,8 @@
   --mention: oklch(0.55 0.17 255);
   --control-radius: 0.5rem;
   --topbar-height: 52px;
-  --island-gap: 0.5rem;
-  --island-radius: 0.75rem;
+  --island-gap: 0.25rem;
+  --island-radius: 0.625rem;
   --island-header-height: calc(var(--topbar-height) - 2 * var(--island-gap));
   --workspace-controls-left: calc(env(safe-area-inset-left) + 0.75rem);
   --workspace-titlebar-control-size: 1.75rem;
