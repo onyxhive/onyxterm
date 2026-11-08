@@ -88,7 +88,7 @@ function RowStatusSlot({ task }: { task: Task }) {
   if (!status) return null;
   const Icon = status.icon;
   return (
-    <span className={cn("inline-flex items-center gap-1 text-xs font-medium", status.className)}>
+    <span className={cn("inline-flex h-5 shrink-0 items-center gap-1 text-xs font-medium", status.className)}>
       <Icon aria-hidden className="size-3 shrink-0" />
       {status.label}
     </span>
@@ -120,32 +120,29 @@ function MetaDot() {
 }
 
 interface RowMetaProps {
-  projectName: string;
   branch: string | null;
   pr: ChatPullRequest | null;
   elapsed: string;
 }
 
-function RowMeta({ projectName, branch, pr, elapsed }: RowMetaProps) {
+function RowMeta({ branch, pr, elapsed }: RowMetaProps) {
   return (
     <span className="flex min-w-0 items-center gap-1 text-xs text-secondary-label group-hover/row:pe-6">
-      <span className="max-w-1/2 shrink-0 truncate">{projectName}</span>
-      {branch && !pr && (
+      {branch && (
         <>
-          <MetaDot />
           <span className="flex min-w-0 items-center gap-1" title={branch}>
             <GitBranch aria-hidden className="size-3 shrink-0" />
             <span className="min-w-0 truncate">{branch}</span>
           </span>
+          <MetaDot />
         </>
       )}
       {pr && (
         <>
-          <MetaDot />
           <PrBadge pr={pr} />
+          <MetaDot />
         </>
       )}
-      <MetaDot />
       <span className="shrink-0 tabular-nums">{elapsed}</span>
     </span>
   );
@@ -153,13 +150,12 @@ function RowMeta({ projectName, branch, pr, elapsed }: RowMetaProps) {
 
 interface ThreadRowProps {
   task: Task;
-  projectName: string;
   branch: string | null;
   isActive: boolean;
   actions: SidebarActions;
 }
 
-function ThreadRow({ task, projectName, branch, isActive, actions }: ThreadRowProps) {
+function ThreadRow({ task, branch, isActive, actions }: ThreadRowProps) {
   const isSettled = task.status === "done";
   return (
     <li className="group/row relative list-none">
@@ -176,18 +172,18 @@ function ThreadRow({ task, projectName, branch, isActive, actions }: ThreadRowPr
             : "hover:bg-sidebar-row-hover",
         )}
       >
-        <span
-          className={cn(
-            "line-clamp-2 min-w-0 text-sm leading-5 [overflow-wrap:anywhere]",
-            isSettled ? "font-normal text-foreground/75 group-hover/row:text-foreground" : "font-medium",
-          )}
-        >
-          <span className="float-right ms-2 flex h-5 items-center tabular-nums">
-            <RowStatusSlot task={task} />
+        <span className="flex min-w-0 items-start gap-2">
+          <span
+            className={cn(
+              "line-clamp-2 min-w-0 flex-1 text-sm leading-5 [overflow-wrap:anywhere]",
+              isSettled ? "font-normal text-foreground/75 group-hover/row:text-foreground" : "font-medium",
+            )}
+          >
+            {task.title}
           </span>
-          {task.title}
+          <RowStatusSlot task={task} />
         </span>
-        <RowMeta projectName={projectName} branch={branch} pr={task.pr} elapsed={task.elapsed} />
+        <RowMeta branch={branch} pr={task.pr} elapsed={task.elapsed} />
       </button>
       <span className="absolute right-2 bottom-1.5 flex h-4 items-center">
         <SettleButton task={task} actions={actions} />
@@ -345,16 +341,11 @@ export function Sidebar(props: SidebarProps) {
     (section) => section.tasks.length > 0,
   );
 
-  function projectName(projectId: string): string {
-    return workspace.projects.find((project) => project.id === projectId)?.name ?? "Removed project";
-  }
-
   function row(task: Task) {
     return (
       <ThreadRow
         key={task.id}
         task={task}
-        projectName={projectName(task.projectId)}
         branch={task.branch ?? branches[task.projectId] ?? null}
         isActive={task.id === selectedTaskId}
         actions={actions}
