@@ -41,6 +41,16 @@ CREATE TABLE settings (
 );
 "#,
     "ALTER TABLE chats ADD COLUMN branch TEXT;",
+    r#"
+CREATE TABLE project_scripts (
+    id TEXT PRIMARY KEY,
+    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    command TEXT NOT NULL,
+    position INTEGER NOT NULL
+);
+CREATE INDEX project_scripts_by_project ON project_scripts (project_id, position);
+"#,
 ];
 
 pub struct Db(Mutex<Connection>);

@@ -11,6 +11,7 @@ mod project_files;
 mod protocol;
 mod prs;
 mod runtime;
+mod scripts;
 mod settings;
 mod subagents;
 mod subprocess;
@@ -42,6 +43,7 @@ pub fn run() {
         .manage(project_files::ProjectFiles::default())
         .manage(branches::ProjectBranches::default())
         .manage(prs::GitHub::default())
+        .manage(scripts::ScriptRuns::default())
         .setup(|app| {
             let db = open_database(app)?;
             app.manage(db);
@@ -87,12 +89,18 @@ pub fn run() {
             desktop::reveal_project,
             editors::list_editors,
             editors::open_in_editor,
+            scripts::list_scripts,
+            scripts::add_script,
+            scripts::remove_script,
+            scripts::run_script,
+            scripts::stop_script,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app, event| {
             if let RunEvent::Exit = event {
                 app.state::<AgentRuntime>().shutdown();
+                app.state::<scripts::ScriptRuns>().stop_all();
             }
         });
 }

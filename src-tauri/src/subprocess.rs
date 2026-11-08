@@ -50,14 +50,14 @@ fn wait_until(child: &mut Child, deadline: Instant) -> AppResult<Option<std::pro
         }
         thread::sleep(EXIT_POLL_INTERVAL);
     }
-    kill_group(child.id());
+    signal_group(child.id(), "-KILL");
     let _ = child.wait();
     Ok(None)
 }
 
-fn kill_group(process_group: u32) {
+pub fn signal_group(process_group: u32, signal: &str) {
     let _ = Command::new("/bin/kill")
-        .args(["-KILL", "--", &format!("-{process_group}")])
+        .args([signal, "--", &format!("-{process_group}")])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status();
