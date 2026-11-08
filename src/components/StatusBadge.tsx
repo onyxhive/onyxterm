@@ -30,7 +30,10 @@ export function StatusLabel({ status }: { status: TaskStatus }) {
   return (
     <span
       title={STATUS_LABEL[status]}
-      className={cn("inline-flex items-center gap-1.5 text-xs font-medium", STATUS_TONE[status].textClass)}
+      className={cn(
+        "inline-flex shrink-0 items-center gap-1.5 text-xs font-medium whitespace-nowrap",
+        STATUS_TONE[status].textClass,
+      )}
     >
       <ToneDot status={status} />
       {STATUS_LABEL[status]}
