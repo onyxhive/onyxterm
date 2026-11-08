@@ -91,9 +91,9 @@
   :root {
     color-scheme: dark;
     --glass-blur: 16px;
+    --mention: oklch(0.74 0.13 245);
     --glass-saturation: 1.08;
     --scrollbar-thumb: rgb(255 255 255 / 8%);
-    --mention: oklch(0.74 0.13 245);
     --scrollbar-thumb-hover: rgb(255 255 255 / 12%);
 
     --background: #000;
@@ -274,6 +274,15 @@
   box-shadow: var(--popover-shadow);
 }
 
+@utility mention-token {
+  border-radius: 0.3rem;
+  background: color-mix(in srgb, var(--mention) 14%, transparent);
+  box-shadow: 0 0 0 0.15rem color-mix(in srgb, var(--mention) 14%, transparent);
+  color: var(--mention);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
 @utility composer-outline {
   border: 1px solid var(--composer-outline);
   box-shadow:
@@ -300,15 +309,6 @@
     background-image:
       linear-gradient(to right, transparent, var(--foreground), transparent),
       linear-gradient(var(--secondary-label), var(--secondary-label));
-@utility mention-token {
-  border-radius: 0.3rem;
-  background: color-mix(in srgb, var(--mention) 14%, transparent);
-  box-shadow: 0 0 0 0.15rem color-mix(in srgb, var(--mention) 14%, transparent);
-  color: var(--mention);
-  -webkit-box-decoration-break: clone;
-  box-decoration-break: clone;
-}
-
     background-size:
       4.5rem 100%,
       100% 100%;

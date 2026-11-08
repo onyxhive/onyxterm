@@ -3,8 +3,8 @@ import { useComposerInsertions, withInsertion } from "../composerInsertions";
 import { sendNeedsModifier } from "../preferences";
 import type { Suggestion } from "../types";
 import { findTrigger, matchSuggestions, type SuggestionSources } from "./composerTrigger";
-import { SuggestionList, suggestionOptionId } from "./SuggestionPopup";
 import { MentionText } from "./MentionText";
+import { SuggestionList, suggestionOptionId } from "./SuggestionPopup";
 import { cn } from "./ui";
 
 interface ComposerProps {
@@ -22,8 +22,8 @@ interface ComposerProps {
 }
 
 const DEFAULT_SUBMIT_LABEL = "Send message";
-
 const COMPOSER_TEXT = "text-sm leading-relaxed whitespace-pre-wrap break-words";
+
 export const COMPOSER_PLACEHOLDER = "Ask anything. @ files, / commands";
 export const QUESTION_PLACEHOLDER = "Type your own answer, or leave this blank to use the selected option";
 
