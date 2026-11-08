@@ -8,6 +8,7 @@ import type {
   GitDiff,
   GitStatus,
   MergeMethod,
+  PrAuthorFilter,
   PrCheck,
   PrState,
   ProjectScript,
@@ -23,6 +24,7 @@ export const SCRIPT_OUTPUT = "script-output";
 export const SCRIPT_EXITED = "script-exited";
 export const PREFERRED_EDITOR_SETTING = "preferredEditor";
 export const WORK_IN_WORKTREES_SETTING = "workInWorktrees";
+export const PR_AUTHOR_FILTER_SETTING = "prAuthorFilter";
 export const GH_NOT_INSTALLED = "gh-not-installed";
 export const GH_NOT_LOGGED_IN = "gh-not-logged-in";
 
@@ -58,7 +60,8 @@ export const gitApi = {
 };
 
 export const prApi = {
-  list: (projectId: string, state: PrState = "open") => invoke<PullRequest[]>("pr_list", { projectId, state }),
+  list: (projectId: string, state: PrState = "open", author: PrAuthorFilter = "everyone") =>
+    invoke<PullRequest[]>("pr_list", { projectId, state, author }),
   view: (projectId: string, number: number) => invoke<PullRequestDetail>("pr_view", { projectId, number }),
   forBranch: (projectId: string, branch: string) =>
     invoke<PullRequest | null>("pr_for_branch", { projectId, branch }),

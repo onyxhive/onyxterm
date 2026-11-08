@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { Check, ChevronDown, Copy, Folder, GitPullRequest } from "lucide-react";
+import { Check, ChevronDown, Copy, Folder, GitPullRequest, type LucideIcon, UserRound } from "lucide-react";
 import { ghProblemOf, prApi, PRS_UPDATED } from "../gitApi";
 import { elapsedSince } from "../tasks";
-import type { Project, PullRequest } from "../types";
+import type { PrAuthorFilter, Project, PullRequest } from "../types";
 import { useLoaded } from "../useLoaded";
 import { GhProblemState } from "./GhProblemState";
 import { ChecksDot } from "./PrBadge";
@@ -23,6 +23,20 @@ const STATE_OPTIONS = [
   { value: "merged" as const, label: "Merged" },
   { value: "closed" as const, label: "Closed" },
 ];
+
+const DEFAULT_AUTHOR: PrAuthorFilter = "everyone";
+
+const AUTHOR_OPTIONS = [
+  { value: "everyone" as const, label: "Everyone" },
+  { value: "mine" as const, label: "Mine" },
+  { value: "review-requested" as const, label: "Review requested" },
+];
+
+const EMPTY_LIST_SUFFIX: Record<PrAuthorFilter, string> = {
+  everyone: "",
+  mine: " by you",
+  "review-requested": " awaiting your review",
+};
 
 const ROW_COPY_BUTTON = cn(
   "absolute top-2 right-2 inline-flex h-6 min-w-6 cursor-pointer items-center justify-center gap-1 rounded-md px-1",
@@ -48,10 +62,19 @@ interface Selection {
   number: number;
 }
 
-async function listAcross(projects: Project[], state: ListState): Promise<ProjectPullRequest[]> {
+interface ListFilter {
+  state: ListState;
+  author: PrAuthorFilter;
+}
+
+export function prAuthorFilterFrom(saved: string | undefined): PrAuthorFilter {
+  return AUTHOR_OPTIONS.find((option) => option.value === saved)?.value ?? DEFAULT_AUTHOR;
+}
+
+async function listAcross(projects: Project[], { state, author }: ListFilter): Promise<ProjectPullRequest[]> {
   const results = await Promise.allSettled(
     projects.map(async (project) =>
-      (await prApi.list(project.id, state)).map((pr) => ({ ...pr, projectId: project.id })),
+      (await prApi.list(project.id, state, author)).map((pr) => ({ ...pr, projectId: project.id })),
     ),
   );
   const failures = results.flatMap((result) => (result.status === "rejected" ? [result.reason] : []));
@@ -63,9 +86,10 @@ async function listAcross(projects: Project[], state: ListState): Promise<Projec
     .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
 }
 
-function useWorkspacePullRequests(projects: Project[], state: ListState) {
-  const key = projects.length === 0 ? null : `${projects.map((project) => project.id).join(",")}:${state}`;
-  const loaded = useLoaded(key, () => listAcross(projects, state));
+function useWorkspacePullRequests(projects: Project[], filter: ListFilter) {
+  const projectIds = projects.map((project) => project.id).join(",");
+  const key = projects.length === 0 ? null : `${projectIds}:${filter.state}:${filter.author}`;
+  const loaded = useLoaded(key, () => listAcross(projects, filter));
   const { refresh } = loaded;
 
   useEffect(() => {
@@ -78,17 +102,24 @@ function useWorkspacePullRequests(projects: Project[], state: ListState) {
   return loaded;
 }
 
-interface ProjectFilterProps {
-  projects: Project[];
-  value: string;
-  onChange: (value: string) => void;
+interface FilterChoice<T extends string> {
+  value: T;
+  label: string;
 }
 
-function ProjectFilter({ projects, value, onChange }: ProjectFilterProps) {
-  const popup = usePopup();
-  const current = projects.find((project) => project.id === value);
+interface FilterMenuProps<T extends string> {
+  name: string;
+  Icon: LucideIcon;
+  groups: FilterChoice<T>[][];
+  value: T;
+  onChange: (value: T) => void;
+}
 
-  function choose(next: string) {
+function FilterMenu<T extends string>({ name, Icon, groups, value, onChange }: FilterMenuProps<T>) {
+  const popup = usePopup();
+  const current = groups.flat().find((choice) => choice.value === value) ?? groups[0][0];
+
+  function choose(next: T) {
     onChange(next);
     popup.close();
   }
@@ -99,29 +130,32 @@ function ProjectFilter({ projects, value, onChange }: ProjectFilterProps) {
         type="button"
         aria-haspopup="menu"
         aria-expanded={popup.isOpen}
-        aria-label={`Project: ${current?.name ?? "All projects"}`}
+        aria-label={`${name}: ${current.label}`}
         onClick={popup.toggle}
         className={cn(
-          "inline-flex h-7 max-w-48 cursor-pointer items-center gap-1.5 rounded-md px-2 text-xs font-medium",
+          "inline-flex h-7 max-w-40 min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-2 text-xs font-medium",
           "text-muted-foreground hover:bg-accent hover:text-foreground aria-expanded:bg-accent",
           FOCUS_RING,
         )}
       >
-        <Folder className="size-3.5 shrink-0" />
-        <span className="truncate">{current?.name ?? "All projects"}</span>
+        <Icon className="size-3.5 shrink-0" />
+        <span className="truncate">{current.label}</span>
         <ChevronDown className="size-3.5 shrink-0 opacity-70" />
       </button>
       {popup.isOpen && (
-        <div role="menu" aria-label="Projects" className={cn(MENU_POPUP, "absolute top-full right-0 mt-1 w-56")}>
-          <ProjectOption label="All projects" isChecked={value === ALL_PROJECTS} onPick={() => choose(ALL_PROJECTS)} />
-          <MenuSeparator />
-          {projects.map((project) => (
-            <ProjectOption
-              key={project.id}
-              label={project.name}
-              isChecked={project.id === value}
-              onPick={() => choose(project.id)}
-            />
+        <div role="menu" aria-label={name} className={cn(MENU_POPUP, "absolute top-full right-0 mt-1 w-56")}>
+          {groups.map((group, index) => (
+            <Fragment key={index}>
+              {index > 0 && <MenuSeparator />}
+              {group.map((choice) => (
+                <FilterOption
+                  key={choice.value}
+                  label={choice.label}
+                  isChecked={choice.value === value}
+                  onPick={() => choose(choice.value)}
+                />
+              ))}
+            </Fragment>
           ))}
         </div>
       )}
@@ -129,13 +163,18 @@ function ProjectFilter({ projects, value, onChange }: ProjectFilterProps) {
   );
 }
 
-function ProjectOption({ label, isChecked, onPick }: { label: string; isChecked: boolean; onPick: () => void }) {
+function FilterOption({ label, isChecked, onPick }: { label: string; isChecked: boolean; onPick: () => void }) {
   return (
     <button type="button" role="menuitemradio" aria-checked={isChecked} className={MENU_ITEM} onClick={onPick}>
       <span className="min-w-0 flex-1 truncate">{label}</span>
       <Check className={cn("size-3.5", !isChecked && "invisible")} />
     </button>
   );
+}
+
+function projectGroups(projects: Project[]): FilterChoice<string>[][] {
+  const everyProject = [{ value: ALL_PROJECTS, label: "All projects" }];
+  return [everyProject, projects.map((project) => ({ value: project.id, label: project.name }))];
 }
 
 interface PullRequestRowProps {
@@ -222,12 +261,18 @@ function EmptyDetail() {
   );
 }
 
-export function PullRequestsPage({ projects }: { projects: Project[] }) {
+interface PullRequestsPageProps {
+  projects: Project[];
+  author: PrAuthorFilter;
+  onAuthorChange: (author: PrAuthorFilter) => void;
+}
+
+export function PullRequestsPage({ projects, author, onAuthorChange }: PullRequestsPageProps) {
   const [state, setState] = useState<ListState>("open");
   const [projectFilter, setProjectFilter] = useState(ALL_PROJECTS);
   const [selection, setSelection] = useState<Selection | null>(null);
   const scoped = projects.filter((project) => projectFilter === ALL_PROJECTS || project.id === projectFilter);
-  const pullRequests = useWorkspacePullRequests(scoped, state);
+  const pullRequests = useWorkspacePullRequests(scoped, { state, author });
   const problem = pullRequests.error ? ghProblemOf(pullRequests.error) : null;
   const list = pullRequests.data ?? [];
   const showsProject = projectFilter === ALL_PROJECTS && projects.length > 1;
@@ -249,13 +294,28 @@ export function PullRequestsPage({ projects }: { projects: Project[] }) {
         <div className="flex h-11 shrink-0 items-center gap-2 px-3">
           <Segmented label="Pull request state" options={STATE_OPTIONS} value={state} onChange={setState} />
           <span className="flex-1" />
-          <ProjectFilter projects={projects} value={projectFilter} onChange={setProjectFilter} />
+          <FilterMenu
+            name="Author"
+            Icon={UserRound}
+            groups={[AUTHOR_OPTIONS]}
+            value={author}
+            onChange={onAuthorChange}
+          />
+          <FilterMenu
+            name="Project"
+            Icon={Folder}
+            groups={projectGroups(projects)}
+            value={projectFilter}
+            onChange={setProjectFilter}
+          />
         </div>
         <ul className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
           {pullRequests.error && <li className="p-4 text-xs text-error-foreground">{pullRequests.error}</li>}
           {!pullRequests.error && list.length === 0 && (
             <li className="px-4 py-10 text-center text-xs text-muted-foreground">
-              {pullRequests.isLoading ? "Loading pull requests…" : `No ${state} pull requests`}
+              {pullRequests.isLoading
+                ? "Loading pull requests…"
+                : `No ${state} pull requests${EMPTY_LIST_SUFFIX[author]}`}
             </li>
           )}
           {list.map((pr) => (

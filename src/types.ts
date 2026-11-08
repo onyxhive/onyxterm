@@ -196,6 +196,8 @@ export interface TurnDiff {
 
 export type PrState = "open" | "closed" | "merged" | "all";
 
+export type PrAuthorFilter = "everyone" | "mine" | "review-requested";
+
 export type MergeMethod = "merge" | "squash" | "rebase";
 
 export interface ChecksSummary {

@@ -7,7 +7,7 @@ import { DiffPanel, LATEST_TURN_SCOPE, type DiffScope } from "./components/DiffP
 import { FilesPanel } from "./components/FilesPanel";
 import type { AgentChoice } from "./components/ComposerControls";
 import { NewChat, type ChatStart } from "./components/NewChat";
-import { PullRequestsPage } from "./components/PullRequestsPage";
+import { prAuthorFilterFrom, PullRequestsPage } from "./components/PullRequestsPage";
 import { SettingsPage } from "./components/SettingsPage";
 import { Sidebar, type SidebarActions } from "./components/Sidebar";
 import { TerminalDrawer } from "./components/TerminalDrawer";
@@ -18,7 +18,7 @@ import { Toasts } from "./components/Toasts";
 import { useIsFullscreen } from "./components/useIsFullscreen";
 import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher";
 import { EMPTY_FEED } from "./feed";
-import { PREFERRED_EDITOR_SETTING, WORK_IN_WORKTREES_SETTING } from "./gitApi";
+import { PR_AUTHOR_FILTER_SETTING, PREFERRED_EDITOR_SETTING, WORK_IN_WORKTREES_SETTING } from "./gitApi";
 import { displayTitle, toTask } from "./tasks";
 import type { Chat, Provider, TaskStatus, Toast } from "./types";
 import { collapsedSectionsFrom } from "./collapsedSections";
@@ -268,7 +268,16 @@ export default function App() {
 
   function renderMain() {
     if (!workspace || !settings) return null;
-    if (view === "prs") return <PullRequestsPage key={workspace.id} projects={workspace.projects} />;
+    if (view === "prs") {
+      return (
+        <PullRequestsPage
+          key={workspace.id}
+          projects={workspace.projects}
+          author={prAuthorFilterFrom(settings[PR_AUTHOR_FILTER_SETTING])}
+          onAuthorChange={(author) => remember(PR_AUTHOR_FILTER_SETTING, author)}
+        />
+      );
+    }
     if (view === "settings") {
       return (
         <SettingsPage
