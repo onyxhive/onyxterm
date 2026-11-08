@@ -151,7 +151,7 @@ export function NewChat({ workspace, initialChoice, initialProjectId, onStart, o
         {problem && <p className="new-chat__problem">{problem}</p>}
         <Composer
           variant="hero"
-          placeholder="Describe the change, or type / for commands and @ for agents"
+          placeholder="Describe the change for the agent"
           suggestionSources={suggestionSources(capabilities)}
           onSubmit={start}
           toolbar={toolbar}

@@ -32,7 +32,7 @@ export function Sidebar({ tasks, selectedTaskId, isNewChatActive, isOpen, onSele
           aria-current={isNewChatActive}
           onClick={onNewChat}
         >
-          <SquarePen size={15} />
+          <SquarePen size={14} />
           New chat
           <kbd>⌘N</kbd>
         </button>

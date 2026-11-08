@@ -68,7 +68,7 @@ export function ChatView({ task, projectName, isWorkPanelOpen, actions }: ChatVi
           <Composer
             key={task.id}
             variant="reply"
-            placeholder="Reply, or type / for commands and @ for agents"
+            placeholder="Reply to the agent"
             suggestionSources={suggestionSources(capabilities)}
             onSubmit={actions.onReply}
             sendBlockedReason={task.command === CODEX_COMMAND ? CODEX_COMING : undefined}
