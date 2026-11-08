@@ -149,7 +149,7 @@ export function ChatView({ task, actions }: ChatViewProps) {
           )}
         </div>
       </div>
-      <div ref={dockRef} className="pointer-events-none absolute inset-x-0 bottom-0 z-20 px-5 pt-2 pb-4">
+      <div ref={dockRef} className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-background px-5 pt-2 pb-4">
         <div className="pointer-events-auto">
           <Composer
             key={task.id}
