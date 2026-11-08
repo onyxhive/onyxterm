@@ -214,6 +214,8 @@ export default function App() {
     onStop: () => withSelectedChat(chatState.stop),
     onChangeChoice: ({ command, model, effort }) =>
       withSelectedChat((chatId) => chatState.changeOptions(chatId, { command, model, effort })),
+    onChangeFastMode: (fastMode) => withSelectedChat((chatId) => chatState.changeOptions(chatId, { fastMode })),
+    onChangeUltracode: (ultracode) => withSelectedChat((chatId) => chatState.changeOptions(chatId, { ultracode })),
     onChangePermissionMode: (permissionMode) => {
       remember(PERMISSION_MODE_SETTING, permissionMode);
       withSelectedChat((chatId) => chatState.changeOptions(chatId, { permissionMode }));

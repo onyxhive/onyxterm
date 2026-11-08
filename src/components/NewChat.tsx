@@ -17,6 +17,8 @@ export interface ChatStart extends AgentChoice {
   attachments: ImageAttachment[];
   projectId: string;
   permissionMode: PermissionMode;
+  fastMode: boolean;
+  ultracode: boolean;
 }
 
 interface NewChatProps {
@@ -101,6 +103,8 @@ export function NewChat(props: NewChatProps) {
   const { workspace, initialChoice, projectId, isWorktreeMode, onStart, onPickProject, onAddProject } = props;
   const [choice, setChoice] = useState<AgentChoice>(initialChoice);
   const [permissionMode, setPermissionMode] = useState<PermissionMode>(props.initialPermissionMode);
+  const [fastMode, setFastMode] = useState(false);
+  const [ultracode, setUltracode] = useState(false);
 
   const project = workspace.projects.find((candidate) => candidate.id === projectId) ?? workspace.projects[0];
   const isCodex = choice.provider === "Codex";
@@ -126,7 +130,7 @@ export function NewChat(props: NewChatProps) {
 
   function start(text: string, attachments: ImageAttachment[]) {
     if (!project) return;
-    onStart({ ...resolvedChoice, text, attachments, projectId: project.id, permissionMode });
+    onStart({ ...resolvedChoice, text, attachments, projectId: project.id, permissionMode, fastMode, ultracode });
   }
 
   function sendBlockedReason(): string | undefined {
@@ -157,6 +161,8 @@ export function NewChat(props: NewChatProps) {
       align="end"
       onChange={(update) => setChoice({ ...choice, ...update })}
       onPermissionModeChange={pickPermissionMode}
+      fastMode={{ isEnabled: fastMode, onChange: setFastMode }}
+      ultracode={capabilities?.ultracodeAvailable ? { isEnabled: ultracode, onChange: setUltracode } : undefined}
     />
   );
 

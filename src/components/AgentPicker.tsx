@@ -18,7 +18,7 @@ import { cn, Kbd, MENU_POPUP } from "./ui";
 import { useFavoriteModels, type FavoriteModel } from "./useFavoriteModels";
 import { usePopup } from "./usePopup";
 
-interface FastMode {
+interface Toggle {
   isEnabled: boolean;
   onChange: (isEnabled: boolean) => void;
 }
@@ -30,7 +30,8 @@ interface AgentPickerProps {
   permissionMode: PermissionMode;
   onChange: (update: Partial<AgentChoice>) => void;
   onPermissionModeChange: (mode: PermissionMode) => void;
-  fastMode?: FastMode;
+  fastMode?: Toggle;
+  ultracode?: Toggle;
   side?: PopupSide;
   align?: PopupAlign;
   disabledReason?: string;
@@ -39,6 +40,7 @@ interface AgentPickerProps {
 const FAVORITES_TAB = "favorites";
 const CLAUDE_PROVIDER = "Claude Code";
 const MAX_JUMP_SHORTCUTS = 9;
+const ULTRACODE_LABEL = "Ultracode";
 const EFFORT_LABELS: Record<string, string> = {
   low: "Low",
   medium: "Medium",
@@ -172,10 +174,27 @@ interface ReasoningColumnProps {
   modelLabel: string;
   efforts: string[];
   effort: string;
+  ultracode?: Toggle;
   onPick: (effort: string) => void;
 }
 
-function ReasoningColumn({ modelLabel, efforts, effort, onPick }: ReasoningColumnProps) {
+function ReasoningRow({ label, isSelected, onPick }: { label: string; isSelected: boolean; onPick: () => void }) {
+  return (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={isSelected}
+      className={cn(PICKER_ROW, "hover:bg-accent")}
+      onClick={onPick}
+    >
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {isSelected && <Check aria-hidden className="size-3.5 shrink-0" />}
+    </button>
+  );
+}
+
+function ReasoningColumn({ modelLabel, efforts, effort, ultracode, onPick }: ReasoningColumnProps) {
+  const isUltracode = ultracode?.isEnabled ?? false;
   return (
     <div className="flex w-44 shrink-0 flex-col border-l border-border/70 p-1">
       <div className="flex items-center gap-2 px-2 py-1.5 text-xs">
@@ -185,24 +204,22 @@ function ReasoningColumn({ modelLabel, efforts, effort, onPick }: ReasoningColum
       {efforts.length === 0 && <p className="px-2 py-1 text-xs text-muted-foreground">Not adjustable</p>}
       <div role="radiogroup" aria-label="Reasoning" className="flex flex-col gap-px">
         {efforts.map((level) => (
-          <button
+          <ReasoningRow
             key={level}
-            type="button"
-            role="radio"
-            aria-checked={level === effort}
-            className={cn(PICKER_ROW, "hover:bg-accent")}
-            onClick={() => onPick(level)}
-          >
-            <span className="min-w-0 flex-1 truncate">{effortLabelOf(level)}</span>
-            {level === effort && <Check aria-hidden className="size-3.5 shrink-0" />}
-          </button>
+            label={effortLabelOf(level)}
+            isSelected={!isUltracode && level === effort}
+            onPick={() => onPick(level)}
+          />
         ))}
+        {ultracode && (
+          <ReasoningRow label={ULTRACODE_LABEL} isSelected={isUltracode} onPick={() => ultracode.onChange(true)} />
+        )}
       </div>
     </div>
   );
 }
 
-function SpeedToggle({ isEnabled, onChange }: FastMode) {
+function SpeedToggle({ isEnabled, onChange }: Toggle) {
   const segment = cn(
     "inline-flex h-6 cursor-pointer items-center gap-1 rounded-md px-2 text-xs text-muted-foreground",
     "transition-colors hover:text-foreground aria-checked:bg-card aria-checked:text-foreground aria-checked:shadow-xs",
@@ -235,7 +252,7 @@ interface PickerPanelProps extends AgentPickerProps {
 }
 
 function PickerPanel(props: PickerPanelProps) {
-  const { choice, models, efforts, permissionMode, onChange, onPermissionModeChange, fastMode, onClose } = props;
+  const { choice, models, efforts, permissionMode, onChange, onPermissionModeChange, fastMode, ultracode } = props;
   const [tab, setTab] = useState(choice.command);
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
@@ -252,7 +269,12 @@ function PickerPanel(props: PickerPanelProps) {
   function pick(row: FavoriteModel | undefined) {
     if (!row) return;
     onChange({ provider: CLAUDE_PROVIDER, command: row.command, model: row.model });
-    onClose();
+    props.onClose();
+  }
+
+  function pickEffort(effort: string) {
+    onChange({ effort });
+    if (ultracode?.isEnabled) ultracode.onChange(false);
   }
 
   function switchTab(next: string) {
@@ -325,7 +347,8 @@ function PickerPanel(props: PickerPanelProps) {
           modelLabel={modelLabel}
           efforts={efforts}
           effort={choice.effort}
-          onPick={(effort) => onChange({ effort })}
+          ultracode={ultracode}
+          onPick={pickEffort}
         />
       </div>
       <div className="flex items-center gap-2 border-t border-border/70 px-2 py-1.5">

@@ -36,6 +36,8 @@ export interface ChatActions {
   onOpenChanges: () => void;
   onChangeChoice: (choice: AgentChoice) => void;
   onChangePermissionMode: (mode: PermissionMode) => void;
+  onChangeFastMode: (isEnabled: boolean) => void;
+  onChangeUltracode: (isEnabled: boolean) => void;
 }
 
 const ACTIVE_TURN_STATUSES: TaskStatus[] = ["running", "permission", "question"];
@@ -160,6 +162,7 @@ export function ChatView({ task, projectPath, actions }: ChatViewProps) {
 
   const isTurnSettled = SETTLED_STATUSES.includes(task.status);
 
+  const ultracodeToggle = { isEnabled: task.ultracode, onChange: actions.onChangeUltracode };
   const agentControls = (
     <AgentPicker
       choice={choice}
@@ -171,6 +174,8 @@ export function ChatView({ task, projectPath, actions }: ChatViewProps) {
       disabledReason={choiceLockReason}
       onChange={(update) => actions.onChangeChoice({ ...choice, ...update })}
       onPermissionModeChange={actions.onChangePermissionMode}
+      fastMode={{ isEnabled: task.fastMode, onChange: actions.onChangeFastMode }}
+      ultracode={capabilities?.ultracodeAvailable ? ultracodeToggle : undefined}
     />
   );
 
