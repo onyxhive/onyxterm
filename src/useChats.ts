@@ -3,7 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { CHAT_EVENT, CHAT_UPDATED, type ChatEventPayload } from "./agentEvents";
 import { api } from "./api";
 import type { ChatStart } from "./components/NewChat";
-import type { PermissionDecision } from "./components/PermissionCard";
+import type { PermissionDecision } from "./components/ApprovalRow";
 import {
   EMPTY_FEED,
   feedFromHistory,

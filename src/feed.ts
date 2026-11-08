@@ -1,5 +1,5 @@
 import type { AgentEvent, ToolSummary } from "./agentEvents";
-import type { PermissionDecision } from "./components/PermissionCard";
+import type { PermissionDecision } from "./components/ApprovalRow";
 import { clockTime } from "./tasks";
 import type { ChangedFile, FeedItem, Step } from "./types";
 
