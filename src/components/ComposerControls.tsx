@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { Provider } from "../types";
-import { Check, ChevronDown, Folder, FolderGit2, Gauge, GitBranch, SquareTerminal } from "lucide-react";
+import { Check, ChevronDown, FolderGit2, Gauge, GitBranch, SquareTerminal } from "lucide-react";
 import { CLAUDE_COMMANDS } from "../agentOptions";
 import { ProviderLogo } from "./ProviderLogo";
 import { cn, MENU_ITEM, MENU_POPUP, MenuLabel } from "./ui";
@@ -258,13 +258,9 @@ interface ChatWorkspaceControlsProps {
 export function ChatWorkspaceControls({ worktreePath, branch }: ChatWorkspaceControlsProps) {
   return (
     <>
-      {worktreePath ? (
+      {worktreePath && (
         <StaticControl icon={<FolderGit2 />} title={`Worktree: ${worktreePath}`}>
           Worktree
-        </StaticControl>
-      ) : (
-        <StaticControl icon={<Folder />} title="Runs in the project folder">
-          Local checkout
         </StaticControl>
       )}
       {branch && (
