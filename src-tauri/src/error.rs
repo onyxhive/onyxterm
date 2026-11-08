@@ -15,6 +15,7 @@ pub enum AppError {
     GhNotInstalled,
     GhNotLoggedIn,
     TimedOut(&'static str),
+    Terminal(String),
 }
 
 impl std::fmt::Display for AppError {
@@ -30,6 +31,7 @@ impl std::fmt::Display for AppError {
             AppError::GhNotInstalled => write!(formatter, "{GH_NOT_INSTALLED}"),
             AppError::GhNotLoggedIn => write!(formatter, "{GH_NOT_LOGGED_IN}"),
             AppError::TimedOut(what) => write!(formatter, "{what} timed out"),
+            AppError::Terminal(reason) => write!(formatter, "terminal: {reason}"),
         }
     }
 }

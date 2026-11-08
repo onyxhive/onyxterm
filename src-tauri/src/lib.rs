@@ -5,6 +5,7 @@ mod db;
 mod desktop;
 mod editors;
 mod error;
+mod explorer;
 mod git;
 mod process;
 mod project_files;
@@ -15,6 +16,7 @@ mod scripts;
 mod settings;
 mod subagents;
 mod subprocess;
+mod terminals;
 mod transcripts;
 mod workspaces;
 mod worktrees;
@@ -45,6 +47,7 @@ pub fn run() {
         .manage(branches::ProjectBranches::default())
         .manage(prs::GitHub::default())
         .manage(scripts::ScriptRuns::default())
+        .manage(terminals::Terminals::default())
         .setup(|app| {
             let db = open_database(app)?;
             app.manage(db);
@@ -97,6 +100,12 @@ pub fn run() {
             scripts::remove_script,
             scripts::run_script,
             scripts::stop_script,
+            terminals::terminal_open,
+            terminals::terminal_write,
+            terminals::terminal_resize,
+            terminals::terminal_close,
+            explorer::list_dir,
+            explorer::read_file,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -104,6 +113,7 @@ pub fn run() {
             if let RunEvent::Exit = event {
                 app.state::<AgentRuntime>().shutdown();
                 app.state::<scripts::ScriptRuns>().stop_all();
+                app.state::<terminals::Terminals>().close_all();
             }
         });
 }

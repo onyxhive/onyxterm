@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use crate::chats::AgentCommand;
 
-const STRIPPED_ENV: &[&str] = &[
+pub const STRIPPED_ENV: &[&str] = &[
     "CLAUDECODE",
     "CLAUDE_CODE_CHILD_SESSION",
     "CLAUDE_CODE_SESSION_ID",
