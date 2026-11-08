@@ -1,14 +1,14 @@
-import { useCallback, useMemo, useRef, useState } from "react";
-import { Folder, FolderGit2, FolderOpen, FolderPlus, TriangleAlert } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Check, ChevronDown, Folder, FolderGit2, FolderOpen, FolderPlus, TriangleAlert } from "lucide-react";
 import { effortOptionsFor, modelChoices, pickOption } from "../agentChoices";
 import { CODEX_COMMAND, DEFAULT_EFFORT, DEFAULT_MODEL } from "../agentOptions";
 import type { Project, Workspace } from "../types";
 import { suggestionSources, useCapabilities } from "../useCapabilities";
 import { useProjectFiles } from "../useProjectFiles";
 import { Composer, COMPOSER_PLACEHOLDER } from "./Composer";
-import { EffortPicker, ModelPicker, type AgentChoice } from "./ComposerControls";
-import { cn, INLINE_BUTTON, MENU_ITEM, MENU_POPUP, MenuSeparator, OUTLINE_BUTTON } from "./ui";
-import { useDismiss } from "./useDismiss";
+import { CONTROL_CLASS, EffortPicker, ModelPicker, type AgentChoice } from "./ComposerControls";
+import { cn, MENU_ITEM, MENU_POPUP, MenuLabel, MenuSeparator, OUTLINE_BUTTON } from "./ui";
+import { usePopup } from "./usePopup";
 
 export interface ChatStart extends AgentChoice {
   text: string;
@@ -35,40 +35,31 @@ interface ProjectPickerProps {
 }
 
 function ProjectPicker({ project, projects, onPick, onAddProject }: ProjectPickerProps) {
-  const [isOpen, setIsOpen] = useState(false);
-  const rootRef = useRef<HTMLSpanElement>(null);
-  const close = useCallback(() => setIsOpen(false), []);
-  useDismiss(rootRef, isOpen, close);
+  const popup = usePopup();
 
   function choose(action: () => void) {
     action();
-    close();
+    popup.close();
   }
 
   return (
-    <span className="relative inline-flex min-w-0" ref={rootRef}>
+    <div className="relative min-w-0" ref={popup.rootRef}>
       <button
         type="button"
         aria-haspopup="menu"
-        aria-expanded={isOpen}
+        aria-expanded={popup.isOpen}
+        aria-label={`Project: ${project.name}`}
         title={project.path}
-        onClick={() => setIsOpen(!isOpen)}
-        className={cn(
-          INLINE_BUTTON,
-          "min-w-0 font-medium text-foreground decoration-from-font underline-offset-4 aria-expanded:underline",
-        )}
+        className={cn(CONTROL_CLASS, "max-w-56")}
+        onClick={popup.toggle}
       >
+        <Folder />
         <span className="truncate">{project.name}</span>
+        <ChevronDown className="-me-1 size-3.5" />
       </button>
-      {isOpen && (
-        <div
-          role="menu"
-          aria-label="Projects"
-          className={cn(
-            MENU_POPUP,
-            "absolute top-full left-1/2 mt-2 w-72 -translate-x-1/2 text-left text-sm tracking-normal",
-          )}
-        >
+      {popup.isOpen && (
+        <div role="menu" aria-label="Projects" className={cn(MENU_POPUP, "absolute top-full left-0 mt-2 w-72")}>
+          <MenuLabel>Project</MenuLabel>
           {projects.map((candidate) => (
             <button
               key={candidate.id}
@@ -81,16 +72,17 @@ function ProjectPicker({ project, projects, onPick, onAddProject }: ProjectPicke
               <Folder />
               <span className="min-w-0 flex-1 truncate">{candidate.name}</span>
               <span className="max-w-32 truncate text-xs text-muted-foreground">{candidate.path}</span>
+              <Check className={cn("size-3.5", candidate.id !== project.id && "invisible")} />
             </button>
           ))}
           <MenuSeparator />
           <button type="button" className={MENU_ITEM} onClick={() => choose(onAddProject)}>
             <FolderPlus />
-            Add project
+            Add project…
           </button>
         </div>
       )}
-    </span>
+    </div>
   );
 }
 
@@ -129,6 +121,14 @@ export function NewChat(props: NewChatProps) {
 
   const controls = (
     <>
+      {project && (
+        <ProjectPicker
+          project={project}
+          projects={workspace.projects}
+          onPick={setProjectId}
+          onAddProject={onAddProject}
+        />
+      )}
       <ModelPicker
         choice={resolvedChoice}
         models={choices}
@@ -179,14 +179,8 @@ export function NewChat(props: NewChatProps) {
               )}
             >
               <span>What should we build in</span>
-              <span className="inline-flex max-w-full min-w-0 items-baseline">
-                <ProjectPicker
-                  project={project}
-                  projects={workspace.projects}
-                  onPick={setProjectId}
-                  onAddProject={onAddProject}
-                />
-                ?
+              <span className="max-w-full min-w-0 truncate font-medium" title={project.path}>
+                {project.name}?
               </span>
             </h1>
           ) : (

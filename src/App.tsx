@@ -40,6 +40,8 @@ const MAC_WINDOW_CONTROLS_INSET = { "--workspace-controls-left": "90px" } as CSS
 
 const ROOM_FOR_CHANGES_PANEL = "(min-width: 1181px)";
 
+const LAST_PROJECT_SETTING_PREFIX = "lastProject:";
+
 const TURN_END_STATES = new Set<TaskStatus>(["review", "failed"]);
 
 const ATTENTION_HEADLINES: Partial<Record<TaskStatus, string>> = {
@@ -48,6 +50,10 @@ const ATTENTION_HEADLINES: Partial<Record<TaskStatus, string>> = {
   review: "is waiting for you",
   failed: "failed",
 };
+
+function lastProjectSettingOf(workspaceId: string): string {
+  return `${LAST_PROJECT_SETTING_PREFIX}${workspaceId}`;
+}
 
 function rememberedChoice(saved: string | undefined): AgentChoice {
   if (!saved) return DEFAULT_CHOICE;
@@ -83,6 +89,9 @@ export default function App() {
   const projects = workspaces.flatMap((candidate) => candidate.projects);
   const { branches, refresh: refreshBranch } = useProjectBranches(projects.map((project) => project.id));
   const sidebarSections = collapsedSectionsFrom(settings, remember);
+  const { lastAddedProjectId } = workspaceState;
+  const lastProjectSetting = workspace ? lastProjectSettingOf(workspace.id) : null;
+  const lastProjectId = lastProjectSetting ? settings?.[lastProjectSetting] : undefined;
   const selectedTaskIdRef = useRef(selectedTaskId);
   selectedTaskIdRef.current = selectedTaskId;
 
@@ -163,9 +172,14 @@ export default function App() {
     setView("chat");
   }
 
+  useEffect(() => {
+    if (lastAddedProjectId && lastProjectSetting) remember(lastProjectSetting, lastAddedProjectId);
+  }, [lastAddedProjectId]);
+
   async function start(chatStart: ChatStart) {
-    const { provider, command, model, effort } = chatStart;
+    const { provider, command, model, effort, projectId } = chatStart;
     remember(CHOICE_SETTING, JSON.stringify({ provider, command, model, effort }));
+    if (lastProjectSetting) remember(lastProjectSetting, projectId);
     const chat = await startChat(chatStart);
     if (chat) setSelectedTaskId(chat.id);
   }
@@ -302,10 +316,10 @@ export default function App() {
     if (!selectedTask) {
       return (
         <NewChat
-          key={`${workspace.id}-${workspace.projects.length}-${newChatProjectId}`}
+          key={`${workspace.id}-${workspace.projects.length}-${newChatProjectId}-${lastProjectId}`}
           workspace={workspace}
           initialChoice={rememberedChoice(settings[CHOICE_SETTING])}
-          initialProjectId={newChatProjectId ?? workspaceState.lastAddedProjectId}
+          initialProjectId={newChatProjectId ?? lastProjectId ?? null}
           isWorktreeMode={settings[WORK_IN_WORKTREES_SETTING] === "true"}
           onStart={start}
           onAddProject={workspaceActions.onAddProject}

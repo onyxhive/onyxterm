@@ -50,6 +50,7 @@ pub fn run() {
         .manage(terminals::Terminals::default())
         .setup(|app| {
             let db = open_database(app)?;
+            settings::apply_color_scheme(app.handle(), &db.connection())?;
             app.manage(db);
             AgentRuntime::start_reaper(app.handle().clone());
             Ok(())
