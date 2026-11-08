@@ -1,30 +1,20 @@
-import { FileDiff, GitBranch, Play } from "lucide-react";
-import type { Work } from "../mock";
+import { FileDiff, FolderGit2, Play } from "lucide-react";
+import type { Project, Work } from "../types";
 
 interface WorkPanelProps {
   work: Work;
-  projectName: string;
+  project: Project | undefined;
 }
-
-const PERCENT = 100;
 
 function totalLines(work: Work, key: "added" | "removed"): number {
   return work.files.reduce((sum, file) => sum + file[key], 0);
 }
 
-export function WorkPanel({ work, projectName }: WorkPanelProps) {
-  const percent = Math.round(work.progress * PERCENT);
-
+export function WorkPanel({ work, project }: WorkPanelProps) {
   return (
     <aside className="work-panel" aria-label="Work">
       <section className="work-panel__section">
-        <div className="work-panel__row">
-          <h2 className="work-panel__heading">{work.phase}</h2>
-          <span className="work-panel__value">{percent}%</span>
-        </div>
-        <div className="progress" role="progressbar" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={PERCENT}>
-          <div className="progress__bar" style={{ width: `${percent}%` }} />
-        </div>
+        <h2 className="work-panel__heading">{work.phase}</h2>
       </section>
       <section className="work-panel__section">
         <h2 className="work-panel__heading">Running now</h2>
@@ -60,14 +50,12 @@ export function WorkPanel({ work, projectName }: WorkPanelProps) {
         </ul>
       </section>
       <section className="work-panel__section">
-        <h2 className="work-panel__heading">Branch</h2>
+        <h2 className="work-panel__heading">Project</h2>
         <div className="branch">
-          <GitBranch size={13} />
-          <code>{work.branch || "not created yet"}</code>
+          <FolderGit2 size={13} />
+          <code title={project?.path}>{project?.name ?? "removed"}</code>
         </div>
-        <p className="work-panel__empty">
-          {projectName}, from {work.base}
-        </p>
+        <p className="work-panel__empty">{project?.path}</p>
       </section>
     </aside>
   );

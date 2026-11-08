@@ -1,5 +1,5 @@
 import { CheckCheck, PanelRight, SquareTerminal } from "lucide-react";
-import type { Task } from "../mock";
+import type { Task } from "../types";
 import { STATUS_LABEL } from "../status";
 import { StatusGlyph } from "./StatusGlyph";
 

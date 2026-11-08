@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ChevronRight, ListChecks } from "lucide-react";
-import type { Step } from "../mock";
+import type { Step } from "../types";
 
 interface StepsRowProps {
   steps: Step[];

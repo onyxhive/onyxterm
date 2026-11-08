@@ -1,4 +1,9 @@
-import { MENTIONS, SLASH_COMMANDS, type Suggestion } from "../mock";
+import type { Suggestion } from "../types";
+
+export interface SuggestionSources {
+  commands: Suggestion[];
+  mentions: Suggestion[];
+}
 
 export interface Trigger {
   start: number;
@@ -14,11 +19,11 @@ function tokenStart(text: string, caret: number): number {
   return start;
 }
 
-export function findTrigger(text: string, caret: number): Trigger | null {
+export function findTrigger(text: string, caret: number, sources: SuggestionSources): Trigger | null {
   const start = tokenStart(text, caret);
   const token = text.slice(start, caret);
-  if (token.startsWith("/") && start === 0) return { start, query: token.slice(1), source: SLASH_COMMANDS };
-  if (token.startsWith("@")) return { start, query: token.slice(1), source: MENTIONS };
+  if (token.startsWith("/") && start === 0) return { start, query: token.slice(1), source: sources.commands };
+  if (token.startsWith("@")) return { start, query: token.slice(1), source: sources.mentions };
   return null;
 }
 

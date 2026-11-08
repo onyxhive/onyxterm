@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { ShieldAlert } from "lucide-react";
-import type { FeedItem } from "../mock";
+import type { FeedItem } from "../types";
 
 export type PermissionDecision = "once" | "always" | "deny";
 

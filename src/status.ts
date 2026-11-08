@@ -1,4 +1,4 @@
-import type { Task, TaskStatus } from "./mock";
+import type { Task, TaskStatus } from "./types";
 
 export interface StatusGroup {
   id: string;

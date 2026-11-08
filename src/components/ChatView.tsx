@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import type { Task } from "../mock";
+import type { Task } from "../types";
 import { ChatHeader } from "./ChatHeader";
 import { Composer } from "./Composer";
 import { FeedItemView, type FeedActions } from "./FeedItemView";
@@ -21,6 +21,7 @@ interface ChatViewProps {
 }
 
 const PROVIDER_MARK = { "Claude Code": "C", Codex: "X" } as const;
+const NO_SUGGESTIONS = { commands: [], mentions: [] };
 
 export function ChatView({ task, projectName, isWorkPanelOpen, actions }: ChatViewProps) {
   const feedRef = useRef<HTMLDivElement>(null);
@@ -60,7 +61,8 @@ export function ChatView({ task, projectName, isWorkPanelOpen, actions }: ChatVi
           <Composer
             key={task.id}
             variant="reply"
-            placeholder="Reply, or type / for commands and @ for files"
+            placeholder="Reply, or type / for commands and @ for agents"
+            suggestionSources={NO_SUGGESTIONS}
             onSubmit={actions.onReply}
           />
         </div>

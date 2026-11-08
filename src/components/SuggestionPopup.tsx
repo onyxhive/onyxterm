@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Bot, FileText, Slash } from "lucide-react";
-import type { Suggestion } from "../mock";
+import type { Suggestion } from "../types";
 
 interface SuggestionPopupProps {
   id: string;

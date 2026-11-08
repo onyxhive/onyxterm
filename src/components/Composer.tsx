@@ -1,21 +1,24 @@
 import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { ArrowUp } from "lucide-react";
-import type { Suggestion } from "../mock";
-import { findTrigger, matchSuggestions } from "./composerTrigger";
+import type { Suggestion } from "../types";
+import { findTrigger, matchSuggestions, type SuggestionSources } from "./composerTrigger";
 import { SuggestionPopup, suggestionOptionId } from "./SuggestionPopup";
 
 interface ComposerProps {
   placeholder: string;
   variant: "hero" | "reply";
+  suggestionSources: SuggestionSources;
   onSubmit: (text: string) => void;
   toolbar?: ReactNode;
+  sendBlockedReason?: string;
 }
 
 function cycle(index: number, step: number, length: number): number {
   return (index + step + length) % length;
 }
 
-export function Composer({ placeholder, variant, onSubmit, toolbar }: ComposerProps) {
+export function Composer(props: ComposerProps) {
+  const { placeholder, variant, suggestionSources, onSubmit, toolbar, sendBlockedReason } = props;
   const [text, setText] = useState("");
   const [caret, setCaret] = useState(0);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -24,7 +27,7 @@ export function Composer({ placeholder, variant, onSubmit, toolbar }: ComposerPr
   const pendingCaret = useRef<number | null>(null);
   const popupId = useId();
 
-  const trigger = findTrigger(text, caret);
+  const trigger = findTrigger(text, caret, suggestionSources);
   const suggestions = trigger ? matchSuggestions(trigger) : [];
   const isPopupOpen = trigger !== null && suggestions.length > 0 && dismissedStart !== trigger.start;
 
@@ -53,7 +56,7 @@ export function Composer({ placeholder, variant, onSubmit, toolbar }: ComposerPr
   }
 
   function submit() {
-    if (!text.trim()) return;
+    if (!text.trim() || sendBlockedReason) return;
     onSubmit(text.trim());
     setText("");
     setCaret(0);
@@ -117,17 +120,19 @@ export function Composer({ placeholder, variant, onSubmit, toolbar }: ComposerPr
       <div className="composer__footer">
         <div className="composer__toolbar">{toolbar}</div>
         <span className="composer__hint">
-          <kbd>/</kbd> commands <kbd>@</kbd> files
+          <kbd>/</kbd> commands <kbd>@</kbd> agents
         </span>
-        <button
-          type="button"
-          className="send-button"
-          aria-label="Send"
-          disabled={!text.trim()}
-          onClick={submit}
-        >
-          <ArrowUp size={15} strokeWidth={2.4} />
-        </button>
+        <span className="send-button__wrap" title={sendBlockedReason}>
+          <button
+            type="button"
+            className="send-button"
+            aria-label="Send"
+            disabled={!text.trim() || sendBlockedReason !== undefined}
+            onClick={submit}
+          >
+            <ArrowUp size={15} strokeWidth={2.4} />
+          </button>
+        </span>
       </div>
     </div>
   );

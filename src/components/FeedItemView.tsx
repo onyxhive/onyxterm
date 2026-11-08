@@ -1,4 +1,4 @@
-import type { FeedItem } from "../mock";
+import type { FeedItem } from "../types";
 import { Markdown } from "./Markdown";
 import { PermissionCard, type PermissionDecision } from "./PermissionCard";
 import { QuestionCard } from "./QuestionCard";

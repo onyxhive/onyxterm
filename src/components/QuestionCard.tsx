@@ -1,6 +1,6 @@
 import { useState, type KeyboardEvent } from "react";
 import { MessageCircleQuestion } from "lucide-react";
-import type { FeedItem } from "../mock";
+import type { FeedItem } from "../types";
 import { Markdown } from "./Markdown";
 
 type Question = Extract<FeedItem, { kind: "question" }>;

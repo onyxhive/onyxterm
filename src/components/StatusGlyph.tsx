@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import type { TaskStatus } from "../mock";
+import type { TaskStatus } from "../types";
 import { STATUS_LABEL } from "../status";
 
 const GLYPH_SHAPES: Record<TaskStatus, ReactNode> = {

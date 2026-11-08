@@ -1,7 +1,7 @@
 import { PanelLeft } from "lucide-react";
-import type { Task, Workspace } from "../mock";
+import type { Task, Workspace } from "../types";
 import { StatusGlyph } from "./StatusGlyph";
-import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
+import { WorkspaceSwitcher, type WorkspaceActions } from "./WorkspaceSwitcher";
 
 export type View = "chat" | "board";
 
@@ -17,7 +17,7 @@ interface TitleBarProps {
   waitingCount: number;
   view: View;
   onViewChange: (view: View) => void;
-  onWorkspaceChange: (workspaceId: string) => void;
+  workspaceActions: WorkspaceActions;
   onToggleSidebar: () => void;
   onOpenWaiting: () => void;
 }
@@ -32,7 +32,7 @@ export function TitleBar(props: TitleBarProps) {
         workspaces={props.workspaces}
         current={props.workspace}
         tasks={props.tasks}
-        onSelect={props.onWorkspaceChange}
+        actions={props.workspaceActions}
       />
       <nav className="segmented" aria-label="View">
         {VIEWS.map((view) => (

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ChevronRight, SquarePen } from "lucide-react";
-import type { Task } from "../mock";
+import type { Task } from "../types";
 import { STATUS_GROUPS, tasksInGroup, taskLabel } from "../status";
 import { StatusGlyph } from "./StatusGlyph";
 
