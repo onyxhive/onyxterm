@@ -11,8 +11,7 @@ const MAX_FOLDER_NAME_LENGTH: usize = 40;
 const HASHED_FOLDER_PREFIX_LENGTH: usize = 23;
 const CURRENT_BRANCH: &str = "HEAD";
 const MANAGED_DEPTH: usize = 2;
-const DIRTY_WORKTREE: &str =
-    "the worktree has uncommitted changes; commit or discard them before removing it";
+const DIRTY_WORKTREE: &str = "the worktree has uncommitted changes; commit or discard them before removing it";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Worktree {

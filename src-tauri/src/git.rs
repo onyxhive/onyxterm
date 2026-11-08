@@ -366,7 +366,8 @@ pub fn line_counts(git: &Git, base: &[&str]) -> AppResult<LineCounts> {
 }
 
 fn remote_default_base(git: &Git, remote: &str) -> AppResult<Option<String>> {
-    let output = git.run(&["symbolic-ref", "--quiet", "--short", &format!("{REMOTE_PREFIX}{remote}/HEAD")], READ_LIMITS)?;
+    let output =
+        git.run(&["symbolic-ref", "--quiet", "--short", &format!("{REMOTE_PREFIX}{remote}/HEAD")], READ_LIMITS)?;
     if output.is_success && !output.stdout.trim().is_empty() {
         return Ok(Some(output.stdout.trim().to_string()));
     }
