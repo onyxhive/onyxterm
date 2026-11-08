@@ -6,7 +6,7 @@ const MS_PER_SECOND = 1000;
 const SECONDS_PER_MINUTE = 60;
 const MINUTES_PER_HOUR = 60;
 
-function formatWorkingDuration(totalSeconds: number): string {
+export function formatDuration(totalSeconds: number): string {
   const minutes = Math.floor(totalSeconds / SECONDS_PER_MINUTE);
   if (minutes === 0) return `${totalSeconds}s`;
   const hours = Math.floor(minutes / MINUTES_PER_HOUR);
@@ -33,7 +33,7 @@ export function WorkingRow({ since }: { since: number }) {
           "flex h-6 min-w-0 items-baseline gap-2 px-1 text-sm leading-relaxed tabular-nums",
           "text-muted-foreground",
         )}>
-        <span className="live-tool-shine">Working for {formatWorkingDuration(seconds)}</span>
+        <span className="live-tool-shine">Working for {formatDuration(seconds)}</span>
       </div>
     </div>
   );

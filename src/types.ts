@@ -68,7 +68,16 @@ export type FeedItem =
       reason: string;
       since: number;
     }
-  | { kind: "question"; requestId: string; questions: Question[]; since: number };
+  | { kind: "question"; requestId: string; questions: Question[]; since: number }
+  | {
+      kind: "subagent";
+      toolUseId: string;
+      agentType: string;
+      description: string;
+      status: SubagentStatus;
+      lastTool: string | null;
+      summary: string | null;
+    };
 
 export interface ChangedFile {
   path: string;

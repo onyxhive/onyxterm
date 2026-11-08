@@ -32,6 +32,7 @@ const SUBAGENT_REQUESTER = "a subagent";
 
 type AgentItem = Extract<FeedItem, { kind: "agent" }>;
 type StepsItem = Extract<FeedItem, { kind: "steps" }>;
+type SubagentItem = Extract<FeedItem, { kind: "subagent" }>;
 
 function isAgentItem(item: FeedItem): item is AgentItem {
   return item.kind === "agent";
@@ -140,6 +141,27 @@ function permissionItem(event: Extract<AgentEvent, { kind: "permissionRequested"
   };
 }
 
+function startSubagent(feed: ChatFeed, event: Extract<AgentEvent, { kind: "subagentStarted" }>): ChatFeed {
+  if (feed.items.some((item) => item.kind === "subagent" && item.toolUseId === event.toolUseId)) return feed;
+  const created: SubagentItem = {
+    kind: "subagent",
+    toolUseId: event.toolUseId,
+    agentType: event.agentType,
+    description: event.description,
+    status: "running",
+    lastTool: null,
+    summary: null,
+  };
+  return withItems(feed, [...feed.items, created]);
+}
+
+function updateSubagent(feed: ChatFeed, toolUseId: string, change: (item: SubagentItem) => SubagentItem): ChatFeed {
+  const items = feed.items.map((item) =>
+    item.kind === "subagent" && item.toolUseId === toolUseId ? change(item) : item,
+  );
+  return withItems(feed, items);
+}
+
 function replaceRequest(feed: ChatFeed, requestId: string, replacement: FeedItem): ChatFeed {
   const items = feed.items.map((item) =>
     (item.kind === "permission" || item.kind === "question") && item.requestId === requestId ? replacement : item,
@@ -181,12 +203,19 @@ export function reduceFeed(feed: ChatFeed, event: AgentEvent): ChatFeed {
         ...feed.items,
         { kind: "note", text: event.message },
       ]);
+    case "subagentStarted":
+      return startSubagent(feed, event);
+    case "subagentProgress":
+      return updateSubagent(feed, event.toolUseId, (item) => ({ ...item, lastTool: event.lastTool ?? item.lastTool }));
+    case "subagentFinished":
+      return updateSubagent(feed, event.toolUseId, (item) => ({
+        ...item,
+        status: event.isError ? "failed" : "completed",
+        summary: event.summary || item.summary,
+      }));
     case "session":
     case "initialized":
     case "titleChanged":
-    case "subagentStarted":
-    case "subagentProgress":
-    case "subagentFinished":
       return feed;
   }
 }

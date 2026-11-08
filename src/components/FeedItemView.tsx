@@ -1,9 +1,10 @@
 import { useState } from "react";
-import type { FeedItem } from "../types";
+import type { FeedItem, Subagent } from "../types";
 import { ApprovalRow, type PermissionDecision } from "./ApprovalRow";
 import { CopyButton } from "./CopyButton";
 import { Markdown } from "./Markdown";
 import { QuestionRow } from "./QuestionDrawer";
+import { SubagentRow } from "./SubagentRow";
 import { cn } from "./ui";
 import { WorkGroup } from "./WorkLog";
 
@@ -15,6 +16,7 @@ interface FeedItemViewProps {
   item: FeedItem;
   liveStepId: string | null;
   isTurnReply: boolean;
+  subagent: Subagent | undefined;
   actions: FeedActions;
 }
 
@@ -128,7 +130,7 @@ function SystemDivider({ text }: { text: string }) {
   );
 }
 
-export function FeedItemView({ item, liveStepId, isTurnReply, actions }: FeedItemViewProps) {
+export function FeedItemView({ item, liveStepId, isTurnReply, subagent, actions }: FeedItemViewProps) {
   switch (item.kind) {
     case "user":
       return <UserMessage text={item.text} time={item.time} />;
@@ -142,5 +144,7 @@ export function FeedItemView({ item, liveStepId, isTurnReply, actions }: FeedIte
       return <ApprovalRow request={item} onDecide={actions.onDecide} />;
     case "question":
       return <QuestionRow request={item} />;
+    case "subagent":
+      return <SubagentRow agent={subagent ?? item} />;
   }
 }

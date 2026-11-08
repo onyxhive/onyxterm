@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef } from "react";
 import { Gauge, SquareTerminal } from "lucide-react";
 import { CODEX_COMMAND } from "../agentOptions";
-import type { FeedItem, Task, TaskStatus } from "../types";
+import type { FeedItem, Subagent, Task, TaskStatus } from "../types";
 import { suggestionSources, useCapabilities } from "../useCapabilities";
+import { useSubagents } from "../useGit";
 import { useProjectFiles } from "../useProjectFiles";
 import { ChangedFilesCard } from "./ChangesPanel";
 import { Composer, COMPOSER_PLACEHOLDER, QUESTION_PLACEHOLDER } from "./Composer";
@@ -46,6 +47,10 @@ function turnReplyIndexes(feed: FeedItem[], isRunning: boolean): Set<number> {
   return replies;
 }
 
+function subagentWith(subagents: Subagent[], toolUseId: string): Subagent | undefined {
+  return subagents.find((subagent) => subagent.toolUseId === toolUseId);
+}
+
 function liveStepIdIn(task: Task): string | null {
   if (task.status !== "running" || !task.work.runningNow) return null;
   const lastSteps = task.feed.findLast((item) => item.kind === "steps");
@@ -68,6 +73,7 @@ export function ChatView({ task, actions }: ChatViewProps) {
   const scrollKey = lastItem?.kind === "agent" ? lastItem.markdown.length : 0;
   const isRunning = task.status === "running";
   const turnReplies = turnReplyIndexes(task.feed, isRunning);
+  const { subagents } = useSubagents(task.id);
   const modelLabel = capabilities?.models.find((model) => model.value === task.model)?.displayName ?? task.model;
 
   useEffect(() => {
@@ -120,6 +126,7 @@ export function ChatView({ task, actions }: ChatViewProps) {
               item={item}
               liveStepId={liveStepId}
               isTurnReply={turnReplies.has(index)}
+              subagent={item.kind === "subagent" ? subagentWith(subagents, item.toolUseId) : undefined}
               actions={actions}
             />
           ))}

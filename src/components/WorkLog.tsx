@@ -42,7 +42,7 @@ interface WorkLogLineProps {
   isWrapping?: boolean;
 }
 
-function WorkLogLine({ icon, label, trailing, isWrapping = false }: WorkLogLineProps) {
+export function WorkLogLine({ icon, label, trailing, isWrapping = false }: WorkLogLineProps) {
   return (
     <div
       className={cn(
@@ -57,7 +57,8 @@ function WorkLogLine({ icon, label, trailing, isWrapping = false }: WorkLogLineP
   );
 }
 
-const ROW_CLASS = "group/timeline-row relative w-full min-w-0 rounded-md px-0.5 py-0.5 text-left transition-colors";
+export const TIMELINE_ROW_CLASS =
+  "group/timeline-row relative w-full min-w-0 rounded-md px-0.5 py-0.5 text-left transition-colors";
 
 export function WorkLogRow({
   icon,
@@ -68,7 +69,7 @@ export function WorkLogRow({
   ...rowProps
 }: WorkLogLineProps & Omit<ComponentProps<"div">, "className">) {
   return (
-    <div {...rowProps} className={ROW_CLASS}>
+    <div {...rowProps} className={TIMELINE_ROW_CLASS}>
       <WorkLogLine icon={icon} label={label} trailing={trailing} isWrapping={isWrapping} />
       {children}
     </div>
@@ -155,7 +156,7 @@ export function WorkGroup({ steps, liveStepId }: WorkGroupProps) {
         aria-expanded={isExpanded}
         onClick={() => setIsExpanded(!isExpanded)}
         className={cn(
-          ROW_CLASS,
+          TIMELINE_ROW_CLASS,
           "cursor-pointer hover:text-foreground focus-visible:outline-none focus-visible:ring-2",
           "focus-visible:ring-ring/70 focus-visible:ring-inset",
         )}
