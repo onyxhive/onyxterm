@@ -1,5 +1,13 @@
 use std::collections::HashSet;
+use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
+
+use tauri::State;
+
+use crate::chats;
+use crate::db::Db;
+use crate::error::AppResult;
+use crate::protocol::{AgentEvent, Source, StreamParser};
 
 const DEFAULT_CONFIG_DIR: &str = ".claude";
 const ALTERNATE_CONFIG_PREFIX: &str = ".claude-";
@@ -39,6 +47,27 @@ pub fn find(session_id: &str) -> Option<PathBuf> {
     find_in(&dirs::home_dir()?, session_id)
 }
 
+pub fn history(transcript: &Path) -> AppResult<Vec<AgentEvent>> {
+    let mut parser = StreamParser::new(Source::Transcript);
+    let mut reader = BufReader::new(std::fs::File::open(transcript)?);
+    let mut buffer = Vec::new();
+    let mut events = Vec::new();
+    while reader.read_until(b'\n', &mut buffer)? > 0 {
+        events.extend(parser.parse_line(String::from_utf8_lossy(&buffer).trim_end()));
+        buffer.clear();
+    }
+    Ok(events)
+}
+
+#[tauri::command]
+pub fn load_chat_history(db: State<'_, Db>, chat_id: String) -> AppResult<Vec<AgentEvent>> {
+    let session_id = chats::chat(&db.connection(), &chat_id)?.session_id;
+    match find(&session_id) {
+        Some(transcript) => history(&transcript),
+        None => Ok(Vec::new()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -69,6 +98,28 @@ mod tests {
         std::fs::create_dir_all(home.join(".claude-alt")).unwrap();
         std::os::unix::fs::symlink(home.join(".claude/projects"), home.join(".claude-alt/projects")).unwrap();
         assert_eq!(projects_dirs(&home).len(), 1);
+    }
+
+    #[test]
+    fn rebuilds_the_conversation_from_a_transcript() {
+        let home = scratch_home("history");
+        let transcript = home.join("session.jsonl");
+        let lines = [
+            r#"{"type":"queue-operation","operation":"enqueue"}"#,
+            r#"{"type":"user","isSidechain":false,"message":{"role":"user","content":[{"type":"text","text":"hi"}]}}"#,
+            r#"{"type":"user","isMeta":true,"message":{"role":"user","content":"<local-command-caveat>"}}"#,
+            r#"{"type":"assistant","message":{"id":"m1","content":[{"type":"thinking","thinking":""}]}}"#,
+            r#"{"type":"assistant","message":{"id":"m1","content":[{"type":"text","text":"ok"}]}}"#,
+            r#"{"type":"assistant","message":{"id":"m1","content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"ls"}}]}}"#,
+            r#"{"type":"user","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"x"}]}}"#,
+        ];
+        std::fs::write(&transcript, lines.join("\n")).unwrap();
+        let events = history(&transcript).unwrap();
+        assert_eq!(events.len(), 4, "{events:?}");
+        assert_eq!(events[0], AgentEvent::UserText { text: "hi".into() });
+        assert_eq!(events[1], AgentEvent::Text { message_id: "m1".into(), text: "ok".into() });
+        assert!(matches!(&events[2], AgentEvent::ToolStarted { tool_use_id, .. } if tool_use_id == "t1"));
+        assert_eq!(events[3], AgentEvent::ToolFinished { tool_use_id: "t1".into(), is_error: false });
     }
 
     #[test]

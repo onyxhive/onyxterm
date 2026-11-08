@@ -4,7 +4,16 @@ import { CHAT_EVENT, CHAT_UPDATED, type ChatEventPayload } from "./agentEvents";
 import { api } from "./api";
 import type { ChatStart } from "./components/NewChat";
 import type { PermissionDecision } from "./components/PermissionCard";
-import { EMPTY_FEED, reduceFeed, withAnswers, withDecision, withSentMessage, withStop, type ChatFeed } from "./feed";
+import {
+  EMPTY_FEED,
+  feedFromHistory,
+  reduceFeed,
+  withAnswers,
+  withDecision,
+  withSentMessage,
+  withStop,
+  type ChatFeed,
+} from "./feed";
 import { titleFrom } from "./tasks";
 import type { Chat, TaskStatus } from "./types";
 
@@ -17,6 +26,7 @@ export function useChats(input: ChatsInput) {
   const [chats, setChats] = useState<Chat[]>([]);
   const [feeds, setFeeds] = useState<Record<string, ChatFeed>>({});
   const chatsRef = useRef(chats);
+  const requestedHistories = useRef(new Set<string>());
   const inputRef = useRef(input);
   chatsRef.current = chats;
   inputRef.current = input;
@@ -67,6 +77,7 @@ export function useChats(input: ChatsInput) {
     try {
       const chat = await api.createChat({ ...choice, title: titleFrom(text) });
       upsertChat(chat);
+      requestedHistories.current.add(chat.id);
       setFeeds((current) => ({ ...current, [chat.id]: EMPTY_FEED }));
       void send(chat.id, text);
       return chat;
@@ -103,6 +114,18 @@ export function useChats(input: ChatsInput) {
     }
   }
 
+  async function loadHistory(chatId: string) {
+    if (requestedHistories.current.has(chatId)) return;
+    requestedHistories.current.add(chatId);
+    try {
+      const history = feedFromHistory(await api.loadChatHistory(chatId));
+      setFeeds((current) => (current[chatId] ? current : { ...current, [chatId]: history }));
+    } catch (error) {
+      requestedHistories.current.delete(chatId);
+      report(error);
+    }
+  }
+
   async function setState(chatId: string, state: TaskStatus) {
     try {
       upsertChat(await api.setChatState(chatId, state));
@@ -111,5 +134,5 @@ export function useChats(input: ChatsInput) {
     }
   }
 
-  return { chats, feeds, startChat, send, decide, answer, stop, setState };
+  return { chats, feeds, startChat, send, decide, answer, stop, setState, loadHistory };
 }

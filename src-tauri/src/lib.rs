@@ -52,6 +52,7 @@ pub fn run() {
             runtime::answer_permission,
             runtime::answer_question,
             runtime::discover_capabilities,
+            transcripts::load_chat_history,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

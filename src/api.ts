@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Capabilities } from "./agentEvents";
+import type { AgentEvent, Capabilities } from "./agentEvents";
 import type { PermissionDecision } from "./components/PermissionCard";
 import type { Chat, Project, Provider, TaskStatus, Workspace } from "./types";
 
@@ -31,6 +31,7 @@ export const api = {
     invoke<void>("answer_permission", { chatId, requestId, decision }),
   answerQuestion: (chatId: string, requestId: string, answers: Record<string, string>) =>
     invoke<void>("answer_question", { chatId, requestId, answers }),
+  loadChatHistory: (chatId: string) => invoke<AgentEvent[]>("load_chat_history", { chatId }),
   discoverCapabilities: (command: string, projectId: string) =>
     invoke<Capabilities>("discover_capabilities", { command, projectId }),
 };

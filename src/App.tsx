@@ -81,6 +81,10 @@ export default function App() {
   const projects = workspaces.flatMap((candidate) => candidate.projects);
 
   useEffect(() => {
+    if (selectedTaskId) void chatState.loadHistory(selectedTaskId);
+  }, [selectedTaskId]);
+
+  useEffect(() => {
     function startNewChatByShortcut(event: KeyboardEvent) {
       if (!event.metaKey || event.key !== "n") return;
       event.preventDefault();
