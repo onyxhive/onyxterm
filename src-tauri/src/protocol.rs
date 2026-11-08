@@ -10,6 +10,7 @@ const ASK_USER_QUESTION: &str = "AskUserQuestion";
 const DETAIL_LENGTH: usize = 160;
 const RULE_LABEL_LENGTH: usize = 120;
 const PERSISTABLE_RULE_TYPES: [&str; 2] = ["addRules", "addDirectories"];
+const SESSION_DESTINATION: &str = "session";
 const TITLE_FIELD: &str = "title";
 const SUBAGENT_TOOLS: [&str; 2] = ["Task", "Agent"];
 const AGENT_TASK_TYPE: &str = "local_agent";
@@ -215,15 +216,6 @@ pub enum RuleScope {
     Session,
     #[serde(rename = "localSettings")]
     LocalSettings,
-}
-
-impl RuleScope {
-    fn destination(self) -> &'static str {
-        match self {
-            RuleScope::Session => "session",
-            RuleScope::LocalSettings => "localSettings",
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -1004,17 +996,21 @@ fn scoped_rules(request: &PermissionRequest, scope: RuleScope) -> Vec<Value> {
     };
     if chosen.is_empty() {
         let fallback = json!({"type": "addRules", "rules": [{"toolName": request.tool_name}], "behavior": "allow"});
-        return scoped(vec![fallback], scope);
+        return for_session(vec![fallback]);
     }
-    scoped(chosen, scope)
+    for_session(chosen)
 }
 
-fn scoped(rules: Vec<Value>, scope: RuleScope) -> Vec<Value> {
+pub fn project_rules(request: &PermissionRequest) -> Vec<Value> {
+    persistable(&request.suggestions)
+}
+
+fn for_session(rules: Vec<Value>) -> Vec<Value> {
     rules
         .into_iter()
         .map(|mut rule| {
             if let Some(fields) = rule.as_object_mut() {
-                fields.insert("destination".into(), Value::from(scope.destination()));
+                fields.insert("destination".into(), Value::from(SESSION_DESTINATION));
             }
             rule
         })
@@ -1258,11 +1254,18 @@ mod tests {
         let wire = serde_json::to_value(&suggestions[1]).unwrap();
         assert_eq!(wire, json!({"label": "Always allow Bash(ls:*) in this project", "value": "localSettings"}));
         let request = parser.take_permission_requests().remove(0);
+        assert_eq!(
+            project_rules(&request),
+            vec![
+                json!({"type": "addRules", "rules": [{"toolName": "Bash", "ruleContent": "ls:*"}], "behavior": "allow",
+                "destination": "localSettings"})
+            ]
+        );
         let project: Value = serde_json::from_str(&allow_with_rules(&request, RuleScope::LocalSettings)).unwrap();
         assert_eq!(
             project["response"]["response"]["updatedPermissions"],
             json!([{"type": "addRules", "rules": [{"toolName": "Bash", "ruleContent": "ls:*"}], "behavior": "allow",
-                "destination": "localSettings"}])
+                "destination": "session"}])
         );
         let chat: Value = serde_json::from_str(&allow_with_rules(&request, RuleScope::Session)).unwrap();
         let destinations: Vec<_> = chat["response"]["response"]["updatedPermissions"]
@@ -1303,6 +1306,7 @@ mod tests {
         let AgentEvent::PermissionRequested { suggestions, .. } = &events[0] else { panic!("{events:?}") };
         assert!(suggestions.is_empty());
         let request = parser.take_permission_requests().remove(0);
+        assert!(project_rules(&request).is_empty());
         let reply: Value = serde_json::from_str(&allow_with_rules(&request, RuleScope::Session)).unwrap();
         assert!(reply["response"]["response"].get("updatedPermissions").is_none());
         assert_eq!(reply["response"]["response"]["decisionClassification"], "user_temporary");

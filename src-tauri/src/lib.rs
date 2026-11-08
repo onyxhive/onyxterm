@@ -10,6 +10,7 @@ mod explorer;
 mod git;
 mod process;
 mod project_files;
+mod project_rules;
 mod protocol;
 mod prs;
 mod runtime;

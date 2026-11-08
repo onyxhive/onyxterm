@@ -17,6 +17,7 @@ use crate::checkpoints;
 use crate::db::{Db, new_id};
 use crate::error::{AppError, AppResult};
 use crate::process::{self, Launch, SessionFlag};
+use crate::project_rules;
 use crate::protocol::{
     self, AgentEvent, Capabilities, ControlNotice, PermissionRequest, RuleScope, Source, StreamParser,
 };
@@ -37,6 +38,7 @@ const STDERR_TAIL_LENGTH: usize = 2000;
 const MAX_MESSAGE_LENGTH: usize = 200_000;
 const MAX_TITLE_DESCRIPTION_LENGTH: usize = 2_000;
 const DENY_MESSAGE: &str = "The user denied this tool use.";
+const NO_PROJECT_RULES: &str = "Claude offered no rule that can be saved for this project";
 const RULE_NEEDS_ALWAYS: &str = "a rule scope only applies to an always-allow answer";
 const CODEX_UNSUPPORTED: &str = "Codex support coming next";
 const TURN_IS_RUNNING: &str = "the agent is working; wait for this turn to finish or stop it before changing settings";
@@ -229,6 +231,10 @@ impl AgentProcess {
     fn is_idle_for(&self, limit: Duration) -> bool {
         let activity = locked(&self.activity);
         !activity.is_turn_active && activity.last_seen.elapsed() >= limit
+    }
+
+    fn permission(&self, request_id: &str) -> AppResult<PermissionRequest> {
+        locked(&self.permissions).get(request_id).cloned().ok_or(AppError::NotFound("permission request"))
     }
 
     fn take_permission(&self, request_id: &str) -> AppResult<PermissionRequest> {
@@ -688,9 +694,20 @@ fn rule_scope(decision: PermissionDecision, suggestion: Option<RuleScope>) -> Ap
     }
 }
 
+async fn save_project_rules(db: &Db, chat_id: &str, request: &PermissionRequest) -> AppResult<()> {
+    let rules = protocol::project_rules(request);
+    if rules.is_empty() {
+        return Err(AppError::Invalid(NO_PROJECT_RULES.into()));
+    }
+    let project_id = chats::chat(&db.connection(), chat_id)?.project_id;
+    let project_root = crate::git::project_root(db, &project_id)?;
+    in_background(move || project_rules::save(&project_root, &rules)).await
+}
+
 #[tauri::command]
-pub fn answer_permission(
+pub async fn answer_permission(
     app: AppHandle,
+    db: State<'_, Db>,
     runtime: State<'_, AgentRuntime>,
     chat_id: String,
     request_id: String,
@@ -699,6 +716,9 @@ pub fn answer_permission(
 ) -> AppResult<()> {
     let scope = rule_scope(decision, suggestion)?;
     let process = runtime.running_process(&chat_id)?;
+    if scope == Some(RuleScope::LocalSettings) {
+        save_project_rules(&db, &chat_id, &process.permission(&request_id)?).await?;
+    }
     let request = process.take_permission(&request_id)?;
     let reply = match (decision, scope) {
         (PermissionDecision::Always, Some(scope)) => protocol::allow_with_rules(&request, scope),
