@@ -8,8 +8,7 @@
   --text-xs: 11px;
   --text-sm: 12px;
   --text-md: 13px;
-  --text-lg: 14px;
-  --text-xl: 17px;
+  --text-lg: 15px;
   --text-hero: 26px;
 
   --space-0-5: 2px;
@@ -34,7 +33,7 @@
   --traffic-light-inset: 84px;
   --sidebar-width: 256px;
   --workpanel-width: 300px;
-  --column-width: 720px;
+  --column-width: 680px;
 
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --duration-fast: 150ms;

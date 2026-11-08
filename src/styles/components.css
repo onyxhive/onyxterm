@@ -529,7 +529,7 @@
 }
 
 .task-row__title {
-  font-size: 12.5px;
+  font-size: var(--text-md);
   font-weight: 500;
 }
 
@@ -625,7 +625,6 @@
 .composer--hero .composer__input {
   min-height: 112px;
   padding: var(--space-4) var(--space-5) var(--space-2);
-  font-size: 15px;
 }
 
 .composer__footer {
@@ -977,7 +976,7 @@
 .markdown {
   min-width: 0;
   font-size: var(--text-lg);
-  line-height: 1.6;
+  line-height: 1.55;
 }
 
 .markdown > :first-child {

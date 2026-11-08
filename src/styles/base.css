@@ -74,7 +74,7 @@ kbd {
   border-radius: 4px;
   background: var(--surface-active);
   color: var(--text-tertiary);
-  font-size: 10.5px;
+  font-size: var(--text-xs);
   font-weight: 500;
   justify-content: center;
 }
