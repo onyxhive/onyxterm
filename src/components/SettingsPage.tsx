@@ -116,7 +116,7 @@ function EditorRow({ settings, onRemember }: SettingsGroupProps) {
   return (
     <SettingsRow
       title="Preferred editor"
-      description="Open in uses this editor. Picking another editor from a chat changes it too."
+      description="The files panel opens files in this editor."
       control={
         <SettingsSelect
           label="Preferred editor"
