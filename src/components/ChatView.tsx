@@ -1,7 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { CODEX_COMMAND } from "../agentOptions";
 import type { Task } from "../types";
 import { suggestionSources, useCapabilities } from "../useCapabilities";
+import { useProjectFiles } from "../useProjectFiles";
 import { ChatHeader } from "./ChatHeader";
 import { Composer } from "./Composer";
 import { FeedItemView, type FeedActions } from "./FeedItemView";
@@ -31,6 +32,8 @@ export function ChatView({ task, projectName, isWorkPanelOpen, actions }: ChatVi
   const dockRef = useRef<HTMLDivElement>(null);
   useDockHeight(dockRef);
   const { capabilities } = useCapabilities(task.command, task.projectId);
+  const files = useProjectFiles(task.projectId);
+  const sources = useMemo(() => suggestionSources(capabilities, files), [capabilities, files]);
   const lastItem = task.feed.at(-1);
   const scrollKey = lastItem?.kind === "agent" ? lastItem.markdown.length : 0;
 
@@ -69,7 +72,7 @@ export function ChatView({ task, projectName, isWorkPanelOpen, actions }: ChatVi
             key={task.id}
             variant="reply"
             placeholder="Reply to the agent"
-            suggestionSources={suggestionSources(capabilities)}
+            suggestionSources={sources}
             onSubmit={actions.onReply}
             sendBlockedReason={task.command === CODEX_COMMAND ? CODEX_COMING : undefined}
           />

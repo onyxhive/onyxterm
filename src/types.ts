@@ -94,7 +94,10 @@ export interface Task {
   work: Work;
 }
 
+export type SuggestionKind = "command" | "agent" | "folder" | "file";
+
 export interface Suggestion {
+  kind: SuggestionKind;
   value: string;
   hint: string;
   description: string;

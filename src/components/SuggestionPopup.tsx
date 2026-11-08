@@ -1,6 +1,6 @@
-import { useEffect, useRef } from "react";
-import { Bot, FileText, Slash } from "lucide-react";
-import type { Suggestion } from "../types";
+import { useEffect, useRef, type ReactNode } from "react";
+import { Bot, FileText, Folder, Slash } from "lucide-react";
+import type { Suggestion, SuggestionKind } from "../types";
 
 interface SuggestionPopupProps {
   id: string;
@@ -9,11 +9,12 @@ interface SuggestionPopupProps {
   onPick: (suggestion: Suggestion) => void;
 }
 
-function SuggestionIcon({ suggestion }: { suggestion: Suggestion }) {
-  if (suggestion.value.startsWith("/")) return <Slash size={13} />;
-  if (suggestion.hint === "agent") return <Bot size={13} />;
-  return <FileText size={13} />;
-}
+const KIND_ICONS: Record<SuggestionKind, ReactNode> = {
+  command: <Slash size={13} />,
+  agent: <Bot size={13} />,
+  folder: <Folder size={13} />,
+  file: <FileText size={13} />,
+};
 
 export function suggestionOptionId(popupId: string, index: number): string {
   return `${popupId}-option-${index}`;
@@ -39,7 +40,7 @@ export function SuggestionPopup({ id, suggestions, activeIndex, onPick }: Sugges
           onClick={() => onPick(suggestion)}
         >
           <span className="suggestion__icon">
-            <SuggestionIcon suggestion={suggestion} />
+            {KIND_ICONS[suggestion.kind]}
           </span>
           <span className="suggestion__value">{suggestion.value}</span>
           {suggestion.hint && <span className="suggestion__hint">{suggestion.hint}</span>}

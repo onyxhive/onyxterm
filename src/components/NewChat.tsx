@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Bot, Cpu, FolderGit2, FolderPlus, Gauge, TerminalSquare } from "lucide-react";
 import {
   CLAUDE_COMMANDS,
@@ -12,6 +12,7 @@ import {
 import type { ModelOption } from "../agentEvents";
 import type { Provider, Workspace } from "../types";
 import { suggestionSources, useCapabilities } from "../useCapabilities";
+import { useProjectFiles } from "../useProjectFiles";
 import { Composer } from "./Composer";
 import { PillSelect } from "./PillSelect";
 
@@ -57,6 +58,8 @@ export function NewChat({ workspace, initialChoice, initialProjectId, onStart, o
   const isCodex = choice.provider === "Codex";
   const command = isCodex ? CODEX_COMMAND : choice.command;
   const { capabilities, problem } = useCapabilities(command, project?.id);
+  const files = useProjectFiles(project?.id);
+  const sources = useMemo(() => suggestionSources(capabilities, files), [capabilities, files]);
   const models = capabilities?.models ?? [];
   const modelOptions = models.length > 0 ? models.map((model) => model.value) : FALLBACK_MODELS;
   const model = pickOption(modelOptions, choice.model, DEFAULT_MODEL);
@@ -152,7 +155,7 @@ export function NewChat({ workspace, initialChoice, initialProjectId, onStart, o
         <Composer
           variant="hero"
           placeholder="Describe the change for the agent"
-          suggestionSources={suggestionSources(capabilities)}
+          suggestionSources={sources}
           onSubmit={start}
           toolbar={toolbar}
           sendBlockedReason={sendBlockedReason()}

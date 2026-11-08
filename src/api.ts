@@ -34,4 +34,5 @@ export const api = {
   loadChatHistory: (chatId: string) => invoke<AgentEvent[]>("load_chat_history", { chatId }),
   discoverCapabilities: (command: string, projectId: string) =>
     invoke<Capabilities>("discover_capabilities", { command, projectId }),
+  listProjectFiles: (projectId: string) => invoke<string[]>("list_project_files", { projectId }),
 };

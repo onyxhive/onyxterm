@@ -3,7 +3,7 @@ import type { Capabilities } from "./agentEvents";
 import { CODEX_COMMAND } from "./agentOptions";
 import { api } from "./api";
 import type { Suggestion } from "./types";
-import type { SuggestionSources } from "./components/composerTrigger";
+import { FOLDER_SUFFIX, type SuggestionSources } from "./components/composerTrigger";
 
 interface CapabilityState {
   capabilities: Capabilities | null;
@@ -55,17 +55,23 @@ export function useCapabilities(command: string, projectId: string | undefined):
   return state;
 }
 
-export function suggestionSources(capabilities: Capabilities | null): SuggestionSources {
-  if (!capabilities) return { commands: [], mentions: [] };
-  const commands: Suggestion[] = capabilities.commands.map((command) => ({
+function fileSuggestion(path: string): Suggestion {
+  const kind = path.endsWith(FOLDER_SUFFIX) ? "folder" : "file";
+  return { kind, value: `@${path}`, hint: "", description: "" };
+}
+
+export function suggestionSources(capabilities: Capabilities | null, files: string[]): SuggestionSources {
+  const commands: Suggestion[] = (capabilities?.commands ?? []).map((command) => ({
+    kind: "command",
     value: `/${command.name}`,
     hint: command.argumentHint,
     description: command.description,
   }));
-  const mentions: Suggestion[] = capabilities.agents.map((agent) => ({
+  const agents: Suggestion[] = (capabilities?.agents ?? []).map((agent) => ({
+    kind: "agent",
     value: `@agent-${agent.name}`,
     hint: "agent",
     description: agent.description,
   }));
-  return { commands, mentions };
+  return { commands, mentions: [...agents, ...files.map(fileSuggestion)] };
 }

@@ -47,11 +47,12 @@ export function Composer(props: ComposerProps) {
 
   function pick(suggestion: Suggestion) {
     if (!trigger) return;
-    const inserted = `${suggestion.value} `;
+    const inserted = suggestion.kind === "folder" ? suggestion.value : `${suggestion.value} `;
     const nextCaret = trigger.start + inserted.length;
     pendingCaret.current = nextCaret;
     setText(text.slice(0, trigger.start) + inserted + text.slice(caret));
     setCaret(nextCaret);
+    setActiveIndex(0);
     inputRef.current?.focus();
   }
 
@@ -120,7 +121,7 @@ export function Composer(props: ComposerProps) {
       <div className="composer__footer">
         <div className="composer__toolbar">{toolbar}</div>
         <span className="composer__hint">
-          <kbd>/</kbd> commands <kbd>@</kbd> agents
+          <kbd>/</kbd> commands <kbd>@</kbd> files
         </span>
         <span className="send-button__wrap" title={sendBlockedReason}>
           <button
