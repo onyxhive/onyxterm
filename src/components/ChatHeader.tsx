@@ -1,4 +1,5 @@
 import { CheckCheck, Folder, GitBranch, PanelRight, RotateCcw, SquareTerminal } from "lucide-react";
+import type { ReactNode } from "react";
 import type { Project, Task } from "../types";
 import { PrBadge } from "./PrBadge";
 import { StatusLabel } from "./StatusBadge";
@@ -17,6 +18,7 @@ export interface ChatHeaderActions {
 interface ChatHeaderProps {
   task: Task;
   project: Project | undefined;
+  details: ReactNode;
   branch: string | null;
   isChangesPanelOpen: boolean;
   actions: ChatHeaderActions;
@@ -58,7 +60,7 @@ function BranchLabel({ branch }: { branch: string }) {
   );
 }
 
-export function ChatHeader({ task, project, branch, isChangesPanelOpen, actions }: ChatHeaderProps) {
+export function ChatHeader({ task, project, details, branch, isChangesPanelOpen, actions }: ChatHeaderProps) {
   return (
     <>
       <nav aria-label="Chat breadcrumb" data-tauri-drag-region className="min-w-0 flex-1">
@@ -95,6 +97,7 @@ export function ChatHeader({ task, project, branch, isChangesPanelOpen, actions 
         </ol>
       </nav>
       <div className="flex shrink-0 items-center gap-0.5">
+        {details}
         <DoneToggle task={task} actions={actions} />
         <span title={RAW_TERMINAL_COMING}>
           <button type="button" className={ICON_BUTTON} aria-label="Open raw terminal" disabled>

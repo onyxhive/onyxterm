@@ -8,10 +8,12 @@ import type { AgentChoice } from "./components/ComposerControls";
 import { NewChat, type ChatStart } from "./components/NewChat";
 import { Sidebar, type SidebarActions } from "./components/Sidebar";
 import { SidebarToggle, TopBar, TopBarHeading, type View } from "./components/TitleBar";
+import { ThreadDetails, type ThreadDetailsActions } from "./components/ThreadDetails";
 import { Toasts } from "./components/Toasts";
 import { useIsFullscreen } from "./components/useIsFullscreen";
 import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher";
 import { EMPTY_FEED } from "./feed";
+import { PREFERRED_EDITOR_SETTING } from "./gitApi";
 import { displayTitle, toTask } from "./tasks";
 import type { Chat, Provider, TaskStatus, Toast } from "./types";
 import { collapsedSectionsFrom } from "./collapsedSections";
@@ -185,6 +187,16 @@ export default function App() {
     onNewChatInProject: () => openNewChat(selectedTask?.projectId),
   };
 
+  const threadDetailsActions: ThreadDetailsActions = {
+    onPreferEditor: (editorId) => remember(PREFERRED_EDITOR_SETTING, editorId),
+    onOpenDiff: () => {
+      setDiffScope({ kind: "workingTree" });
+      setIsChangesPanelOpen(true);
+    },
+    onBranchChanged: () => selectedTask && refreshBranch(selectedTask.projectId),
+    onError: showError,
+  };
+
   const sidebarActions: SidebarActions = {
     onSelect: openTask,
     onMarkDone: (taskId) => chatState.setState(taskId, "done"),
@@ -197,10 +209,22 @@ export default function App() {
   function renderHeading() {
     if (view === "board") return <TopBarHeading title="Board" meta={`${workspaceTasks.length} chats`} />;
     if (!selectedTask) return null;
+    const project = projects.find((candidate) => candidate.id === selectedTask.projectId);
     return (
       <ChatHeader
         task={selectedTask}
-        project={projects.find((project) => project.id === selectedTask.projectId)}
+        project={project}
+        details={
+          project && (
+            <ThreadDetails
+              key={selectedTask.id}
+              task={selectedTask}
+              project={project}
+              preferredEditor={settings?.[PREFERRED_EDITOR_SETTING]}
+              actions={threadDetailsActions}
+            />
+          )
+        }
         branch={selectedTask.branch ?? branches[selectedTask.projectId] ?? null}
         isChangesPanelOpen={isChangesPanelOpen}
         actions={chatHeaderActions}

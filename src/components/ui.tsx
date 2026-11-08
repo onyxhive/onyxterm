@@ -28,6 +28,26 @@ export const OUTLINE_BUTTON = cn(
   FOCUS_RING,
 );
 
+export const TEXT_INPUT = cn(
+  "h-8 w-full min-w-0 rounded-lg border border-input bg-background px-2.5 text-sm text-foreground shadow-xs/5",
+  "outline-none transition-shadow placeholder:text-placeholder focus-visible:border-ring",
+  "focus-visible:ring-2 focus-visible:ring-ring/24 dark:bg-input/32",
+);
+
+export const PRIMARY_BUTTON = cn(
+  "inline-flex h-8 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-lg bg-primary px-3",
+  "text-sm font-medium whitespace-nowrap text-primary-foreground shadow-xs/5 transition-colors hover:bg-primary/90",
+  "disabled:pointer-events-none disabled:opacity-64 [&_svg]:size-4",
+  FOCUS_RING,
+);
+
+export const GHOST_BUTTON = cn(
+  "inline-flex h-8 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-lg px-3 text-sm",
+  "font-medium whitespace-nowrap text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",
+  "disabled:pointer-events-none disabled:opacity-64 [&_svg]:size-4",
+  FOCUS_RING,
+);
+
 export const MENU_POPUP = "dropdown-glass z-50 rounded-lg p-1 text-sm text-foreground";
 
 export const MENU_ITEM = cn(
