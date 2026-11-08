@@ -76,8 +76,8 @@
 }
 
 .icon-button--small {
-  width: 22px;
-  height: 22px;
+  width: 28px;
+  height: 28px;
 }
 
 .button {
@@ -358,9 +358,14 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  height: 26px;
+  height: 28px;
   color: var(--text-secondary);
   font-size: var(--text-sm);
+}
+
+.switcher__project-name {
+  flex: none;
+  white-space: nowrap;
 }
 
 .name-field {
@@ -798,6 +803,7 @@
 }
 
 .suggestion__description {
+  grid-column: 4;
   overflow: hidden;
   color: var(--text-secondary);
   font-size: var(--text-sm);

@@ -150,7 +150,7 @@ export function WorkspaceSwitcher({ workspaces, current, tasks, actions }: Works
                   {workspace.projects.map((project) => (
                     <li key={project.id}>
                       <FolderGit2 size={13} />
-                      <span>{project.name}</span>
+                      <span className="switcher__project-name">{project.name}</span>
                       <span className="switcher__path" title={project.path}>
                         {project.path}
                       </span>
