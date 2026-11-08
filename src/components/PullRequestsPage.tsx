@@ -29,7 +29,7 @@ const DEFAULT_AUTHOR: PrAuthorFilter = "everyone";
 const AUTHOR_OPTIONS = [
   { value: "everyone" as const, label: "Everyone" },
   { value: "mine" as const, label: "Mine" },
-  { value: "review-requested" as const, label: "Review requested" },
+  { value: "review-requested" as const, label: "Review requested", shortLabel: "To review" },
 ];
 
 const EMPTY_LIST_SUFFIX: Record<PrAuthorFilter, string> = {
@@ -105,6 +105,7 @@ function useWorkspacePullRequests(projects: Project[], filter: ListFilter) {
 interface FilterChoice<T extends string> {
   value: T;
   label: string;
+  shortLabel?: string;
 }
 
 interface FilterMenuProps<T extends string> {
@@ -125,7 +126,7 @@ function FilterMenu<T extends string>({ name, Icon, groups, value, onChange }: F
   }
 
   return (
-    <div className="relative min-w-0" ref={popup.rootRef}>
+    <div className="relative flex min-w-0" ref={popup.rootRef}>
       <button
         type="button"
         aria-haspopup="menu"
@@ -133,13 +134,13 @@ function FilterMenu<T extends string>({ name, Icon, groups, value, onChange }: F
         aria-label={`${name}: ${current.label}`}
         onClick={popup.toggle}
         className={cn(
-          "inline-flex h-7 max-w-40 min-w-0 cursor-pointer items-center gap-1.5 rounded-md px-2 text-xs font-medium",
+          "inline-flex h-7 max-w-40 min-w-0 cursor-pointer items-center gap-1 rounded-md px-1.5 text-xs font-medium",
           "text-muted-foreground hover:bg-accent hover:text-foreground aria-expanded:bg-accent",
           FOCUS_RING,
         )}
       >
         <Icon className="size-3.5 shrink-0" />
-        <span className="truncate">{current.label}</span>
+        <span className="truncate">{current.shortLabel ?? current.label}</span>
         <ChevronDown className="size-3.5 shrink-0 opacity-70" />
       </button>
       {popup.isOpen && (
@@ -293,21 +294,22 @@ export function PullRequestsPage({ projects, author, onAuthorChange }: PullReque
       <div className="flex w-[clamp(20rem,30vw,27rem)] shrink-0 flex-col border-r border-border">
         <div className="flex h-11 shrink-0 items-center gap-2 px-3">
           <Segmented label="Pull request state" options={STATE_OPTIONS} value={state} onChange={setState} />
-          <span className="flex-1" />
-          <FilterMenu
-            name="Author"
-            Icon={UserRound}
-            groups={[AUTHOR_OPTIONS]}
-            value={author}
-            onChange={onAuthorChange}
-          />
-          <FilterMenu
-            name="Project"
-            Icon={Folder}
-            groups={projectGroups(projects)}
-            value={projectFilter}
-            onChange={setProjectFilter}
-          />
+          <div className="ms-auto flex min-w-0 items-center">
+            <FilterMenu
+              name="Author"
+              Icon={UserRound}
+              groups={[AUTHOR_OPTIONS]}
+              value={author}
+              onChange={onAuthorChange}
+            />
+            <FilterMenu
+              name="Project"
+              Icon={Folder}
+              groups={projectGroups(projects)}
+              value={projectFilter}
+              onChange={setProjectFilter}
+            />
+          </div>
         </div>
         <ul className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
           {pullRequests.error && <li className="p-4 text-xs text-error-foreground">{pullRequests.error}</li>}
