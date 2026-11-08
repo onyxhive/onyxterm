@@ -1,4 +1,4 @@
-import { ChevronDown, ListChecks, Lock, Pencil, ShieldOff, Sparkles, type LucideIcon } from "lucide-react";
+import { ChevronLeft, ListChecks, Lock, Pencil, ShieldOff, Sparkles, type LucideIcon } from "lucide-react";
 import { isFullAccess, PERMISSION_MODE_INFO, PERMISSION_MODES, type PermissionMode } from "../permissionModes";
 import { cn, MENU_POPUP } from "./ui";
 import { usePopup } from "./usePopup";
@@ -51,7 +51,7 @@ export function PermissionModeMenu({ mode, onPick }: PermissionModeMenuProps) {
   const Icon = MODE_ICONS[mode];
 
   return (
-    <div ref={popup.rootRef} className="relative">
+    <div ref={popup.rootRef}>
       <button
         type="button"
         aria-haspopup="dialog"
@@ -67,13 +67,13 @@ export function PermissionModeMenu({ mode, onPick }: PermissionModeMenuProps) {
       >
         <Icon className="size-3.5" />
         {info.shortLabel}
-        <ChevronDown className="size-3" />
+        <ChevronLeft className="size-3" />
       </button>
       {popup.isOpen && (
         <div
           role="dialog"
           aria-label="Permissions"
-          className={cn(MENU_POPUP, "absolute top-full right-0 mt-2 w-64 p-2")}
+          className={cn(MENU_POPUP, "absolute right-full bottom-0 me-2 w-64 p-2")}
         >
           <ModeSegments mode={mode} onPick={onPick} />
           <p className={cn("px-0.5 pt-2 text-sm font-medium", isFullAccess(mode) && "text-warning-foreground")}>
