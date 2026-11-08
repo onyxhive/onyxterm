@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { DEFAULT_EFFORT, DEFAULT_MODEL } from "./agentOptions";
 import { Board } from "./components/Board";
+import { ChangesPanel } from "./components/ChangesPanel";
 import { ChatHeader, type ChatHeaderActions } from "./components/ChatHeader";
 import { ChatView, type ChatActions } from "./components/ChatView";
-import { NewChat, type ChatChoice, type ChatStart } from "./components/NewChat";
-import { Sidebar } from "./components/Sidebar";
-import { TitleBar, TitleBarHeading, type View } from "./components/TitleBar";
+import type { AgentChoice } from "./components/ComposerControls";
+import { NewChat, type ChatStart } from "./components/NewChat";
+import { Sidebar, type SidebarActions } from "./components/Sidebar";
+import { SidebarToggle, TopBar, TopBarHeading, type View } from "./components/TitleBar";
 import { Toasts } from "./components/Toasts";
-import { WorkPanel } from "./components/WorkPanel";
 import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher";
 import { EMPTY_FEED } from "./feed";
 import { toTask } from "./tasks";
@@ -17,14 +18,14 @@ import { useSettings } from "./useSettings";
 import { useWorkspaces } from "./useWorkspaces";
 
 const CHOICE_SETTING = "chatChoice";
-const DEFAULT_CHOICE: ChatChoice = {
+const DEFAULT_CHOICE: AgentChoice = {
   provider: "Claude Code" as Provider,
   command: "claude-lyxa-team",
   model: DEFAULT_MODEL,
   effort: DEFAULT_EFFORT,
 };
 
-const ROOM_FOR_WORK_PANEL = "(min-width: 1181px)";
+const ROOM_FOR_CHANGES_PANEL = "(min-width: 1181px)";
 
 const ATTENTION_HEADLINES: Partial<Record<TaskStatus, string>> = {
   permission: "needs your permission",
@@ -33,10 +34,10 @@ const ATTENTION_HEADLINES: Partial<Record<TaskStatus, string>> = {
   failed: "failed",
 };
 
-function rememberedChoice(saved: string | undefined): ChatChoice {
+function rememberedChoice(saved: string | undefined): AgentChoice {
   if (!saved) return DEFAULT_CHOICE;
   try {
-    return { ...DEFAULT_CHOICE, ...(JSON.parse(saved) as Partial<ChatChoice>) };
+    return { ...DEFAULT_CHOICE, ...(JSON.parse(saved) as Partial<AgentChoice>) };
   } catch {
     return DEFAULT_CHOICE;
   }
@@ -46,7 +47,10 @@ export default function App() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [view, setView] = useState<View>("chat");
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [isWorkPanelOpen, setIsWorkPanelOpen] = useState(() => window.matchMedia(ROOM_FOR_WORK_PANEL).matches);
+  const [isChangesPanelOpen, setIsChangesPanelOpen] = useState(
+    () => window.matchMedia(ROOM_FOR_CHANGES_PANEL).matches,
+  );
+  const [newChatProjectId, setNewChatProjectId] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   function showError(message: string) {
@@ -87,13 +91,24 @@ export default function App() {
   }, [selectedTaskId]);
 
   useEffect(() => {
-    function startNewChatByShortcut(event: KeyboardEvent) {
-      if (!event.metaKey || event.key !== "n") return;
+    const toggleChangesPanel = () => setIsChangesPanelOpen((isOpen) => !isOpen);
+    const shortcuts: Record<string, () => void> = {
+      n: () => openNewChat(),
+      "shift+o": () => openNewChat(),
+      b: () => setIsSidebarOpen((isOpen) => !isOpen),
+      d: toggleChangesPanel,
+      "alt+b": toggleChangesPanel,
+    };
+    function runShortcut(event: KeyboardEvent) {
+      if (!event.metaKey || event.ctrlKey) return;
+      const modifiers = [event.shiftKey && "shift", event.altKey && "alt"].filter(Boolean);
+      const shortcut = shortcuts[[...modifiers, event.code.replace(/^Key/, "").toLowerCase()].join("+")];
+      if (!shortcut) return;
       event.preventDefault();
-      openNewChat();
+      shortcut();
     }
-    window.addEventListener("keydown", startNewChatByShortcut);
-    return () => window.removeEventListener("keydown", startNewChatByShortcut);
+    window.addEventListener("keydown", runShortcut);
+    return () => window.removeEventListener("keydown", runShortcut);
   }, []);
 
   function projectName(projectId: string): string {
@@ -105,7 +120,8 @@ export default function App() {
     setView("chat");
   }
 
-  function openNewChat() {
+  function openNewChat(projectId?: string) {
+    setNewChatProjectId(projectId ?? null);
     setSelectedTaskId(null);
     setView("chat");
   }
@@ -139,18 +155,36 @@ export default function App() {
     onDecide: (requestId, decision) => withSelectedChat((chatId) => chatState.decide(chatId, requestId, decision)),
     onAnswer: (requestId, answers) => withSelectedChat((chatId) => chatState.answer(chatId, requestId, answers)),
     onStop: () => withSelectedChat(chatState.stop),
+    onOpenChanges: () => setIsChangesPanelOpen(true),
   };
 
   const chatHeaderActions: ChatHeaderActions = {
     onMarkDone: () => withSelectedChat((chatId) => chatState.setState(chatId, "done")),
     onReopen: () => withSelectedChat((chatId) => chatState.setState(chatId, "review")),
-    onToggleWorkPanel: () => setIsWorkPanelOpen(!isWorkPanelOpen),
+    onToggleChangesPanel: () => setIsChangesPanelOpen(!isChangesPanelOpen),
+    onNewChatInProject: () => openNewChat(selectedTask?.projectId),
+  };
+
+  const sidebarActions: SidebarActions = {
+    onSelect: openTask,
+    onMarkDone: (taskId) => chatState.setState(taskId, "done"),
+    onReopen: (taskId) => chatState.setState(taskId, "review"),
+    onNewChat: openNewChat,
+    onAddProject: workspaceActions.onAddProject,
+    onToggleBoard: () => setView(view === "board" ? "chat" : "board"),
   };
 
   function renderHeading() {
-    if (view === "board") return <TitleBarHeading title="Board" meta={`${workspaceTasks.length} chats`} />;
+    if (view === "board") return <TopBarHeading title="Board" meta={`${workspaceTasks.length} chats`} />;
     if (!selectedTask) return null;
-    return <ChatHeader task={selectedTask} isWorkPanelOpen={isWorkPanelOpen} actions={chatHeaderActions} />;
+    return (
+      <ChatHeader
+        task={selectedTask}
+        project={projects.find((project) => project.id === selectedTask.projectId)}
+        isChangesPanelOpen={isChangesPanelOpen}
+        actions={chatHeaderActions}
+      />
+    );
   }
 
   function renderMain() {
@@ -159,10 +193,10 @@ export default function App() {
     if (!selectedTask) {
       return (
         <NewChat
-          key={`${workspace.id}-${workspace.projects.length}`}
+          key={`${workspace.id}-${workspace.projects.length}-${newChatProjectId}`}
           workspace={workspace}
           initialChoice={rememberedChoice(settings[CHOICE_SETTING])}
-          initialProjectId={workspaceState.lastAddedProjectId}
+          initialProjectId={newChatProjectId ?? workspaceState.lastAddedProjectId}
           onStart={start}
           onAddProject={workspaceActions.onAddProject}
         />
@@ -171,57 +205,52 @@ export default function App() {
     return <ChatView task={selectedTask} actions={chatActions} />;
   }
 
-  const isWorkPanelVisible = view === "chat" && selectedTask !== null && isWorkPanelOpen;
+  const isChangesPanelVisible = view === "chat" && selectedTask !== null && isChangesPanelOpen;
 
-  if (!workspace) return <div className="app" />;
+  if (!workspace) return <div className="h-full bg-background" />;
 
   return (
-    <div className="app">
-      <TitleBar
+    <div className="flex h-full overflow-hidden bg-background text-foreground">
+      <SidebarToggle
         isSidebarOpen={isSidebarOpen}
-        view={view}
-        actions={{
-          onToggleSidebar: () => setIsSidebarOpen(!isSidebarOpen),
-          onToggleBoard: () => setView(view === "board" ? "chat" : "board"),
-          onNewChat: openNewChat,
-        }}
-      >
-        {renderHeading()}
-      </TitleBar>
-      <div className="app__body">
-        <Sidebar
-          tasks={workspaceTasks}
-          selectedTaskId={view === "chat" ? (selectedTask?.id ?? null) : null}
-          isNewChatActive={view === "chat" && selectedTask === null}
-          isOpen={isSidebarOpen}
-          onSelect={openTask}
-          onNewChat={openNewChat}
-          footer={
-            <WorkspaceSwitcher
-              workspaces={workspaces}
-              current={workspace}
-              tasks={tasks}
-              actions={{
-                ...workspaceActions,
-                onSelect: (workspaceId) => {
-                  workspaceActions.onSelect(workspaceId);
-                  setSelectedTaskId(null);
-                },
-              }}
-            />
-          }
-        />
-        <main className="app__main">
+        onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
+        onNewChat={() => openNewChat()}
+      />
+      <Sidebar
+        workspace={workspace}
+        tasks={workspaceTasks}
+        selectedTaskId={view === "chat" ? (selectedTask?.id ?? null) : null}
+        isOpen={isSidebarOpen}
+        isBoardActive={view === "board"}
+        actions={sidebarActions}
+        header={
+          <WorkspaceSwitcher
+            workspaces={workspaces}
+            current={workspace}
+            tasks={tasks}
+            actions={{
+              ...workspaceActions,
+              onSelect: (workspaceId) => {
+                workspaceActions.onSelect(workspaceId);
+                setSelectedTaskId(null);
+              },
+            }}
+          />
+        }
+      />
+      <main className="flex min-w-0 flex-1">
+        <div className="flex min-w-0 flex-1 flex-col">
+          <TopBar isSidebarOpen={isSidebarOpen}>{renderHeading()}</TopBar>
           {renderMain()}
-        </main>
-        {isWorkPanelVisible && (
-          <WorkPanel
+        </div>
+        {isChangesPanelVisible && (
+          <ChangesPanel
             work={selectedTask.work}
             project={projects.find((project) => project.id === selectedTask.projectId)}
           />
         )}
-        <Toasts toasts={toasts} tasks={tasks} onOpen={openToast} onDismiss={dismissToast} />
-      </div>
+      </main>
+      <Toasts toasts={toasts} tasks={tasks} onOpen={openToast} onDismiss={dismissToast} />
     </div>
   );
 }
