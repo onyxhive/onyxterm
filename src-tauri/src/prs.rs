@@ -654,4 +654,22 @@ mod tests {
         assert!(serde_json::from_str::<PullRequestDraft>(extra).is_err());
         assert!(validated_number(0).is_err());
     }
+
+    #[test]
+    #[ignore = "calls gh against a real repository named by ONYX_LIVE_REPO"]
+    fn live_lists_pull_requests_of_a_real_repository() {
+        let Ok(root) = std::env::var("ONYX_LIVE_REPO") else { return };
+        let gh = GitHub::default().gh(Path::new(&root)).unwrap();
+        for state in [PrState::Open, PrState::All] {
+            match gh.list(state) {
+                Ok(listed) => {
+                    eprintln!("{} prs: {}", state.as_str(), listed.len());
+                    for pull_request in listed.iter().take(3) {
+                        eprintln!("pr: {}", serde_json::to_string(pull_request).unwrap());
+                    }
+                }
+                Err(error) => eprintln!("{} prs failed: {error}", state.as_str()),
+            }
+        }
+    }
 }

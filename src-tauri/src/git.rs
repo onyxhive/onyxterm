@@ -825,4 +825,17 @@ mod tests {
         assert_eq!(pushed.upstream.as_deref(), Some("origin/main"));
         assert_eq!(pushed.ahead, 0);
     }
+
+    #[test]
+    #[ignore = "reads a real repository named by ONYX_LIVE_REPO"]
+    fn live_reads_status_and_branches_of_a_real_repository() {
+        let Ok(root) = std::env::var("ONYX_LIVE_REPO") else { return };
+        let git = Git::at(root);
+        eprintln!("status: {}", serde_json::to_string_pretty(&status(&git).unwrap()).unwrap());
+        let listed = branches(&git).unwrap();
+        eprintln!("current: {:?}, branches: {}", listed.current, listed.branches.len());
+        for branch in listed.branches.iter().take(5) {
+            eprintln!("branch: {}", serde_json::to_string(branch).unwrap());
+        }
+    }
 }
