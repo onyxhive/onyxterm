@@ -1,4 +1,5 @@
 import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useComposerInsertions, withInsertion } from "../composerInsertions";
 import type { Suggestion } from "../types";
 import { findTrigger, matchSuggestions, type SuggestionSources } from "./composerTrigger";
 import { SuggestionList, suggestionOptionId } from "./SuggestionPopup";
@@ -93,6 +94,14 @@ export function Composer(props: ComposerProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const pendingCaret = useRef<number | null>(null);
   const listId = useId();
+
+  useComposerInsertions((inserted) => {
+    const next = withInsertion(text, inserted);
+    pendingCaret.current = next.length;
+    setText(next);
+    setCaret(next.length);
+    inputRef.current?.focus();
+  });
 
   const trigger = findTrigger(text, caret, suggestionSources);
   const suggestions = trigger ? matchSuggestions(trigger) : [];

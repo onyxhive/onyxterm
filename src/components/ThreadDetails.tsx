@@ -19,6 +19,7 @@ export interface ThreadDetailsActions {
   onOpenDiff: () => void;
   onBranchChanged: () => void;
   onWorktreeRemoved: (chat: Chat) => void;
+  onRunInTerminal: (command: string) => void;
   onError: (message: string) => void;
 }
 
@@ -29,7 +30,7 @@ interface ThreadDetailsProps {
   actions: ThreadDetailsActions;
 }
 
-function useScriptRunner(): ScriptRunner {
+function useScriptRunner(runInTerminal: (command: string) => void): ScriptRunner {
   const [activeScriptId, setActiveScriptId] = useState<string>();
   const [isStartPending, setIsStartPending] = useState(false);
   const run = useScriptRun(activeScriptId);
@@ -49,6 +50,7 @@ function useScriptRunner(): ScriptRunner {
       setIsStartPending(true);
     },
     dismiss: () => setActiveScriptId(undefined),
+    runInTerminal,
   };
 }
 
@@ -56,7 +58,10 @@ export function ThreadDetails({ task, project, preferredEditor, actions }: Threa
   const popup = usePopup();
   const target: GitTarget = { chat: task.id };
   const status = useGitStatus(target);
-  const runner = useScriptRunner();
+  const runner = useScriptRunner((command) => {
+    popup.close();
+    actions.onRunInTerminal(command);
+  });
   const [isCreatingPr, setIsCreatingPr] = useState(false);
   const { refresh } = status;
 

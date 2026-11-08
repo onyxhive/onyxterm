@@ -4,11 +4,14 @@ import { Board } from "./components/Board";
 import { ChatHeader, type ChatHeaderActions } from "./components/ChatHeader";
 import { ChatView, type ChatActions } from "./components/ChatView";
 import { DiffPanel, LATEST_TURN_SCOPE, type DiffScope } from "./components/DiffPanel";
+import { FilesPanel } from "./components/FilesPanel";
 import type { AgentChoice } from "./components/ComposerControls";
 import { NewChat, type ChatStart } from "./components/NewChat";
 import { PullRequestsPage } from "./components/PullRequestsPage";
 import { SettingsPage } from "./components/SettingsPage";
 import { Sidebar, type SidebarActions } from "./components/Sidebar";
+import { TerminalDrawer } from "./components/TerminalDrawer";
+import { openTerminal } from "./terminalSessions";
 import { SidebarToggle, TopBar, TopBarHeading, type View } from "./components/TitleBar";
 import { ThreadDetails, type ThreadDetailsActions } from "./components/ThreadDetails";
 import { Toasts } from "./components/Toasts";
@@ -22,6 +25,7 @@ import { collapsedSectionsFrom } from "./collapsedSections";
 import { useChats } from "./useChats";
 import { useProjectBranches } from "./useProjectBranches";
 import { useSettings } from "./useSettings";
+import { useWorkbench } from "./useWorkbench";
 import { useWorkspaces } from "./useWorkspaces";
 
 const DEFAULT_CHOICE: AgentChoice = {
@@ -63,6 +67,8 @@ export default function App() {
     () => window.matchMedia(ROOM_FOR_CHANGES_PANEL).matches,
   );
   const [diffScope, setDiffScope] = useState<DiffScope>(LATEST_TURN_SCOPE);
+  const workbench = useWorkbench();
+  const { closeFilesPanel, toggleFilesPanel, toggleTerminal } = workbench;
   const [newChatProjectId, setNewChatProjectId] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
@@ -110,14 +116,25 @@ export default function App() {
     if (selectedTaskId) void chatState.loadHistory(selectedTaskId);
   }, [selectedTaskId]);
 
+  function toggleChangesPanel() {
+    closeFilesPanel();
+    setIsChangesPanelOpen((isOpen) => !isOpen);
+  }
+
+  function toggleFiles() {
+    setIsChangesPanelOpen(false);
+    toggleFilesPanel();
+  }
+
   useEffect(() => {
-    const toggleChangesPanel = () => setIsChangesPanelOpen((isOpen) => !isOpen);
     const shortcuts: Record<string, () => void> = {
       n: () => openNewChat(),
       "shift+o": () => openNewChat(),
       b: () => setIsSidebarOpen((isOpen) => !isOpen),
       d: toggleChangesPanel,
       "alt+b": toggleChangesPanel,
+      j: toggleTerminal,
+      "shift+e": toggleFiles,
     };
     function runShortcut(event: KeyboardEvent) {
       if (!event.metaKey || event.ctrlKey) return;
@@ -177,6 +194,7 @@ export default function App() {
     onStop: () => withSelectedChat(chatState.stop),
     onOpenChanges: () => {
       setDiffScope(LATEST_TURN_SCOPE);
+      closeFilesPanel();
       setIsChangesPanelOpen(true);
     },
   };
@@ -184,7 +202,9 @@ export default function App() {
   const chatHeaderActions: ChatHeaderActions = {
     onMarkDone: () => withSelectedChat((chatId) => chatState.setState(chatId, "done")),
     onReopen: () => withSelectedChat((chatId) => chatState.setState(chatId, "review")),
-    onToggleChangesPanel: () => setIsChangesPanelOpen(!isChangesPanelOpen),
+    onToggleChangesPanel: toggleChangesPanel,
+    onToggleFilesPanel: toggleFiles,
+    onToggleTerminal: toggleTerminal,
     onNewChatInProject: () => openNewChat(selectedTask?.projectId),
   };
 
@@ -192,10 +212,16 @@ export default function App() {
     onPreferEditor: (editorId) => remember(PREFERRED_EDITOR_SETTING, editorId),
     onOpenDiff: () => {
       setDiffScope({ kind: "workingTree" });
+      closeFilesPanel();
       setIsChangesPanelOpen(true);
     },
     onBranchChanged: () => selectedTask && refreshBranch(selectedTask.projectId),
     onWorktreeRemoved: chatState.upsertChat,
+    onRunInTerminal: (command) =>
+      withSelectedChat((chatId) => {
+        workbench.showTerminal();
+        openTerminal(chatId, command).catch((error) => showError(String(error)));
+      }),
     onError: showError,
   };
 
@@ -233,6 +259,8 @@ export default function App() {
         }
         branch={selectedTask.branch ?? branches[selectedTask.projectId] ?? null}
         isChangesPanelOpen={isChangesPanelOpen}
+        isFilesPanelOpen={workbench.isFilesPanelOpen}
+        isTerminalOpen={workbench.isTerminalOpen}
         actions={chatHeaderActions}
       />
     );
@@ -278,7 +306,8 @@ export default function App() {
     return <ChatView task={selectedTask} actions={chatActions} />;
   }
 
-  const isChangesPanelVisible = view === "chat" && selectedTask !== null && isChangesPanelOpen;
+  const isChatOpen = view === "chat" && selectedTask !== null;
+  const isChangesPanelVisible = isChatOpen && isChangesPanelOpen;
 
   if (!workspace) return <div className="h-full bg-background" />;
 
@@ -319,7 +348,24 @@ export default function App() {
         <div className="flex min-w-0 flex-1 flex-col">
           <TopBar isSidebarOpen={isSidebarOpen}>{renderHeading()}</TopBar>
           {renderMain()}
+          {isChatOpen && workbench.isTerminalOpen && (
+            <TerminalDrawer
+              chatId={selectedTask.id}
+              height={workbench.terminalHeight}
+              onHeightChange={workbench.resizeTerminal}
+              onHide={workbench.hideTerminal}
+              onError={showError}
+            />
+          )}
         </div>
+        {isChatOpen && workbench.isFilesPanelOpen && (
+          <FilesPanel
+            key={selectedTask.id}
+            task={selectedTask}
+            preferredEditor={settings?.[PREFERRED_EDITOR_SETTING]}
+            onError={showError}
+          />
+        )}
         {isChangesPanelVisible && (
           <DiffPanel
             key={selectedTask.id}

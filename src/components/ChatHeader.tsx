@@ -1,17 +1,18 @@
-import { CheckCheck, Folder, GitBranch, PanelRight, RotateCcw, SquareTerminal } from "lucide-react";
+import { CheckCheck, Folder, FolderTree, GitBranch, PanelRight, RotateCcw, SquareTerminal } from "lucide-react";
 import type { ReactNode } from "react";
 import type { Project, Task } from "../types";
 import { PrBadge } from "./PrBadge";
 import { StatusLabel } from "./StatusBadge";
 import { cn, ICON_BUTTON } from "./ui";
 
-const RAW_TERMINAL_COMING = "Raw terminal coming later";
 const HIDDEN_HEADER_STATUSES = new Set(["done"]);
 
 export interface ChatHeaderActions {
   onMarkDone: () => void;
   onReopen: () => void;
   onToggleChangesPanel: () => void;
+  onToggleFilesPanel: () => void;
+  onToggleTerminal: () => void;
   onNewChatInProject: () => void;
 }
 
@@ -21,6 +22,8 @@ interface ChatHeaderProps {
   details: ReactNode;
   branch: string | null;
   isChangesPanelOpen: boolean;
+  isFilesPanelOpen: boolean;
+  isTerminalOpen: boolean;
   actions: ChatHeaderActions;
 }
 
@@ -60,7 +63,8 @@ function BranchLabel({ branch }: { branch: string }) {
   );
 }
 
-export function ChatHeader({ task, project, details, branch, isChangesPanelOpen, actions }: ChatHeaderProps) {
+export function ChatHeader(props: ChatHeaderProps) {
+  const { task, project, details, branch, isChangesPanelOpen, isFilesPanelOpen, isTerminalOpen, actions } = props;
   return (
     <>
       <nav aria-label="Chat breadcrumb" data-tauri-drag-region className="min-w-0 flex-1">
@@ -99,11 +103,26 @@ export function ChatHeader({ task, project, details, branch, isChangesPanelOpen,
       <div className="flex shrink-0 items-center gap-0.5">
         {details}
         <DoneToggle task={task} actions={actions} />
-        <span title={RAW_TERMINAL_COMING}>
-          <button type="button" className={ICON_BUTTON} aria-label="Open raw terminal" disabled>
-            <SquareTerminal />
-          </button>
-        </span>
+        <button
+          type="button"
+          className={ICON_BUTTON}
+          aria-label="Toggle terminal"
+          title="Terminal (⌘J)"
+          aria-pressed={isTerminalOpen}
+          onClick={actions.onToggleTerminal}
+        >
+          <SquareTerminal />
+        </button>
+        <button
+          type="button"
+          className={ICON_BUTTON}
+          aria-label="Toggle files"
+          title="Files (⌘⇧E)"
+          aria-pressed={isFilesPanelOpen}
+          onClick={actions.onToggleFilesPanel}
+        >
+          <FolderTree />
+        </button>
         <button
           type="button"
           className={ICON_BUTTON}
