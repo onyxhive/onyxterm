@@ -8,6 +8,7 @@ import {
   Eye,
   FolderPlus,
   GitBranch,
+  GitPullRequest,
   MessageCircleQuestion,
   Plus,
   Search,
@@ -33,6 +34,7 @@ export interface SidebarActions {
   onNewChat: (projectId?: string) => void;
   onAddProject: () => void;
   onToggleBoard: () => void;
+  onTogglePullRequests: () => void;
 }
 
 interface SidebarProps {
@@ -43,6 +45,7 @@ interface SidebarProps {
   selectedTaskId: string | null;
   isOpen: boolean;
   isBoardActive: boolean;
+  isPullRequestsActive: boolean;
   header: ReactNode;
   actions: SidebarActions;
 }
@@ -332,7 +335,7 @@ function EmptyProjects({ onAddProject }: { onAddProject: () => void }) {
 }
 
 export function Sidebar(props: SidebarProps) {
-  const { workspace, tasks, branches, sections, selectedTaskId, isOpen, isBoardActive, header, actions } = props;
+  const { workspace, tasks, branches, sections, selectedTaskId, isOpen, header, actions } = props;
   const [query, setQuery] = useState("");
   const isSearching = query.trim().length > 0;
   const visibleTasks = isSearching ? tasks.filter((task) => matchesQuery(task, query)) : tasks;
@@ -428,8 +431,14 @@ export function Sidebar(props: SidebarProps) {
           <UtilityItem
             icon={<SquareKanban />}
             label="Board"
-            isActive={isBoardActive}
+            isActive={props.isBoardActive}
             onClick={actions.onToggleBoard}
+          />
+          <UtilityItem
+            icon={<GitPullRequest />}
+            label="Pull requests"
+            isActive={props.isPullRequestsActive}
+            onClick={actions.onTogglePullRequests}
           />
           <UtilityItem icon={<ChartNoAxesColumn />} label="Usage" disabledReason="Usage coming later" />
         </div>

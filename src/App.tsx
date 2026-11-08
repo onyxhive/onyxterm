@@ -6,6 +6,7 @@ import { ChatView, type ChatActions } from "./components/ChatView";
 import { DiffPanel, LATEST_TURN_SCOPE, type DiffScope } from "./components/DiffPanel";
 import type { AgentChoice } from "./components/ComposerControls";
 import { NewChat, type ChatStart } from "./components/NewChat";
+import { PullRequestsPage } from "./components/PullRequestsPage";
 import { Sidebar, type SidebarActions } from "./components/Sidebar";
 import { SidebarToggle, TopBar, TopBarHeading, type View } from "./components/TitleBar";
 import { ThreadDetails, type ThreadDetailsActions } from "./components/ThreadDetails";
@@ -204,10 +205,12 @@ export default function App() {
     onNewChat: openNewChat,
     onAddProject: workspaceActions.onAddProject,
     onToggleBoard: () => setView(view === "board" ? "chat" : "board"),
+    onTogglePullRequests: () => setView(view === "prs" ? "chat" : "prs"),
   };
 
   function renderHeading() {
     if (view === "board") return <TopBarHeading title="Board" meta={`${workspaceTasks.length} chats`} />;
+    if (view === "prs") return <TopBarHeading title="Pull requests" meta={workspace?.name ?? ""} />;
     if (!selectedTask) return null;
     const project = projects.find((candidate) => candidate.id === selectedTask.projectId);
     return (
@@ -234,6 +237,7 @@ export default function App() {
 
   function renderMain() {
     if (!workspace || !settings) return null;
+    if (view === "prs") return <PullRequestsPage key={workspace.id} projects={workspace.projects} />;
     if (view === "board") {
       return (
         <Board
@@ -278,6 +282,7 @@ export default function App() {
         selectedTaskId={view === "chat" ? (selectedTask?.id ?? null) : null}
         isOpen={isSidebarOpen}
         isBoardActive={view === "board"}
+        isPullRequestsActive={view === "prs"}
         actions={sidebarActions}
         header={
           <WorkspaceSwitcher
