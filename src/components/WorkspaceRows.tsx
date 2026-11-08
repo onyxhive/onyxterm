@@ -70,7 +70,7 @@ interface OpenInRowProps extends TargetRowProps {
   onPreferEditor: (editorId: EditorId) => void;
 }
 
-function preferredOf(editors: Editor[], preferred: string | undefined): Editor | null {
+export function preferredOf(editors: Editor[], preferred: string | undefined): Editor | null {
   return editors.find((editor) => editor.id === preferred) ?? editors[0] ?? null;
 }
 
@@ -136,6 +136,7 @@ export interface ScriptRunner {
   run: ScriptRunState & { stop: () => Promise<void> };
   start: (scriptId: string) => void;
   dismiss: () => void;
+  runInTerminal: (command: string) => void;
 }
 
 interface ScriptRowsProps extends WorkspaceRowsProps {
@@ -145,20 +146,39 @@ interface ScriptRowsProps extends WorkspaceRowsProps {
 function ScriptRow({ script, runner }: { script: ProjectScript; runner: ScriptRunner }) {
   const isRunning = runner.activeScriptId === script.id && runner.run.isRunning;
   return (
-    <button
-      type="button"
-      aria-label={`Run ${script.name}`}
-      title={script.command}
-      disabled={isRunning}
-      className={DETAILS_ROW}
-      onClick={() => runner.start(script.id)}
-    >
-      <Play aria-hidden className={cn(DETAILS_ICON, isRunning && "text-info-foreground")} />
-      <span className={DETAILS_LABEL}>{script.name}</span>
-      <span className="ms-auto min-w-0 truncate font-mono text-2xs font-normal text-muted-foreground">
-        {script.command}
-      </span>
-    </button>
+    <div className="group/script relative flex items-center">
+      <button
+        type="button"
+        aria-label={`Run ${script.name}`}
+        title={script.command}
+        disabled={isRunning}
+        className={DETAILS_ROW}
+        onClick={() => runner.start(script.id)}
+      >
+        <Play aria-hidden className={cn(DETAILS_ICON, isRunning && "text-info-foreground")} />
+        <span className={DETAILS_LABEL}>{script.name}</span>
+        <span
+          className={cn(
+            "ms-auto min-w-0 truncate font-mono text-2xs font-normal text-muted-foreground",
+            "group-hover/script:me-7 group-focus-within/script:me-7",
+          )}
+        >
+          {script.command}
+        </span>
+      </button>
+      <button
+        type="button"
+        aria-label={`Open ${script.name} in terminal`}
+        title="Open in terminal"
+        onClick={() => runner.runInTerminal(script.command)}
+        className={cn(
+          DETAILS_ICON_ACTION,
+          "absolute right-1.5 opacity-0 group-hover/script:opacity-100 focus-visible:opacity-100",
+        )}
+      >
+        <SquareTerminal />
+      </button>
+    </div>
   );
 }
 
