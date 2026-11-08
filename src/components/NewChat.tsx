@@ -66,7 +66,7 @@ function ProjectPicker({ project, projects, onPick, onAddProject }: ProjectPicke
         <div
           role="menu"
           aria-label="Projects"
-          className={cn(MENU_POPUP, "absolute top-full left-0 mt-2 w-72 [--popup-opacity:100%]")}
+          className={cn(MENU_POPUP, "absolute top-full left-0 mt-2 w-72")}
         >
           <MenuLabel>Project</MenuLabel>
           {projects.map((candidate) => (
@@ -138,19 +138,26 @@ export function NewChat(props: NewChatProps) {
           onAddProject={onAddProject}
         />
       )}
+      <PermissionModePicker mode={permissionMode} onChange={setPermissionMode} />
+    </>
+  );
+
+  const agentControls = (
+    <>
       <ModelPicker
         choice={resolvedChoice}
         models={choices}
+        align="end"
         onChange={(update) => setChoice({ ...choice, ...update })}
       />
       {effortOptions.length > 0 && (
         <EffortPicker
           effort={effort}
           levels={effortOptions}
+          align="end"
           onChange={(next) => setChoice({ ...choice, effort: next })}
         />
       )}
-      <PermissionModePicker mode={permissionMode} onChange={setPermissionMode} />
     </>
   );
 
@@ -211,6 +218,7 @@ export function NewChat(props: NewChatProps) {
           suggestionSources={sources}
           onSubmit={start}
           controls={controls}
+          agentControls={agentControls}
           footnote={footnote}
           sendBlockedReason={sendBlockedReason()}
         />

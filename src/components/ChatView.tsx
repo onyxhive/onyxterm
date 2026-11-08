@@ -123,12 +123,13 @@ export function ChatView({ task, projectPath, actions }: ChatViewProps) {
 
   const isTurnSettled = SETTLED_STATUSES.includes(task.status);
 
-  const controls = (
+  const agentControls = (
     <>
       <ModelPicker
         choice={choice}
         models={modelChoices(models)}
         side="top"
+        align="end"
         disabledReason={choiceLockReason}
         onChange={(update) => actions.onChangeChoice({ ...choice, ...update })}
       />
@@ -137,10 +138,16 @@ export function ChatView({ task, projectPath, actions }: ChatViewProps) {
           effort={task.effort}
           levels={efforts}
           side="top"
+          align="end"
           disabledReason={choiceLockReason}
           onChange={(effort) => actions.onChangeChoice({ ...choice, effort })}
         />
       )}
+    </>
+  );
+
+  const controls = (
+    <>
       <PermissionModePicker
         mode={task.permissionMode}
         side="top"
@@ -198,6 +205,7 @@ export function ChatView({ task, projectPath, actions }: ChatViewProps) {
               suggestionSources={sources}
               onSubmit={submit}
               controls={controls}
+              agentControls={agentControls}
               drawer={question ? <QuestionDrawer answers={answers} /> : undefined}
               canSubmitEmpty={question !== null && answers.canSubmit("")}
               submitLabel={question ? "Submit answer" : undefined}

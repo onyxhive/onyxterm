@@ -48,7 +48,7 @@ export function PermissionModePicker({ mode, onChange, side = "bottom", disabled
         onClick={popup.toggle}
       >
         <CurrentIcon className={toneOf(mode)} />
-        <span className={toneOf(mode)}>{current.shortLabel}</span>
+        <span className={cn(toneOf(mode), "@max-[30rem]:hidden")}>{current.shortLabel}</span>
       </button>
       {popup.isOpen && (
         <div

@@ -1,11 +1,12 @@
 import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { Paperclip } from "lucide-react";
 import { useComposerInsertions, withInsertion } from "../composerInsertions";
 import { sendNeedsModifier } from "../preferences";
 import type { Suggestion } from "../types";
 import { findTrigger, matchSuggestions, type SuggestionSources } from "./composerTrigger";
 import { MentionText } from "./MentionText";
 import { SuggestionList, suggestionOptionId } from "./SuggestionPopup";
-import { cn } from "./ui";
+import { cn, ICON_BUTTON } from "./ui";
 
 interface ComposerProps {
   placeholder: string;
@@ -13,6 +14,7 @@ interface ComposerProps {
   suggestionSources: SuggestionSources;
   onSubmit: (text: string) => void;
   controls?: ReactNode;
+  agentControls?: ReactNode;
   drawer?: ReactNode;
   footnote?: ReactNode;
   sendBlockedReason?: string;
@@ -22,6 +24,8 @@ interface ComposerProps {
 }
 
 const DEFAULT_SUBMIT_LABEL = "Send message";
+const MENTION_TRIGGER = "@";
+const WHITESPACE_END = /\s$/;
 const COMPOSER_TEXT = "text-sm leading-relaxed whitespace-pre-wrap break-words";
 
 export const COMPOSER_PLACEHOLDER = "Ask anything. @ files, / commands";
@@ -88,7 +92,7 @@ function AttachedDrawer({ children }: { children: ReactNode }) {
 }
 
 export function Composer(props: ComposerProps) {
-  const { placeholder, variant, suggestionSources, onSubmit, controls, drawer, footnote } = props;
+  const { placeholder, variant, suggestionSources, onSubmit, controls, agentControls, drawer, footnote } = props;
   const { sendBlockedReason, canSubmitEmpty = false, submitLabel = DEFAULT_SUBMIT_LABEL, onStop } = props;
   const [text, setText] = useState("");
   const [caret, setCaret] = useState(0);
@@ -138,6 +142,17 @@ export function Composer(props: ComposerProps) {
     setText(text.slice(0, trigger.start) + inserted + text.slice(caret));
     setCaret(nextCaret);
     setActiveIndex(0);
+    inputRef.current?.focus();
+  }
+
+  function startMention() {
+    const before = text.slice(0, caret);
+    const inserted = before === "" || WHITESPACE_END.test(before) ? MENTION_TRIGGER : ` ${MENTION_TRIGGER}`;
+    const nextCaret = caret + inserted.length;
+    pendingCaret.current = nextCaret;
+    setText(before + inserted + text.slice(caret));
+    setCaret(nextCaret);
+    setDismissedStart(null);
     inputRef.current?.focus();
   }
 
@@ -191,15 +206,15 @@ export function Composer(props: ComposerProps) {
   return (
     <div className="relative mx-auto w-full max-w-(--chat-content-max-width)">
       {drawerContent && <AttachedDrawer>{drawerContent}</AttachedDrawer>}
-      <div className="glass composer-outline relative z-10 rounded-2xl">
-        <div className={cn("relative px-4 pb-2", variant === "hero" ? "pt-4" : "pt-3.5")}>
+      <div className="glass composer-outline relative z-10 rounded-[1.25rem]">
+        <div className={cn("relative px-4.5 pb-2", variant === "hero" ? "pt-4.5" : "pt-4")}>
           <div className="relative max-h-[40vh] overflow-y-auto">
             <div aria-hidden className={cn(COMPOSER_TEXT, "pointer-events-none absolute inset-0 text-foreground")}>
               <MentionText text={text} />
             </div>
             <textarea
               ref={inputRef}
-              rows={variant === "hero" ? 2 : 1}
+              rows={variant === "hero" ? 3 : 1}
               value={text}
               placeholder={placeholder}
               aria-label={placeholder}
@@ -224,8 +239,20 @@ export function Composer(props: ComposerProps) {
             />
           </div>
         </div>
-        <div className="flex min-w-0 items-center gap-2 px-2 pb-2">
-          <div className="flex min-w-0 flex-1 items-center gap-0.5">{controls}</div>
+        <div className="@container flex min-w-0 items-center gap-2 px-2.5 pb-2.5">
+          <div className="flex min-w-0 flex-1 items-center gap-0.5">
+            <button
+              type="button"
+              aria-label="Attach a file or folder"
+              title="Attach a file or folder (@)"
+              className={ICON_BUTTON}
+              onClick={startMention}
+            >
+              <Paperclip />
+            </button>
+            {controls}
+          </div>
+          <div className="flex shrink-0 items-center gap-0.5">{agentControls}</div>
           {onStop && showsStop ? (
             <StopButton onStop={onStop} />
           ) : (

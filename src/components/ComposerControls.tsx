@@ -80,8 +80,16 @@ export const POPUP_SIDE_CLASS: Record<PopupSide, string> = {
   bottom: "top-full mt-2",
 };
 
+export type PopupAlign = "start" | "end";
+
+export const POPUP_ALIGN_CLASS: Record<PopupAlign, string> = {
+  start: "left-0",
+  end: "right-0",
+};
+
 interface PickerPlacement {
   side?: PopupSide;
+  align?: PopupAlign;
   disabledReason?: string;
 }
 
@@ -109,7 +117,8 @@ function GroupLabel({ provider, children }: { provider: Provider; children: Reac
   );
 }
 
-export function ModelPicker({ choice, models, onChange, side = "bottom", disabledReason }: ModelPickerProps) {
+export function ModelPicker(props: ModelPickerProps) {
+  const { choice, models, onChange, side = "bottom", align = "start", disabledReason } = props;
   const popup = usePopup();
   const selectedModel = models.find((model) => model.value === choice.model);
   const commandName = choice.command.replace(/^claude-?/, "") || "claude";
@@ -132,7 +141,7 @@ export function ModelPicker({ choice, models, onChange, side = "bottom", disable
       >
         <ProviderLogo provider={choice.provider} size={15} />
         <span className="max-w-40 truncate">{selectedModel?.label ?? choice.model}</span>
-        <span className="font-normal text-muted-foreground">{commandName}</span>
+        <span className="font-normal text-muted-foreground @max-[36rem]:hidden">{commandName}</span>
         <ChevronDown className="-me-1 size-3.5" />
       </button>
       {popup.isOpen && (
@@ -141,8 +150,9 @@ export function ModelPicker({ choice, models, onChange, side = "bottom", disable
           aria-label="Choose the agent and model"
           className={cn(
             MENU_POPUP,
-            "absolute left-0 grid w-[32rem] grid-cols-[12rem_minmax(0,1fr)] overflow-hidden p-0",
+            "absolute grid w-[32rem] grid-cols-[12rem_minmax(0,1fr)] overflow-hidden p-0",
             POPUP_SIDE_CLASS[side],
+            POPUP_ALIGN_CLASS[align],
           )}
         >
           <div className="flex flex-col gap-px border-r border-border/70 bg-muted/40 p-1">
@@ -208,7 +218,8 @@ interface EffortPickerProps extends PickerPlacement {
   onChange: (effort: string) => void;
 }
 
-export function EffortPicker({ effort, levels, onChange, side = "bottom", disabledReason }: EffortPickerProps) {
+export function EffortPicker(props: EffortPickerProps) {
+  const { effort, levels, onChange, side = "bottom", align = "start", disabledReason } = props;
   const popup = usePopup();
   return (
     <div className="relative" ref={popup.rootRef} title={disabledReason}>
@@ -222,11 +233,15 @@ export function EffortPicker({ effort, levels, onChange, side = "bottom", disabl
         onClick={popup.toggle}
       >
         <Gauge />
-        <span className="capitalize">{effort}</span>
+        <span className="capitalize @max-[30rem]:hidden">{effort}</span>
         <EffortGlyph levels={levels} current={effort} />
       </button>
       {popup.isOpen && (
-        <div role="menu" aria-label="Effort" className={cn(MENU_POPUP, "absolute left-0 w-44", POPUP_SIDE_CLASS[side])}>
+        <div
+          role="menu"
+          aria-label="Effort"
+          className={cn(MENU_POPUP, "absolute w-44", POPUP_SIDE_CLASS[side], POPUP_ALIGN_CLASS[align])}
+        >
           <MenuLabel>Effort</MenuLabel>
           {levels.map((level) => (
             <button
@@ -265,7 +280,7 @@ export function ChatWorkspaceControls({ worktreePath, branch }: ChatWorkspaceCon
       )}
       {branch && (
         <StaticControl icon={<GitBranch />} title={`Branch: ${branch}`}>
-          <span className="max-w-40 truncate">{branch}</span>
+          <span className="max-w-28 truncate">{branch}</span>
         </StaticControl>
       )}
     </>
@@ -276,7 +291,7 @@ export function StaticControl({ icon, children, title }: { icon: ReactNode; chil
   return (
     <span className={STATIC_CONTROL_CLASS} title={title}>
       {icon}
-      {children}
+      <span className="flex min-w-0 @max-[44rem]:hidden">{children}</span>
     </span>
   );
 }
