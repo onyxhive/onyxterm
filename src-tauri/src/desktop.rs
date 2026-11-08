@@ -5,7 +5,7 @@ use tauri::State;
 
 use crate::db::Db;
 use crate::error::{AppError, AppResult};
-use crate::git::project_root;
+use crate::git::{GitTarget, workdir};
 use crate::subprocess::{self, Limits, in_background};
 
 const QUICK_LIMITS: Limits = Limits { timeout: Duration::from_secs(5), max_output: 4096, label: "system command" };
@@ -40,8 +40,8 @@ pub async fn machine_name() -> AppResult<String> {
 }
 
 #[tauri::command]
-pub async fn reveal_project(db: State<'_, Db>, project_id: String) -> AppResult<()> {
-    let root = project_root(&db, &project_id)?;
+pub async fn reveal_project(db: State<'_, Db>, target: GitTarget) -> AppResult<()> {
+    let root = workdir(&db, &target)?.root;
     if !root.is_dir() {
         return Err(AppError::NotFound("project folder"));
     }

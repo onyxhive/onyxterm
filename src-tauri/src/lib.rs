@@ -17,6 +17,7 @@ mod subagents;
 mod subprocess;
 mod transcripts;
 mod workspaces;
+mod worktrees;
 
 use tauri::{Manager, RunEvent};
 
@@ -59,6 +60,7 @@ pub fn run() {
             chats::list_chats,
             chats::create_chat,
             chats::set_chat_state,
+            chats::remove_chat_worktree,
             settings::get_settings,
             settings::set_setting,
             runtime::send_message,

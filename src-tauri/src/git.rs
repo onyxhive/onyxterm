@@ -3,10 +3,11 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use crate::branches::ProjectBranches;
+use crate::chats;
 use crate::db::Db;
 use crate::error::{AppError, AppResult};
 use crate::subprocess::{self, Limits, Output, in_background};
@@ -21,6 +22,7 @@ const MAX_PATH_LENGTH: usize = 4096;
 const MAX_COMMIT_FILES: usize = 1000;
 const MAX_MESSAGE_LENGTH: usize = 20_000;
 const PREFERRED_REMOTE: &str = "origin";
+const DEFAULT_BRANCH_CANDIDATES: [&str; 2] = ["main", "master"];
 const MAX_SLUG_LENGTH: usize = 40;
 const CHAT_BRANCH_PREFIX: &str = "onyx/";
 const FALLBACK_SLUG: &str = "chat";
@@ -88,7 +90,7 @@ impl Git {
         Ok(self.run(arguments, READ_LIMITS)?.is_success)
     }
 
-    fn write(&self, arguments: &[&str]) -> AppResult<String> {
+    pub fn write(&self, arguments: &[&str]) -> AppResult<String> {
         self.output_within(arguments, WRITE_LIMITS)
     }
 }
@@ -132,6 +134,8 @@ pub struct GitStatus {
     pub upstream: Option<String>,
     pub ahead: u64,
     pub behind: u64,
+    pub ahead_of_default: u64,
+    pub has_remote: bool,
     pub files: Vec<ChangedFile>,
 }
 
@@ -317,7 +321,7 @@ pub fn validated_branch(git: &Git, name: &str) -> AppResult<String> {
     Ok(output.stdout.trim().to_string())
 }
 
-fn validated_revision(git: &Git, revision: &str) -> AppResult<String> {
+pub fn validated_revision(git: &Git, revision: &str) -> AppResult<String> {
     let revision = revision.trim();
     let invalid = || AppError::Invalid(format!("{revision:?} is not a commit in this repository"));
     if !is_option_safe(revision, MAX_REF_LENGTH) {
@@ -361,8 +365,43 @@ pub fn line_counts(git: &Git, base: &[&str]) -> AppResult<LineCounts> {
     Ok(counts)
 }
 
+fn remote_default_base(git: &Git, remote: &str) -> AppResult<Option<String>> {
+    let output = git.run(&["symbolic-ref", "--quiet", "--short", &format!("{REMOTE_PREFIX}{remote}/HEAD")], READ_LIMITS)?;
+    if output.is_success && !output.stdout.trim().is_empty() {
+        return Ok(Some(output.stdout.trim().to_string()));
+    }
+    for candidate in DEFAULT_BRANCH_CANDIDATES {
+        let base = format!("{remote}/{candidate}");
+        if ref_exists(git, &format!("{REMOTE_PREFIX}{base}"))? {
+            return Ok(Some(base));
+        }
+    }
+    Ok(None)
+}
+
+fn commits_ahead_of(git: &Git, base: &str) -> AppResult<u64> {
+    let counted = git.output(&["rev-list", "--count", &format!("{base}..HEAD")])?;
+    Ok(counted.trim().parse().unwrap_or_default())
+}
+
+fn apply_default_base_divergence(git: &Git, status: &mut GitStatus) -> AppResult<()> {
+    let Ok(remote) = push_remote(git) else { return Ok(()) };
+    status.has_remote = true;
+    let Some(branch) = status.branch.clone() else { return Ok(()) };
+    let Some(base) = remote_default_base(git, &remote)? else { return Ok(()) };
+    let ahead = commits_ahead_of(git, &base)?;
+    if base != format!("{remote}/{branch}") {
+        status.ahead_of_default = ahead;
+    }
+    if status.upstream.is_none() {
+        (status.ahead, status.behind) = (ahead, 0);
+    }
+    Ok(())
+}
+
 pub fn status(git: &Git) -> AppResult<GitStatus> {
     let mut status = parse_status(&git.output(&["status", "--porcelain=v2", "--branch", "-z"])?);
+    apply_default_base_divergence(git, &mut status)?;
     let mut counts = line_counts(git, &[])?;
     for (path, (added, removed)) in line_counts(git, &["--cached"])? {
         let entry = counts.entry(path).or_default();
@@ -507,23 +546,13 @@ fn slug(title: &str) -> String {
     if trimmed.is_empty() { FALLBACK_SLUG.to_string() } else { trimmed.to_string() }
 }
 
-fn unused_chat_branch(git: &Git, title: &str) -> AppResult<String> {
+pub fn unused_chat_branch(git: &Git, title: &str) -> AppResult<String> {
     let base = format!("{CHAT_BRANCH_PREFIX}{}", slug(title));
     if !ref_exists(git, &format!("{LOCAL_PREFIX}{base}"))? {
         return Ok(base);
     }
     let suffix: String = uuid::Uuid::new_v4().simple().to_string().chars().take(SUFFIX_LENGTH).collect();
     Ok(format!("{base}-{suffix}"))
-}
-
-pub fn start_chat_branch(root: &Path, title: &str) -> AppResult<String> {
-    let git = Git::at(root);
-    if !is_repository(&git) {
-        return Err(AppError::Invalid("the project is not a git repository".into()));
-    }
-    let name = validated_branch(&git, &unused_chat_branch(&git, title)?)?;
-    create_branch(&git, &name, None)?;
-    Ok(name)
 }
 
 pub fn branch_at(root: &Path) -> Option<String> {
@@ -535,8 +564,36 @@ pub fn project_root(db: &Db, project_id: &str) -> AppResult<PathBuf> {
     Ok(PathBuf::from(project(&db.connection(), project_id)?.path))
 }
 
-pub fn project_git(db: &Db, project_id: &str) -> AppResult<Git> {
-    Ok(Git::at(project_root(db, project_id)?))
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub enum GitTarget {
+    Project(String),
+    Chat(String),
+}
+
+pub struct Workdir {
+    pub project_id: String,
+    pub root: PathBuf,
+}
+
+impl Workdir {
+    pub fn git(&self) -> Git {
+        Git::at(&self.root)
+    }
+}
+
+pub fn workdir(db: &Db, target: &GitTarget) -> AppResult<Workdir> {
+    match target {
+        GitTarget::Project(project_id) => {
+            Ok(Workdir { project_id: project_id.clone(), root: project_root(db, project_id)? })
+        }
+        GitTarget::Chat(chat_id) => {
+            validated_id(chat_id, "chat")?;
+            let connection = db.connection();
+            let chat = chats::chat(&connection, chat_id)?;
+            Ok(Workdir { root: chats::chat_root(&connection, &chat)?, project_id: chat.project_id })
+        }
+    }
 }
 
 fn validated_files(files: Option<Vec<String>>) -> AppResult<Vec<String>> {
@@ -548,14 +605,14 @@ fn validated_files(files: Option<Vec<String>>) -> AppResult<Vec<String>> {
 }
 
 #[tauri::command]
-pub async fn git_status(db: State<'_, Db>, project_id: String) -> AppResult<GitStatus> {
-    let git = project_git(&db, &project_id)?;
+pub async fn git_status(db: State<'_, Db>, target: GitTarget) -> AppResult<GitStatus> {
+    let git = workdir(&db, &target)?.git();
     in_background(move || status(&git)).await
 }
 
 #[tauri::command]
-pub async fn git_branches(db: State<'_, Db>, project_id: String) -> AppResult<Branches> {
-    let git = project_git(&db, &project_id)?;
+pub async fn git_branches(db: State<'_, Db>, target: GitTarget) -> AppResult<Branches> {
+    let git = workdir(&db, &target)?.git();
     in_background(move || branches(&git)).await
 }
 
@@ -563,11 +620,12 @@ pub async fn git_branches(db: State<'_, Db>, project_id: String) -> AppResult<Br
 pub async fn git_checkout(
     db: State<'_, Db>,
     project_branches: State<'_, ProjectBranches>,
-    project_id: String,
+    target: GitTarget,
     branch: String,
     force: Option<bool>,
 ) -> AppResult<GitStatus> {
-    let git = project_git(&db, &project_id)?;
+    let workdir = workdir(&db, &target)?;
+    let git = workdir.git();
     let switched = in_background(move || {
         let branch = validated_branch(&git, &branch)?;
         if !force.unwrap_or(false) {
@@ -577,7 +635,7 @@ pub async fn git_checkout(
         status(&git)
     })
     .await;
-    project_branches.forget(&project_id);
+    project_branches.forget(&workdir.project_id);
     switched
 }
 
@@ -585,12 +643,13 @@ pub async fn git_checkout(
 pub async fn git_create_branch(
     db: State<'_, Db>,
     project_branches: State<'_, ProjectBranches>,
-    project_id: String,
+    target: GitTarget,
     name: String,
     from: Option<String>,
     force: Option<bool>,
 ) -> AppResult<GitStatus> {
-    let git = project_git(&db, &project_id)?;
+    let workdir = workdir(&db, &target)?;
+    let git = workdir.git();
     let created = in_background(move || {
         let name = validated_branch(&git, &name)?;
         let from = from.map(|from| validated_revision(&git, &from)).transpose()?;
@@ -601,13 +660,13 @@ pub async fn git_create_branch(
         status(&git)
     })
     .await;
-    project_branches.forget(&project_id);
+    project_branches.forget(&workdir.project_id);
     created
 }
 
 #[tauri::command]
-pub async fn git_diff(db: State<'_, Db>, project_id: String, file: Option<String>) -> AppResult<Diff> {
-    let git = project_git(&db, &project_id)?;
+pub async fn git_diff(db: State<'_, Db>, target: GitTarget, file: Option<String>) -> AppResult<Diff> {
+    let git = workdir(&db, &target)?.git();
     let file = file.map(|file| validated_path(&file)).transpose()?;
     in_background(move || diff_against_head(&git, file.as_deref())).await
 }
@@ -615,19 +674,19 @@ pub async fn git_diff(db: State<'_, Db>, project_id: String, file: Option<String
 #[tauri::command]
 pub async fn git_commit(
     db: State<'_, Db>,
-    project_id: String,
+    target: GitTarget,
     message: String,
     files: Option<Vec<String>>,
 ) -> AppResult<CommitResult> {
-    let git = project_git(&db, &project_id)?;
+    let git = workdir(&db, &target)?.git();
     let message = validated_message(&message)?;
     let files = validated_files(files)?;
     in_background(move || commit(&git, &message, &files)).await
 }
 
 #[tauri::command]
-pub async fn git_push(db: State<'_, Db>, project_id: String) -> AppResult<GitStatus> {
-    let git = project_git(&db, &project_id)?;
+pub async fn git_push(db: State<'_, Db>, target: GitTarget) -> AppResult<GitStatus> {
+    let git = workdir(&db, &target)?.git();
     in_background(move || {
         push(&git)?;
         status(&git)
@@ -802,13 +861,13 @@ mod tests {
     }
 
     #[test]
-    fn starts_a_chat_branch_from_the_current_branch() {
-        let Some((root, git)) = scratch_repo("chat-branch") else { return };
+    fn names_an_unused_chat_branch_from_the_title() {
+        let Some((_, git)) = scratch_repo("chat-branch") else { return };
         git.output(&["commit", "-q", "--allow-empty", "-m", "start"]).unwrap();
-        let first = start_chat_branch(&root, "Fix the sort").unwrap();
+        let first = unused_chat_branch(&git, "Fix the sort").unwrap();
         assert_eq!(first, "onyx/fix-the-sort");
-        assert_eq!(branch_at(&root).as_deref(), Some("onyx/fix-the-sort"));
-        let second = start_chat_branch(&root, "Fix the sort").unwrap();
+        git.output(&["branch", &first]).unwrap();
+        let second = unused_chat_branch(&git, "Fix the sort").unwrap();
         assert!(second.starts_with("onyx/fix-the-sort-") && second != first);
     }
 
@@ -824,6 +883,36 @@ mod tests {
         let pushed = status(&git).unwrap();
         assert_eq!(pushed.upstream.as_deref(), Some("origin/main"));
         assert_eq!(pushed.ahead, 0);
+        assert!(pushed.has_remote);
+    }
+
+    #[test]
+    fn counts_commits_ahead_of_the_remote_default_branch_before_the_first_push() {
+        let Some((root, git)) = scratch_repo("ahead") else { return };
+        let Some((remote_root, remote)) = scratch_repo("ahead-remote") else { return };
+        remote.output(&["config", "receive.denyCurrentBranch", "ignore"]).unwrap();
+        write(&root, "a.txt", "one\n");
+        commit(&git, "start", &[]).unwrap();
+        git.output(&["remote", "add", "origin", remote_root.to_str().unwrap()]).unwrap();
+        push(&git).unwrap();
+        create_branch(&git, "topic", None).unwrap();
+        write(&root, "a.txt", "two\n");
+        commit(&git, "change", &[]).unwrap();
+        let topic = status(&git).unwrap();
+        assert_eq!((topic.upstream.as_deref(), topic.ahead, topic.ahead_of_default), (None, 1, 1));
+        checkout(&git, "main").unwrap();
+        let main = status(&git).unwrap();
+        assert_eq!((main.ahead, main.ahead_of_default), (0, 0));
+    }
+
+    #[test]
+    fn reports_no_remote_for_a_local_only_repository() {
+        let Some((root, git)) = scratch_repo("no-remote") else { return };
+        write(&root, "a.txt", "one\n");
+        commit(&git, "start", &[]).unwrap();
+        let local = status(&git).unwrap();
+        assert!(!local.has_remote);
+        assert_eq!(local.ahead_of_default, 0);
     }
 
     #[test]

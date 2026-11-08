@@ -9,7 +9,6 @@ use crate::db::{Db, new_id};
 use crate::error::{AppError, AppResult};
 use crate::git::{self, Git, validated_id};
 use crate::subprocess::{Limits, in_background};
-use crate::workspaces::project;
 
 const CHECKPOINT_NAMESPACE: &str = "refs/onyx/checkpoints";
 const SCRATCH_INDEX_PREFIX: &str = "onyx-checkpoint-";
@@ -171,7 +170,7 @@ fn chat_git(db: &Db, chat_id: &str) -> AppResult<Git> {
     validated_id(chat_id, "chat")?;
     let connection = db.connection();
     let chat = chats::chat(&connection, chat_id)?;
-    Ok(Git::at(project(&connection, &chat.project_id)?.path))
+    Ok(Git::at(chats::chat_root(&connection, &chat)?))
 }
 
 #[tauri::command]

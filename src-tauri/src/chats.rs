@@ -1,9 +1,9 @@
 use std::collections::HashSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection, OptionalExtension, Row, params};
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
 use crate::branches::ProjectBranches;
 use crate::db::{Db, new_id, now_millis};
@@ -12,6 +12,7 @@ use crate::git;
 use crate::prs::{ChatPullRequest, GitHub};
 use crate::subprocess::in_background;
 use crate::workspaces::project;
+use crate::worktrees::{self, WORK_IN_WORKTREES_SETTING, Worktree};
 
 const MAX_TITLE_LENGTH: usize = 200;
 const MAX_OPTION_LENGTH: usize = 64;
@@ -28,6 +29,10 @@ pub enum ChatState {
 }
 
 impl ChatState {
+    fn is_turn_active(self) -> bool {
+        matches!(self, ChatState::Running | ChatState::Permission | ChatState::Question)
+    }
+
     fn as_str(self) -> &'static str {
         match self {
             ChatState::Running => "running",
@@ -119,6 +124,23 @@ pub struct Chat {
     pub created_at: i64,
     pub updated_at: i64,
     pub branch: Option<String>,
+    pub worktree_path: Option<String>,
+    pub is_worktree_removed: bool,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ChatCheckout {
+    pub branch: Option<String>,
+    pub worktree_path: Option<String>,
+}
+
+impl From<Worktree> for ChatCheckout {
+    fn from(worktree: Worktree) -> Self {
+        ChatCheckout {
+            branch: Some(worktree.branch),
+            worktree_path: Some(worktree.path.to_string_lossy().into_owned()),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -138,14 +160,13 @@ pub struct NewChat {
     pub model: String,
     pub effort: String,
     pub title: String,
-    #[serde(default)]
-    pub new_branch: bool,
 }
 
 const CHAT_COLUMNS: &str = "id, workspace_id, project_id, provider, command, model, effort, session_id, title, \
-    state, created_at, updated_at, branch";
+    state, created_at, updated_at, branch, worktree_path";
 
 fn chat_from_row(row: &Row<'_>) -> rusqlite::Result<Chat> {
+    let worktree_path: Option<String> = row.get(13)?;
     Ok(Chat {
         id: row.get(0)?,
         workspace_id: row.get(1)?,
@@ -160,6 +181,8 @@ fn chat_from_row(row: &Row<'_>) -> rusqlite::Result<Chat> {
         created_at: row.get(10)?,
         updated_at: row.get(11)?,
         branch: row.get(12)?,
+        is_worktree_removed: worktree_path.as_deref().is_some_and(|path| !Path::new(path).is_dir()),
+        worktree_path,
     })
 }
 
@@ -186,13 +209,23 @@ pub fn chat(connection: &Connection, chat_id: &str) -> AppResult<Chat> {
         .ok_or(AppError::NotFound("chat"))
 }
 
+pub fn chat_root(connection: &Connection, chat: &Chat) -> AppResult<PathBuf> {
+    let Some(worktree) = &chat.worktree_path else {
+        return Ok(PathBuf::from(project(connection, &chat.project_id)?.path));
+    };
+    if chat.is_worktree_removed {
+        return Err(AppError::NotFound("this chat's worktree"));
+    }
+    Ok(PathBuf::from(worktree))
+}
+
 pub fn chats(connection: &Connection) -> AppResult<Vec<Chat>> {
     let mut statement = connection.prepare(&format!("SELECT {CHAT_COLUMNS} FROM chats ORDER BY updated_at DESC"))?;
     let all = statement.query_map([], chat_from_row)?.collect::<Result<Vec<_>, _>>()?;
     Ok(all)
 }
 
-pub fn insert_chat(connection: &Connection, draft: NewChat, branch: Option<String>) -> AppResult<Chat> {
+pub fn insert_chat(connection: &Connection, draft: NewChat, checkout: ChatCheckout) -> AppResult<Chat> {
     let draft = validated(draft)?;
     let owner = project(connection, &draft.project_id)?;
     let now = now_millis();
@@ -209,10 +242,14 @@ pub fn insert_chat(connection: &Connection, draft: NewChat, branch: Option<Strin
         state: ChatState::Review,
         created_at: now,
         updated_at: now,
-        branch,
+        branch: checkout.branch,
+        worktree_path: checkout.worktree_path,
+        is_worktree_removed: false,
     };
     connection.execute(
-        &format!("INSERT INTO chats ({CHAT_COLUMNS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)"),
+        &format!(
+            "INSERT INTO chats ({CHAT_COLUMNS}) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)"
+        ),
         params![
             created.id,
             created.workspace_id,
@@ -226,7 +263,8 @@ pub fn insert_chat(connection: &Connection, draft: NewChat, branch: Option<Strin
             created.state.as_str(),
             created.created_at,
             created.updated_at,
-            created.branch
+            created.branch,
+            created.worktree_path
         ],
     )?;
     Ok(created)
@@ -285,23 +323,63 @@ pub fn list_chats(app: AppHandle, db: State<'_, Db>, github: State<'_, GitHub>) 
     Ok(all.into_iter().map(|chat| with_pull_request(&github, chat)).collect())
 }
 
+fn works_in_worktrees(connection: &Connection) -> AppResult<bool> {
+    let value: Option<String> = connection
+        .query_row("SELECT value FROM settings WHERE key = ?1", [WORK_IN_WORKTREES_SETTING], |row| row.get(0))
+        .optional()?;
+    Ok(value.as_deref() == Some("true"))
+}
+
+fn worktrees_root(app: &AppHandle) -> AppResult<PathBuf> {
+    let data_dir = app.path().app_data_dir().map_err(|error| AppError::Agent(error.to_string()))?;
+    Ok(worktrees::worktrees_root(&data_dir))
+}
+
+async fn checkout_for(app: &AppHandle, root: PathBuf, title: String, in_worktree: bool) -> AppResult<ChatCheckout> {
+    if !in_worktree {
+        let branch = in_background(move || Ok(git::branch_at(&root))).await?;
+        return Ok(ChatCheckout { branch, worktree_path: None });
+    }
+    let worktrees_root = worktrees_root(app)?;
+    let created = in_background(move || worktrees::create(&root, &worktrees_root, &title)).await?;
+    Ok(created.into())
+}
+
 #[tauri::command]
-pub async fn create_chat(
+pub async fn create_chat(app: AppHandle, db: State<'_, Db>, draft: NewChat) -> AppResult<Chat> {
+    let draft = validated(draft)?;
+    let (root, in_worktree) = {
+        let connection = db.connection();
+        (PathBuf::from(project(&connection, &draft.project_id)?.path), works_in_worktrees(&connection)?)
+    };
+    let checkout = checkout_for(&app, root, draft.title.clone(), in_worktree).await?;
+    insert_chat(&db.connection(), draft, checkout)
+}
+
+#[tauri::command]
+pub async fn remove_chat_worktree(
+    app: AppHandle,
     db: State<'_, Db>,
     project_branches: State<'_, ProjectBranches>,
-    draft: NewChat,
+    chat_id: String,
 ) -> AppResult<Chat> {
-    let draft = validated(draft)?;
-    let root = project(&db.connection(), &draft.project_id)?.path;
-    let title = draft.title.clone();
-    let branch = if draft.new_branch {
-        let created = in_background(move || git::start_chat_branch(Path::new(&root), &title)).await?;
-        project_branches.forget(&draft.project_id);
-        Some(created)
-    } else {
-        in_background(move || Ok(git::branch_at(Path::new(&root)))).await?
+    git::validated_id(&chat_id, "chat")?;
+    let (chat, project_root) = {
+        let connection = db.connection();
+        let chat = chat(&connection, &chat_id)?;
+        let root = PathBuf::from(project(&connection, &chat.project_id)?.path);
+        (chat, root)
     };
-    insert_chat(&db.connection(), draft, branch)
+    let worktree = chat.worktree_path.clone().ok_or_else(|| AppError::Invalid("this chat has no worktree".into()))?;
+    if chat.state.is_turn_active() {
+        return Err(AppError::Invalid("stop the agent before removing its worktree".into()));
+    }
+    let worktrees_root = worktrees_root(&app)?;
+    in_background(move || worktrees::remove(&project_root, &worktrees_root, Path::new(&worktree))).await?;
+    project_branches.forget(&chat.project_id);
+    let connection = db.connection();
+    update_state(&connection, &chat_id, ChatState::Done)?;
+    self::chat(&connection, &chat_id)
 }
 
 #[tauri::command]
@@ -336,7 +414,6 @@ mod tests {
             model: "default".into(),
             effort: "high".into(),
             title: " Fix the sort ".into(),
-            new_branch: false,
         }
     }
 
@@ -344,7 +421,7 @@ mod tests {
     fn creates_a_chat_with_its_own_session_and_round_trips_state() {
         let db = Db::open_in_memory().unwrap();
         let connection = db.connection();
-        let created = insert_chat(&connection, draft(project_id(&connection)), None).unwrap();
+        let created = insert_chat(&connection, draft(project_id(&connection)), ChatCheckout::default()).unwrap();
         assert_eq!(created.title, "Fix the sort");
         assert!(uuid::Uuid::parse_str(&created.session_id).is_ok());
         update_state(&connection, &created.id, ChatState::Done).unwrap();
@@ -358,14 +435,14 @@ mod tests {
         let db = Db::open_in_memory().unwrap();
         let connection = db.connection();
         let bad = NewChat { model: "opus; echo pwned".into(), ..draft(project_id(&connection)) };
-        assert!(insert_chat(&connection, bad, None).is_err());
+        assert!(insert_chat(&connection, bad, ChatCheckout::default()).is_err());
     }
 
     #[test]
     fn stores_a_cleaned_capped_title_and_reports_real_changes_only() {
         let db = Db::open_in_memory().unwrap();
         let connection = db.connection();
-        let created = insert_chat(&connection, draft(project_id(&connection)), None).unwrap();
+        let created = insert_chat(&connection, draft(project_id(&connection)), ChatCheckout::default()).unwrap();
         assert!(update_title(&connection, &created.id, "  Nearby\u{0}stores\n sorting  ").unwrap());
         assert_eq!(chat(&connection, &created.id).unwrap().title, "Nearby stores sorting");
         assert!(!update_title(&connection, &created.id, "Nearby stores sorting").unwrap());
@@ -385,8 +462,8 @@ mod tests {
     fn stores_and_lists_the_branch_a_chat_runs_on() {
         let db = Db::open_in_memory().unwrap();
         let connection = db.connection();
-        let created =
-            insert_chat(&connection, draft(project_id(&connection)), Some("onyx/fix-the-sort".into())).unwrap();
+        let checkout = ChatCheckout { branch: Some("onyx/fix-the-sort".into()), worktree_path: None };
+        let created = insert_chat(&connection, draft(project_id(&connection)), checkout).unwrap();
         assert_eq!(chat(&connection, &created.id).unwrap().branch.as_deref(), Some("onyx/fix-the-sort"));
         let listed = with_pull_request(&GitHub::default(), created);
         let wire = serde_json::to_value(&listed).unwrap();
@@ -395,10 +472,40 @@ mod tests {
     }
 
     #[test]
-    fn accepts_the_new_branch_flag_but_no_other_unknown_fields() {
+    fn rejects_paths_and_modes_supplied_by_the_ui() {
         let base = r#""projectId":"p1","provider":"Claude Code","command":"claude","model":"default","effort":"high""#;
-        let flagged: NewChat = serde_json::from_str(&format!(r#"{{{base},"title":"t","newBranch":true}}"#)).unwrap();
-        assert!(flagged.new_branch);
-        assert!(serde_json::from_str::<NewChat>(&format!(r#"{{{base},"title":"t","branch":"x"}}"#)).is_err());
+        assert!(serde_json::from_str::<NewChat>(&format!(r#"{{{base},"title":"t"}}"#)).is_ok());
+        for extra in [r#""newBranch":true"#, r#""worktreePath":"/etc""#, r#""branch":"x""#] {
+            assert!(serde_json::from_str::<NewChat>(&format!(r#"{{{base},"title":"t",{extra}}}"#)).is_err());
+        }
+    }
+
+    #[test]
+    fn runs_a_chat_in_its_worktree_and_reports_it_once_removed() {
+        let db = Db::open_in_memory().unwrap();
+        let connection = db.connection();
+        let worktree = std::env::temp_dir().join(format!("onyx-hive-chat-root-{}", new_id()));
+        std::fs::create_dir_all(&worktree).unwrap();
+        let checkout = ChatCheckout {
+            branch: Some("onyx/x".into()),
+            worktree_path: Some(worktree.to_string_lossy().into_owned()),
+        };
+        let created = insert_chat(&connection, draft(project_id(&connection)), checkout).unwrap();
+        assert_eq!(chat_root(&connection, &created).unwrap(), worktree);
+        std::fs::remove_dir(&worktree).unwrap();
+        let reloaded = chat(&connection, &created.id).unwrap();
+        assert!(reloaded.is_worktree_removed);
+        assert!(chat_root(&connection, &reloaded).is_err());
+        let local = insert_chat(&connection, draft("p1".into()), ChatCheckout::default()).unwrap();
+        assert_eq!(chat_root(&connection, &local).unwrap(), PathBuf::from("/tmp/p1"));
+    }
+
+    #[test]
+    fn reads_the_worktree_setting_as_off_until_turned_on() {
+        let db = Db::open_in_memory().unwrap();
+        let connection = db.connection();
+        assert!(!works_in_worktrees(&connection).unwrap());
+        crate::settings::store_setting(&connection, WORK_IN_WORKTREES_SETTING, "true").unwrap();
+        assert!(works_in_worktrees(&connection).unwrap());
     }
 }

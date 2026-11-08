@@ -11,7 +11,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::db::Db;
 use crate::error::{AppError, AppResult};
-use crate::git::{self, Git, project_root};
+use crate::git::{self, Git, GitTarget, project_root, workdir};
 use crate::process::login_shell;
 use crate::subprocess::{self, Limits, Output, in_background};
 
@@ -566,10 +566,11 @@ pub async fn pr_diff(
 pub async fn pr_create(
     db: State<'_, Db>,
     github: State<'_, GitHub>,
-    project_id: String,
+    target: GitTarget,
     draft: PullRequestDraft,
 ) -> AppResult<PullRequestDetail> {
-    let root = project_root(&db, &project_id)?;
+    let workdir = workdir(&db, &target)?;
+    let (root, project_id) = (workdir.root, workdir.project_id);
     let gh = github.gh(&root)?;
     let created = in_background(move || {
         let git = Git::at(&root);

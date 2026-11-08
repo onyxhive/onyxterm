@@ -7,7 +7,7 @@ use tauri::State;
 use crate::db::Db;
 use crate::desktop::open_with;
 use crate::error::{AppError, AppResult};
-use crate::git::project_root;
+use crate::git::{GitTarget, workdir};
 use crate::settings::store_setting;
 use crate::subprocess::in_background;
 
@@ -115,8 +115,8 @@ pub async fn list_editors() -> AppResult<Vec<Editor>> {
 }
 
 #[tauri::command]
-pub async fn open_in_editor(db: State<'_, Db>, project_id: String, editor_id: EditorId) -> AppResult<()> {
-    let root = project_root(&db, &project_id)?;
+pub async fn open_in_editor(db: State<'_, Db>, target: GitTarget, editor_id: EditorId) -> AppResult<()> {
+    let root = workdir(&db, &target)?.root;
     in_background(move || {
         let app = editor_path(editor_id)?;
         open_with(&[OsStr::new("-a"), app.as_os_str(), root.as_os_str()])

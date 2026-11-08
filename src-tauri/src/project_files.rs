@@ -8,7 +8,7 @@ use tauri::State;
 
 use crate::db::Db;
 use crate::error::{AppError, AppResult};
-use crate::workspaces::project;
+use crate::git::{GitTarget, workdir};
 
 const MAX_ENTRIES: usize = 50_000;
 const CACHE_LIFETIME: Duration = Duration::from_secs(30);
@@ -19,15 +19,15 @@ const FOLDER_SUFFIX: char = '/';
 pub struct ProjectFiles(Mutex<HashMap<String, (Instant, Vec<String>)>>);
 
 impl ProjectFiles {
-    fn fresh(&self, project_id: &str) -> Option<Vec<String>> {
+    fn fresh(&self, root: &str) -> Option<Vec<String>> {
         let cache = self.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-        let (listed_at, entries) = cache.get(project_id)?;
+        let (listed_at, entries) = cache.get(root)?;
         (listed_at.elapsed() < CACHE_LIFETIME).then(|| entries.clone())
     }
 
-    fn remember(&self, project_id: String, entries: Vec<String>) {
+    fn remember(&self, root: String, entries: Vec<String>) {
         let mut cache = self.0.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
-        cache.insert(project_id, (Instant::now(), entries));
+        cache.insert(root, (Instant::now(), entries));
     }
 }
 
@@ -90,16 +90,17 @@ pub fn list(root: &Path) -> Vec<String> {
 pub async fn list_project_files(
     db: State<'_, Db>,
     cache: State<'_, ProjectFiles>,
-    project_id: String,
+    target: GitTarget,
 ) -> AppResult<Vec<String>> {
-    let root = project(&db.connection(), &project_id)?.path;
-    if let Some(entries) = cache.fresh(&project_id) {
+    let root = workdir(&db, &target)?.root.to_string_lossy().into_owned();
+    if let Some(entries) = cache.fresh(&root) {
         return Ok(entries);
     }
-    let entries = tauri::async_runtime::spawn_blocking(move || list(Path::new(&root)))
+    let listed_root = root.clone();
+    let entries = tauri::async_runtime::spawn_blocking(move || list(Path::new(&listed_root)))
         .await
         .map_err(|error| AppError::Agent(error.to_string()))?;
-    cache.remember(project_id, entries.clone());
+    cache.remember(root, entries.clone());
     Ok(entries)
 }
 

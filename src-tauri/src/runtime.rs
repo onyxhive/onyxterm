@@ -368,7 +368,7 @@ impl AgentRuntime {
 fn chat_and_cwd(db: &Db, chat_id: &str) -> AppResult<(Chat, String)> {
     let connection = db.connection();
     let chat = chats::chat(&connection, chat_id)?;
-    let cwd = project(&connection, &chat.project_id)?.path;
+    let cwd = chats::chat_root(&connection, &chat)?.to_string_lossy().into_owned();
     Ok((chat, cwd))
 }
 

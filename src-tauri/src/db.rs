@@ -51,6 +51,7 @@ CREATE TABLE project_scripts (
 );
 CREATE INDEX project_scripts_by_project ON project_scripts (project_id, position);
 "#,
+    "ALTER TABLE chats ADD COLUMN worktree_path TEXT;",
 ];
 
 pub struct Db(Mutex<Connection>);
