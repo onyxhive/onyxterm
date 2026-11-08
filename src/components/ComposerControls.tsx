@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Asterisk, Box, Check, ChevronDown, Gauge, GitBranchPlus, SquareTerminal } from "lucide-react";
+import { Asterisk, Box, Check, ChevronDown, Folder, FolderGit2, Gauge, GitBranch, SquareTerminal } from "lucide-react";
 import { CLAUDE_COMMANDS } from "../agentOptions";
 import type { Provider } from "../types";
 import { cn, MENU_ITEM, MENU_POPUP, MenuLabel } from "./ui";
@@ -217,23 +217,29 @@ export function EffortPicker({ effort, levels, onChange }: EffortPickerProps) {
   );
 }
 
-interface NewBranchToggleProps {
-  isOn: boolean;
-  onChange: (isOn: boolean) => void;
+interface ChatWorkspaceControlsProps {
+  worktreePath: string | null;
+  branch: string | null;
 }
 
-export function NewBranchToggle({ isOn, onChange }: NewBranchToggleProps) {
+export function ChatWorkspaceControls({ worktreePath, branch }: ChatWorkspaceControlsProps) {
   return (
-    <button
-      type="button"
-      aria-pressed={isOn}
-      title={isOn ? "This chat starts on its own new branch" : "Start this chat on a new branch"}
-      className={cn(CONTROL_CLASS, "aria-pressed:bg-accent aria-pressed:text-foreground")}
-      onClick={() => onChange(!isOn)}
-    >
-      <GitBranchPlus className={cn(isOn && "text-primary")} />
-      <span>New branch</span>
-    </button>
+    <>
+      {worktreePath ? (
+        <StaticControl icon={<FolderGit2 />} title={`Worktree: ${worktreePath}`}>
+          Worktree
+        </StaticControl>
+      ) : (
+        <StaticControl icon={<Folder />} title="Runs in the project folder">
+          Local checkout
+        </StaticControl>
+      )}
+      {branch && (
+        <StaticControl icon={<GitBranch />} title={`Branch: ${branch}`}>
+          <span className="max-w-40 truncate">{branch}</span>
+        </StaticControl>
+      )}
+    </>
   );
 }
 

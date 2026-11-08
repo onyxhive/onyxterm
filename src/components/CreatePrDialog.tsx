@@ -1,14 +1,14 @@
 import { useState, type FormEvent } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { ExternalLink } from "lucide-react";
-import { ghProblemOf, prApi } from "../gitApi";
+import { ghProblemOf, prApi, type GitTarget } from "../gitApi";
 import type { PullRequestDetail } from "../types";
 import { Dialog } from "./Dialog";
 import { GhProblemState } from "./GhProblemState";
 import { cn, GHOST_BUTTON, PRIMARY_BUTTON, TEXT_INPUT } from "./ui";
 
 interface CreatePrDialogProps {
-  projectId: string;
+  target: GitTarget;
   initialTitle: string;
   onClose: () => void;
 }
@@ -34,7 +34,7 @@ function CreatedPr({ pr, onClose }: { pr: PullRequestDetail; onClose: () => void
   );
 }
 
-export function CreatePrDialog({ projectId, initialTitle, onClose }: CreatePrDialogProps) {
+export function CreatePrDialog({ target, initialTitle, onClose }: CreatePrDialogProps) {
   const [title, setTitle] = useState(initialTitle);
   const [body, setBody] = useState("");
   const [base, setBase] = useState("");
@@ -50,7 +50,7 @@ export function CreatePrDialog({ projectId, initialTitle, onClose }: CreatePrDia
     setError(null);
     try {
       const draft = { title: title.trim(), body, base: base.trim() || null, draft: isDraft };
-      setCreated(await prApi.create(projectId, draft));
+      setCreated(await prApi.create(target, draft));
     } catch (failure) {
       setError(failure);
     } finally {

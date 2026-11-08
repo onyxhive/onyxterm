@@ -135,5 +135,5 @@ export function useChats(input: ChatsInput) {
     }
   }
 
-  return { chats, feeds, startChat, send, decide, answer, stop, setState, loadHistory };
+  return { chats, feeds, startChat, send, decide, answer, stop, setState, loadHistory, upsertChat };
 }

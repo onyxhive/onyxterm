@@ -72,6 +72,8 @@ export function toTask(chat: Chat, feed: ChatFeed, now: number): Task {
     feed: feed.items,
     work: { runningNow: runningActivity(feed), files: Object.values(feed.files) },
     branch: chat.branch,
+    worktreePath: chat.worktreePath ?? null,
+    isWorktreeRemoved: chat.isWorktreeRemoved ?? false,
     pr: chat.pr ?? null,
   };
 }

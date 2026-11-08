@@ -30,6 +30,8 @@ export interface Chat {
   createdAt: number;
   updatedAt: number;
   branch: string | null;
+  worktreePath: string | null;
+  isWorktreeRemoved: boolean;
   pr?: ChatPullRequest | null;
 }
 
@@ -104,6 +106,8 @@ export interface Task {
   feed: FeedItem[];
   work: Work;
   branch: string | null;
+  worktreePath: string | null;
+  isWorktreeRemoved: boolean;
   pr: ChatPullRequest | null;
 }
 
@@ -149,6 +153,8 @@ export interface GitStatus {
   upstream: string | null;
   ahead: number;
   behind: number;
+  aheadOfDefault: number;
+  hasRemote: boolean;
   files: GitChangedFile[];
 }
 

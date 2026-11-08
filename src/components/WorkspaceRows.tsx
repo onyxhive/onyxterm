@@ -12,7 +12,7 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
-import { desktopApi, scriptApi } from "../gitApi";
+import { desktopApi, scriptApi, type GitTarget } from "../gitApi";
 import type { Editor, EditorId, ProjectScript } from "../types";
 import { useEditors, useMachineName, useScripts, type ScriptRunState } from "../useProjectTools";
 import {
@@ -41,7 +41,12 @@ interface WorkspaceRowsProps {
   onError: (message: string) => void;
 }
 
-export function MachineRow({ projectId, onError }: WorkspaceRowsProps) {
+interface TargetRowProps {
+  target: GitTarget;
+  onError: (message: string) => void;
+}
+
+export function MachineRow({ target, onError }: TargetRowProps) {
   const machine = useMachineName();
   return (
     <div className={DETAILS_STATIC_ROW}>
@@ -52,7 +57,7 @@ export function MachineRow({ projectId, onError }: WorkspaceRowsProps) {
         className={cn(DETAILS_ICON_ACTION, "-me-1.5")}
         aria-label="Reveal the project folder"
         title="Reveal in Finder"
-        onClick={() => desktopApi.revealProject(projectId).catch((error) => onError(String(error)))}
+        onClick={() => desktopApi.revealProject(target).catch((error) => onError(String(error)))}
       >
         <FolderOpen />
       </button>
@@ -60,7 +65,7 @@ export function MachineRow({ projectId, onError }: WorkspaceRowsProps) {
   );
 }
 
-interface OpenInRowProps extends WorkspaceRowsProps {
+interface OpenInRowProps extends TargetRowProps {
   preferredEditor: string | undefined;
   onPreferEditor: (editorId: EditorId) => void;
 }
@@ -69,15 +74,15 @@ function preferredOf(editors: Editor[], preferred: string | undefined): Editor |
   return editors.find((editor) => editor.id === preferred) ?? editors[0] ?? null;
 }
 
-export function OpenInRow({ projectId, preferredEditor, onPreferEditor, onError }: OpenInRowProps) {
+export function OpenInRow({ target, preferredEditor, onPreferEditor, onError }: OpenInRowProps) {
   const editors = useEditors().data ?? [];
   const popup = usePopup();
   const editor = preferredOf(editors, preferredEditor);
   const Icon = editor ? editorIcon(editor.id) : CodeXml;
 
-  function open(target: Editor) {
-    onPreferEditor(target.id);
-    desktopApi.openInEditor(projectId, target.id).catch((error) => onError(String(error)));
+  function open(editor: Editor) {
+    onPreferEditor(editor.id);
+    desktopApi.openInEditor(target, editor.id).catch((error) => onError(String(error)));
   }
 
   return (

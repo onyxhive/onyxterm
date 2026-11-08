@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  Chat,
   CommitResult,
   Editor,
   EditorId,
@@ -21,8 +22,11 @@ export const PRS_UPDATED = "prs-updated";
 export const SCRIPT_OUTPUT = "script-output";
 export const SCRIPT_EXITED = "script-exited";
 export const PREFERRED_EDITOR_SETTING = "preferredEditor";
+export const WORK_IN_WORKTREES_SETTING = "workInWorktrees";
 export const GH_NOT_INSTALLED = "gh-not-installed";
 export const GH_NOT_LOGGED_IN = "gh-not-logged-in";
+
+export type GitTarget = { project: string } | { chat: string };
 
 export interface PrsUpdatedPayload {
   projectId: string;
@@ -38,16 +42,17 @@ export function ghProblemOf(error: unknown): GhProblem | null {
 }
 
 export const gitApi = {
-  status: (projectId: string) => invoke<GitStatus>("git_status", { projectId }),
-  branches: (projectId: string) => invoke<GitBranches>("git_branches", { projectId }),
-  checkout: (projectId: string, branch: string, force = false) =>
-    invoke<GitStatus>("git_checkout", { projectId, branch, force }),
-  createBranch: (projectId: string, name: string, from: string | null = null, force = false) =>
-    invoke<GitStatus>("git_create_branch", { projectId, name, from, force }),
-  diff: (projectId: string, file: string | null = null) => invoke<GitDiff>("git_diff", { projectId, file }),
-  commit: (projectId: string, message: string, files: string[] | null = null) =>
-    invoke<CommitResult>("git_commit", { projectId, message, files }),
-  push: (projectId: string) => invoke<GitStatus>("git_push", { projectId }),
+  status: (target: GitTarget) => invoke<GitStatus>("git_status", { target }),
+  branches: (target: GitTarget) => invoke<GitBranches>("git_branches", { target }),
+  checkout: (target: GitTarget, branch: string, force = false) =>
+    invoke<GitStatus>("git_checkout", { target, branch, force }),
+  createBranch: (target: GitTarget, name: string, from: string | null = null, force = false) =>
+    invoke<GitStatus>("git_create_branch", { target, name, from, force }),
+  diff: (target: GitTarget, file: string | null = null) => invoke<GitDiff>("git_diff", { target, file }),
+  commit: (target: GitTarget, message: string, files: string[] | null = null) =>
+    invoke<CommitResult>("git_commit", { target, message, files }),
+  push: (target: GitTarget) => invoke<GitStatus>("git_push", { target }),
+  removeChatWorktree: (chatId: string) => invoke<Chat>("remove_chat_worktree", { chatId }),
   turnDiff: (chatId: string, turn: number) => invoke<TurnDiff>("git_turn_diff", { chatId, turn }),
   checkpointTurns: (chatId: string) => invoke<number[]>("git_checkpoint_turns", { chatId }),
 };
@@ -58,8 +63,7 @@ export const prApi = {
   forBranch: (projectId: string, branch: string) =>
     invoke<PullRequest | null>("pr_for_branch", { projectId, branch }),
   checks: (projectId: string, number: number) => invoke<PrCheck[]>("pr_checks", { projectId, number }),
-  create: (projectId: string, draft: PullRequestDraft) =>
-    invoke<PullRequestDetail>("pr_create", { projectId, draft }),
+  create: (target: GitTarget, draft: PullRequestDraft) => invoke<PullRequestDetail>("pr_create", { target, draft }),
   merge: (projectId: string, number: number, method: MergeMethod) =>
     invoke<void>("pr_merge", { projectId, number, method }),
 };
@@ -70,9 +74,9 @@ export const agentApi = {
 
 export const desktopApi = {
   machineName: () => invoke<string>("machine_name"),
-  revealProject: (projectId: string) => invoke<void>("reveal_project", { projectId }),
+  revealProject: (target: GitTarget) => invoke<void>("reveal_project", { target }),
   editors: () => invoke<Editor[]>("list_editors"),
-  openInEditor: (projectId: string, editorId: EditorId) => invoke<void>("open_in_editor", { projectId, editorId }),
+  openInEditor: (target: GitTarget, editorId: EditorId) => invoke<void>("open_in_editor", { target, editorId }),
 };
 
 export const scriptApi = {

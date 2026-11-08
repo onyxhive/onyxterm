@@ -7,7 +7,7 @@ import { useSubagents } from "../useGit";
 import { useProjectFiles } from "../useProjectFiles";
 import { ChangedFilesCard } from "./ChangesPanel";
 import { Composer, COMPOSER_PLACEHOLDER, QUESTION_PLACEHOLDER } from "./Composer";
-import { ProviderIcon, StaticControl } from "./ComposerControls";
+import { ChatWorkspaceControls, ProviderIcon, StaticControl } from "./ComposerControls";
 import { FeedItemView, type FeedActions } from "./FeedItemView";
 import { QuestionDrawer, useQuestionAnswers, type QuestionRequest } from "./QuestionDrawer";
 import { useDockHeight } from "./useDockHeight";
@@ -64,7 +64,7 @@ export function ChatView({ task, actions }: ChatViewProps) {
   const dockRef = useRef<HTMLDivElement>(null);
   const dockHeight = useDockHeight(dockRef);
   const { capabilities } = useCapabilities(task.command, task.projectId);
-  const files = useProjectFiles(task.projectId);
+  const files = useProjectFiles({ chat: task.id });
   const sources = useMemo(() => suggestionSources(capabilities, files), [capabilities, files]);
   const question = pendingQuestionIn(task.feed);
   const answers = useQuestionAnswers(question);
@@ -104,6 +104,7 @@ export function ChatView({ task, actions }: ChatViewProps) {
       <StaticControl icon={<SquareTerminal />} title="Command">
         {task.command}
       </StaticControl>
+      <ChatWorkspaceControls worktreePath={task.worktreePath} branch={task.branch} />
     </>
   );
 

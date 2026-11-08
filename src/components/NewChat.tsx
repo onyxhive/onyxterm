@@ -1,31 +1,25 @@
 import { useCallback, useMemo, useRef, useState } from "react";
-import { Folder, FolderOpen, FolderPlus, TriangleAlert } from "lucide-react";
+import { Folder, FolderGit2, FolderOpen, FolderPlus, TriangleAlert } from "lucide-react";
 import { CODEX_COMMAND, DEFAULT_EFFORT, DEFAULT_MODEL, FALLBACK_EFFORTS, FALLBACK_MODELS } from "../agentOptions";
 import type { ModelOption } from "../agentEvents";
 import type { Project, Workspace } from "../types";
 import { suggestionSources, useCapabilities } from "../useCapabilities";
 import { useProjectFiles } from "../useProjectFiles";
 import { Composer, COMPOSER_PLACEHOLDER } from "./Composer";
-import {
-  EffortPicker,
-  ModelPicker,
-  NewBranchToggle,
-  type AgentChoice,
-  type ModelChoice,
-} from "./ComposerControls";
+import { EffortPicker, ModelPicker, type AgentChoice, type ModelChoice } from "./ComposerControls";
 import { cn, INLINE_BUTTON, MENU_ITEM, MENU_POPUP, MenuSeparator, OUTLINE_BUTTON } from "./ui";
 import { useDismiss } from "./useDismiss";
 
 export interface ChatStart extends AgentChoice {
   text: string;
   projectId: string;
-  newBranch: boolean;
 }
 
 interface NewChatProps {
   workspace: Workspace;
   initialChoice: AgentChoice;
   initialProjectId: string | null;
+  isWorktreeMode: boolean;
   onStart: (start: ChatStart) => void;
   onAddProject: () => void;
 }
@@ -116,16 +110,16 @@ function ProjectPicker({ project, projects, onPick, onAddProject }: ProjectPicke
   );
 }
 
-export function NewChat({ workspace, initialChoice, initialProjectId, onStart, onAddProject }: NewChatProps) {
+export function NewChat(props: NewChatProps) {
+  const { workspace, initialChoice, initialProjectId, isWorktreeMode, onStart, onAddProject } = props;
   const [projectId, setProjectId] = useState(initialProjectId ?? workspace.projects[0]?.id ?? "");
   const [choice, setChoice] = useState<AgentChoice>(initialChoice);
-  const [isNewBranch, setIsNewBranch] = useState(false);
 
   const project = workspace.projects.find((candidate) => candidate.id === projectId) ?? workspace.projects[0];
   const isCodex = choice.provider === "Codex";
   const command = isCodex ? CODEX_COMMAND : choice.command;
   const { capabilities, problem } = useCapabilities(command, project?.id);
-  const files = useProjectFiles(project?.id);
+  const files = useProjectFiles(project ? { project: project.id } : undefined);
   const sources = useMemo(() => suggestionSources(capabilities, files), [capabilities, files]);
   const models = capabilities?.models ?? [];
   const choices = modelChoices(models);
@@ -140,7 +134,7 @@ export function NewChat({ workspace, initialChoice, initialProjectId, onStart, o
 
   function start(text: string) {
     if (!project) return;
-    onStart({ ...resolvedChoice, text, projectId: project.id, newBranch: isNewBranch });
+    onStart({ ...resolvedChoice, text, projectId: project.id });
   }
 
   function sendBlockedReason(): string | undefined {
@@ -163,13 +157,18 @@ export function NewChat({ workspace, initialChoice, initialProjectId, onStart, o
           onChange={(next) => setChoice({ ...choice, effort: next })}
         />
       )}
-      <NewBranchToggle isOn={isNewBranch} onChange={setIsNewBranch} />
     </>
   );
 
   const footnote = (
     <div className="flex min-w-0 flex-col gap-1 px-2 pt-2 text-xs text-muted-foreground">
-      {project && (
+      {project && isWorktreeMode && (
+        <span className="flex min-w-0 items-center gap-1.5" title={project.path}>
+          <FolderGit2 className="size-3.5 shrink-0" />
+          <span className="truncate">Runs in a new worktree of {project.name} on its own branch</span>
+        </span>
+      )}
+      {project && !isWorktreeMode && (
         <span className="flex min-w-0 items-center gap-1.5" title={project.path}>
           <FolderOpen className="size-3.5 shrink-0" />
           <span className="truncate">Runs in {project.path}</span>

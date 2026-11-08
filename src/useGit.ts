@@ -1,16 +1,20 @@
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { CHAT_EVENT, type AgentEvent, type ChatEventPayload } from "./agentEvents";
-import { agentApi, gitApi, prApi, PRS_UPDATED, type PrsUpdatedPayload } from "./gitApi";
+import { agentApi, gitApi, prApi, PRS_UPDATED, type GitTarget, type PrsUpdatedPayload } from "./gitApi";
 import type { PrState, Subagent } from "./types";
 import { useLoaded } from "./useLoaded";
 
-export function useGitStatus(projectId: string | undefined) {
-  return useLoaded(projectId ?? null, () => gitApi.status(projectId ?? ""));
+export function targetKey(target: GitTarget): string {
+  return "chat" in target ? `chat:${target.chat}` : `project:${target.project}`;
 }
 
-export function useBranches(projectId: string | undefined) {
-  return useLoaded(projectId ?? null, () => gitApi.branches(projectId ?? ""));
+export function useGitStatus(target: GitTarget) {
+  return useLoaded(targetKey(target), () => gitApi.status(target));
+}
+
+export function useBranches(target: GitTarget) {
+  return useLoaded(targetKey(target), () => gitApi.branches(target));
 }
 
 export function usePrs(projectId: string | undefined, state: PrState = "open") {

@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Check, ChevronDown, GitBranch, GitBranchPlus, Search, TriangleAlert } from "lucide-react";
-import { gitApi } from "../gitApi";
+import { gitApi, type GitTarget } from "../gitApi";
 import { elapsedSince } from "../tasks";
 import type { GitBranch as Branch } from "../types";
 import { useBranches } from "../useGit";
@@ -11,7 +11,7 @@ import { usePopup } from "./usePopup";
 const DIRTY_TREE_MARKER = "uncommitted changes";
 
 interface BranchRowProps {
-  projectId: string;
+  target: GitTarget;
   branch: string | null;
   onChanged: () => void;
 }
@@ -83,8 +83,8 @@ function CreateBranchForm({ initialName, isBusy, onCreate }: CreateBranchFormPro
   );
 }
 
-function BranchPicker({ projectId, onChanged, close }: Omit<BranchRowProps, "branch"> & { close: () => void }) {
-  const branches = useBranches(projectId);
+function BranchPicker({ target, onChanged, close }: Omit<BranchRowProps, "branch"> & { close: () => void }) {
+  const branches = useBranches(target);
   const [query, setQuery] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -110,8 +110,8 @@ function BranchPicker({ projectId, onChanged, close }: Omit<BranchRowProps, "bra
     }
   }
 
-  const checkout = (name: string) => run(() => gitApi.checkout(projectId, name), name);
-  const create = (name: string) => run(() => gitApi.createBranch(projectId, name), name);
+  const checkout = (name: string) => run(() => gitApi.checkout(target, name), name);
+  const create = (name: string) => run(() => gitApi.createBranch(target, name), name);
 
   return (
     <div role="dialog" aria-label="Switch branch" className={cn(MENU_POPUP, DETAILS_ANCHORED_POPUP, "p-0")}>
@@ -176,7 +176,7 @@ function BranchPicker({ projectId, onChanged, close }: Omit<BranchRowProps, "bra
   );
 }
 
-export function BranchRow({ projectId, branch, onChanged }: BranchRowProps) {
+export function BranchRow({ target, branch, onChanged }: BranchRowProps) {
   const popup = usePopup();
   const label = branch ?? "Detached HEAD";
   return (
@@ -199,7 +199,7 @@ export function BranchRow({ projectId, branch, onChanged }: BranchRowProps) {
           <ChevronDown aria-hidden className={DETAILS_ICON} />
         </span>
       </button>
-      {popup.isOpen && <BranchPicker projectId={projectId} onChanged={onChanged} close={popup.close} />}
+      {popup.isOpen && <BranchPicker target={target} onChanged={onChanged} close={popup.close} />}
     </div>
   );
 }

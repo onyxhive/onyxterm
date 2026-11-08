@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { SquareMenu } from "lucide-react";
-import type { EditorId, Project, Task } from "../types";
+import type { GitTarget } from "../gitApi";
+import type { Chat, EditorId, Project, Task } from "../types";
 import { useGitStatus } from "../useGit";
 import { useScriptRun } from "../useProjectTools";
 import { BranchRow } from "./BranchRow";
@@ -11,11 +12,13 @@ import { PreviousAgents } from "./PreviousAgents";
 import { cn, ICON_BUTTON } from "./ui";
 import { usePopup } from "./usePopup";
 import { MachineRow, OpenInRow, ScriptRows, type ScriptRunner } from "./WorkspaceRows";
+import { WorktreeRow } from "./WorktreeRow";
 
 export interface ThreadDetailsActions {
   onPreferEditor: (editorId: EditorId) => void;
   onOpenDiff: () => void;
   onBranchChanged: () => void;
+  onWorktreeRemoved: (chat: Chat) => void;
   onError: (message: string) => void;
 }
 
@@ -51,7 +54,8 @@ function useScriptRunner(): ScriptRunner {
 
 export function ThreadDetails({ task, project, preferredEditor, actions }: ThreadDetailsProps) {
   const popup = usePopup();
-  const status = useGitStatus(project.id);
+  const target: GitTarget = { chat: task.id };
+  const status = useGitStatus(target);
   const runner = useScriptRunner();
   const [isCreatingPr, setIsCreatingPr] = useState(false);
   const { refresh } = status;
@@ -98,9 +102,10 @@ export function ThreadDetails({ task, project, preferredEditor, actions }: Threa
           )}
         >
           <section aria-label="Workspace" className={DETAILS_SECTION}>
-            <MachineRow projectId={project.id} onError={actions.onError} />
+            <MachineRow target={target} onError={actions.onError} />
+            <WorktreeRow task={task} onRemoved={actions.onWorktreeRemoved} />
             <OpenInRow
-              projectId={project.id}
+              target={target}
               preferredEditor={preferredEditor}
               onPreferEditor={actions.onPreferEditor}
               onError={actions.onError}
@@ -108,11 +113,12 @@ export function ThreadDetails({ task, project, preferredEditor, actions }: Threa
             <ScriptRows projectId={project.id} runner={runner} onError={actions.onError} />
           </section>
           <section aria-label="Version control" className={DETAILS_SECTION}>
-            <BranchRow projectId={project.id} branch={status.data?.branch ?? task.branch} onChanged={branchChanged} />
+            <BranchRow target={target} branch={status.data?.branch ?? task.branch} onChanged={branchChanged} />
             {task.pr && <PullRequestRow pr={task.pr} />}
             <CommitRows
-              projectId={project.id}
+              target={target}
               status={status.data}
+              hasOpenPr={task.pr?.state === "OPEN"}
               onStatusChanged={refresh}
               onCreatePr={createPr}
               onOpenDiff={openDiff}
@@ -122,7 +128,7 @@ export function ThreadDetails({ task, project, preferredEditor, actions }: Threa
         </div>
       )}
       {isCreatingPr && (
-        <CreatePrDialog projectId={project.id} initialTitle={task.title} onClose={() => setIsCreatingPr(false)} />
+        <CreatePrDialog target={target} initialTitle={task.title} onClose={() => setIsCreatingPr(false)} />
       )}
     </div>
   );

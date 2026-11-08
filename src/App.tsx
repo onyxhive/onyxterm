@@ -14,7 +14,7 @@ import { Toasts } from "./components/Toasts";
 import { useIsFullscreen } from "./components/useIsFullscreen";
 import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher";
 import { EMPTY_FEED } from "./feed";
-import { PREFERRED_EDITOR_SETTING } from "./gitApi";
+import { PREFERRED_EDITOR_SETTING, WORK_IN_WORKTREES_SETTING } from "./gitApi";
 import { displayTitle, toTask } from "./tasks";
 import type { Chat, Provider, TaskStatus, Toast } from "./types";
 import { collapsedSectionsFrom } from "./collapsedSections";
@@ -195,6 +195,7 @@ export default function App() {
       setIsChangesPanelOpen(true);
     },
     onBranchChanged: () => selectedTask && refreshBranch(selectedTask.projectId),
+    onWorktreeRemoved: chatState.upsertChat,
     onError: showError,
   };
 
@@ -255,6 +256,7 @@ export default function App() {
           workspace={workspace}
           initialChoice={rememberedChoice(settings[CHOICE_SETTING])}
           initialProjectId={newChatProjectId ?? workspaceState.lastAddedProjectId}
+          isWorktreeMode={settings[WORK_IN_WORKTREES_SETTING] === "true"}
           onStart={start}
           onAddProject={workspaceActions.onAddProject}
         />

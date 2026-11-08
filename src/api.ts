@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { AgentEvent, Capabilities } from "./agentEvents";
 import type { PermissionDecision } from "./components/ApprovalRow";
+import type { GitTarget } from "./gitApi";
 import type { Chat, Project, Provider, TaskStatus, Workspace } from "./types";
 
 export interface ChatDraft {
@@ -10,7 +11,6 @@ export interface ChatDraft {
   model: string;
   effort: string;
   title: string;
-  newBranch?: boolean;
 }
 
 export type Settings = Record<string, string>;
@@ -35,6 +35,6 @@ export const api = {
   loadChatHistory: (chatId: string) => invoke<AgentEvent[]>("load_chat_history", { chatId }),
   discoverCapabilities: (command: string, projectId: string) =>
     invoke<Capabilities>("discover_capabilities", { command, projectId }),
-  listProjectFiles: (projectId: string) => invoke<string[]>("list_project_files", { projectId }),
+  listProjectFiles: (target: GitTarget) => invoke<string[]>("list_project_files", { target }),
   projectBranch: (projectId: string) => invoke<string | null>("project_branch", { projectId }),
 };

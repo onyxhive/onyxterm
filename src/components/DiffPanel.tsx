@@ -69,14 +69,14 @@ function useTurnDiff(chatId: string, turn: number | null, revision: string): Tur
   };
 }
 
-function useWorkingTreeFiles(projectId: string, isActive: boolean, revision: string): DiffFiles {
-  const status = useLoaded(isActive ? `${projectId}:${revision}` : null, () => gitApi.status(projectId));
+function useWorkingTreeFiles(chatId: string, isActive: boolean, revision: string): DiffFiles {
+  const status = useLoaded(isActive ? `${chatId}:${revision}` : null, () => gitApi.status({ chat: chatId }));
   const files = (status.data?.files ?? []).map(({ path, added, removed }) => ({ path, added, removed }));
   return { files, error: status.error, isLoading: status.isLoading };
 }
 
-function useWorkingFileDiff(projectId: string, path: string | null, revision: string) {
-  const diff = useLoaded(path ? `${projectId}:${path}:${revision}` : null, () => gitApi.diff(projectId, path));
+function useWorkingFileDiff(chatId: string, path: string | null, revision: string) {
+  const diff = useLoaded(path ? `${chatId}:${path}:${revision}` : null, () => gitApi.diff({ chat: chatId }, path));
   return {
     diffs: parseUnifiedDiff(diff.data?.text ?? ""),
     isTruncated: diff.data?.isTruncated ?? false,
@@ -205,12 +205,12 @@ export function DiffPanel({ task, project, scope, onScopeChange }: DiffPanelProp
   const revision = `${task.status}:${refreshCount}`;
   const isWorkingTree = scope.kind === "workingTree";
   const turnDiff = useTurnDiff(task.id, scope.kind === "turn" ? scope.turn : null, revision);
-  const workingTree = useWorkingTreeFiles(task.projectId, isWorkingTree, revision);
+  const workingTree = useWorkingTreeFiles(task.id, isWorkingTree, revision);
   const listed = isWorkingTree ? workingTree : turnDiff;
   const selectedPath = listed.files.some((file) => file.path === chosenPath)
     ? chosenPath
     : (listed.files[0]?.path ?? null);
-  const workingFileDiff = useWorkingFileDiff(task.projectId, isWorkingTree ? selectedPath : null, revision);
+  const workingFileDiff = useWorkingFileDiff(task.id, isWorkingTree ? selectedPath : null, revision);
   const shown = isWorkingTree ? workingFileDiff : turnDiff;
   const selectedDiff = shown.diffs.find((diff) => diff.path === selectedPath) ?? null;
   const currentTurn = scope.kind === "turn" ? (scope.turn ?? turnDiff.turns.at(-1) ?? null) : null;
