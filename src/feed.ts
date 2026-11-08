@@ -46,7 +46,14 @@ function appendDelta(feed: ChatFeed, messageId: string, index: number, text: str
     (item) => isAgentItem(item) && item.messageId === messageId && item.blockIndex === index && !item.isFinal,
   );
   if (position === -1) {
-    const created: AgentItem = { kind: "agent", messageId, blockIndex: index, markdown: text, isFinal: false };
+    const created: AgentItem = {
+      kind: "agent",
+      messageId,
+      blockIndex: index,
+      markdown: text,
+      isFinal: false,
+      time: "",
+    };
     return withItems(feed, [...feed.items, created]);
   }
   const items = feed.items.map((item, at) =>
@@ -58,7 +65,7 @@ function appendDelta(feed: ChatFeed, messageId: string, index: number, text: str
 function finalizeText(feed: ChatFeed, messageId: string, text: string): ChatFeed {
   const position = feed.items.findIndex((item) => isAgentItem(item) && item.messageId === messageId && !item.isFinal);
   if (position === -1) {
-    const created: AgentItem = { kind: "agent", messageId, blockIndex: -1, markdown: text, isFinal: true };
+    const created: AgentItem = { kind: "agent", messageId, blockIndex: -1, markdown: text, isFinal: true, time: "" };
     return withItems(feed, [...feed.items, created]);
   }
   const items = feed.items.map((item, at) =>
@@ -179,6 +186,16 @@ export function reduceFeed(feed: ChatFeed, event: AgentEvent): ChatFeed {
     case "titleChanged":
       return feed;
   }
+}
+
+export function reduceLiveFeed(feed: ChatFeed, event: AgentEvent): ChatFeed {
+  const reduced = reduceFeed(feed, event);
+  if (event.kind !== "text") return reduced;
+  const time = clockTime();
+  const items = reduced.items.map((item) =>
+    isAgentItem(item) && item.messageId === event.messageId && !item.time ? { ...item, time } : item,
+  );
+  return withItems(reduced, items);
 }
 
 export function withSentMessage(feed: ChatFeed, text: string): ChatFeed {

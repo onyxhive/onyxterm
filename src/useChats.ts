@@ -8,6 +8,7 @@ import {
   EMPTY_FEED,
   feedFromHistory,
   reduceFeed,
+  reduceLiveFeed,
   withAnswers,
   withDecision,
   withSentMessage,
@@ -51,7 +52,7 @@ export function useChats(input: ChatsInput) {
     api.listChats().then(setChats, report);
     const subscriptions = [
       listen<ChatEventPayload>(CHAT_EVENT, ({ payload }) => {
-        updateFeed(payload.chatId, (feed) => reduceFeed(feed, payload.event));
+        updateFeed(payload.chatId, (feed) => reduceLiveFeed(feed, payload.event));
       }),
       listen<Chat>(CHAT_UPDATED, ({ payload }) => {
         const previous = chatsRef.current.find((chat) => chat.id === payload.id)?.state;

@@ -33,6 +33,19 @@ function pendingQuestionIn(feed: FeedItem[]): QuestionRequest | null {
   return feed.find((item): item is QuestionRequest => item.kind === "question") ?? null;
 }
 
+function turnReplyIndexes(feed: FeedItem[], isRunning: boolean): Set<number> {
+  const replies = new Set<number>();
+  let latestReply: number | null = null;
+  feed.forEach((item, index) => {
+    if (item.kind === "agent") latestReply = index;
+    if (item.kind !== "user" || latestReply === null) return;
+    replies.add(latestReply);
+    latestReply = null;
+  });
+  if (latestReply !== null && !isRunning) replies.add(latestReply);
+  return replies;
+}
+
 function liveStepIdIn(task: Task): string | null {
   if (task.status !== "running" || !task.work.runningNow) return null;
   const lastSteps = task.feed.findLast((item) => item.kind === "steps");
@@ -54,6 +67,7 @@ export function ChatView({ task, actions }: ChatViewProps) {
   const lastItem = task.feed.at(-1);
   const scrollKey = lastItem?.kind === "agent" ? lastItem.markdown.length : 0;
   const isRunning = task.status === "running";
+  const turnReplies = turnReplyIndexes(task.feed, isRunning);
   const modelLabel = capabilities?.models.find((model) => model.value === task.model)?.displayName ?? task.model;
 
   useEffect(() => {
@@ -101,7 +115,13 @@ export function ChatView({ task, actions }: ChatViewProps) {
         )}
         <div className="mx-auto w-full max-w-(--chat-content-max-width) pt-4">
           {task.feed.map((item, index) => (
-            <FeedItemView key={index} item={item} liveStepId={liveStepId} actions={actions} />
+            <FeedItemView
+              key={index}
+              item={item}
+              liveStepId={liveStepId}
+              isTurnReply={turnReplies.has(index)}
+              actions={actions}
+            />
           ))}
           {isRunning && <WorkingRow key={task.id} since={task.workingSince} />}
           {isTurnSettled && task.work.files.length > 0 && (

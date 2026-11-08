@@ -53,7 +53,7 @@ export interface Question {
 
 export type FeedItem =
   | { kind: "user"; text: string; time: string }
-  | { kind: "agent"; messageId: string; blockIndex: number; markdown: string; isFinal: boolean }
+  | { kind: "agent"; messageId: string; blockIndex: number; markdown: string; isFinal: boolean; time: string }
   | { kind: "steps"; files: number; steps: Step[] }
   | { kind: "note"; text: string }
   | {
