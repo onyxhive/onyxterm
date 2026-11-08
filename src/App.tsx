@@ -23,6 +23,7 @@ import { displayTitle, toTask } from "./tasks";
 import type { Chat, Provider, TaskStatus, Toast } from "./types";
 import { collapsedSectionsFrom } from "./collapsedSections";
 import { useChats } from "./useChats";
+import { shortcutCommandFor, type ShortcutCommand } from "./keybindings";
 import { applyPreferences, areInAppNotificationsOn } from "./preferences";
 import { useProjectBranches } from "./useProjectBranches";
 import { useSettings } from "./useSettings";
@@ -140,22 +141,18 @@ export default function App() {
   }
 
   useEffect(() => {
-    const shortcuts: Record<string, () => void> = {
-      n: () => openNewChat(),
-      "shift+o": () => openNewChat(),
-      b: () => setIsSidebarOpen((isOpen) => !isOpen),
-      d: toggleChangesPanel,
-      "alt+b": toggleChangesPanel,
-      j: toggleTerminal,
-      "shift+e": toggleFiles,
+    const commands: Record<ShortcutCommand, () => void> = {
+      newChat: () => openNewChat(),
+      toggleSidebar: () => setIsSidebarOpen((isOpen) => !isOpen),
+      toggleChangesPanel,
+      toggleTerminal,
+      toggleFilesPanel: toggleFiles,
     };
     function runShortcut(event: KeyboardEvent) {
-      if (!event.metaKey || event.ctrlKey) return;
-      const modifiers = [event.shiftKey && "shift", event.altKey && "alt"].filter(Boolean);
-      const shortcut = shortcuts[[...modifiers, event.code.replace(/^Key/, "").toLowerCase()].join("+")];
-      if (!shortcut) return;
+      const command = shortcutCommandFor(event);
+      if (!command) return;
       event.preventDefault();
-      shortcut();
+      commands[command]();
     }
     window.addEventListener("keydown", runShortcut);
     return () => window.removeEventListener("keydown", runShortcut);
