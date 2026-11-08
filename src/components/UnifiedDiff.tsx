@@ -3,14 +3,14 @@ import { cn } from "./ui";
 
 const LINE_SURFACE: Record<DiffLineKind, string> = {
   context: "",
-  addition: "bg-success/8",
-  deletion: "bg-error/8",
+  addition: "bg-diff-addition-surface/8",
+  deletion: "bg-diff-deletion-surface/8",
 };
 
 const GUTTER_SURFACE: Record<DiffLineKind, string> = {
   context: "text-muted-foreground/60",
-  addition: "bg-success/14 text-diff-addition",
-  deletion: "bg-error/14 text-diff-deletion",
+  addition: "bg-diff-addition-surface/14 text-diff-addition",
+  deletion: "bg-diff-deletion-surface/14 text-diff-deletion",
 };
 
 const SIGN: Record<DiffLineKind, string> = {

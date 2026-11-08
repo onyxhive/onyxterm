@@ -1,5 +1,6 @@
 import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { useComposerInsertions, withInsertion } from "../composerInsertions";
+import { sendNeedsModifier } from "../preferences";
 import type { Suggestion } from "../types";
 import { findTrigger, matchSuggestions, type SuggestionSources } from "./composerTrigger";
 import { SuggestionList, suggestionOptionId } from "./SuggestionPopup";
@@ -167,7 +168,9 @@ export function Composer(props: ComposerProps) {
       menuAction();
       return;
     }
-    if (event.key !== "Enter" || event.shiftKey || event.metaKey || event.altKey) return;
+    if (event.key !== "Enter" || event.shiftKey || event.altKey) return;
+    const hasModifier = event.metaKey || event.ctrlKey;
+    if (hasModifier !== sendNeedsModifier(text)) return;
     event.preventDefault();
     submit();
   }

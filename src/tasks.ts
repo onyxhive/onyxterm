@@ -1,5 +1,6 @@
 import type { ChatFeed } from "./feed";
 import { runningActivity } from "./feed";
+import { timestampFormat, type TimestampFormat } from "./preferences";
 import type { Chat, Task } from "./types";
 
 const TITLE_LENGTH = 60;
@@ -7,6 +8,12 @@ const MS_PER_SECOND = 1000;
 const SECONDS_PER_MINUTE = 60;
 const MINUTES_PER_HOUR = 60;
 const HOURS_PER_DAY = 24;
+
+const HOUR12_BY_FORMAT: Record<TimestampFormat, boolean | undefined> = {
+  locale: undefined,
+  "12-hour": true,
+  "24-hour": false,
+};
 
 const SENTENCE_END = /(?<=[.!?])\s/;
 const WHITESPACE = /\s+/;
@@ -45,7 +52,7 @@ export function displayTitle(title: string): string {
 }
 
 export function clockTime(at: Date = new Date()): string {
-  return at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return at.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: HOUR12_BY_FORMAT[timestampFormat()] });
 }
 
 export function elapsedSince(timestamp: number, now: number): string {

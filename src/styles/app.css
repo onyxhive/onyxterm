@@ -70,6 +70,8 @@
   --failed-dot: var(--color-red-500);
   --diff-addition: var(--color-emerald-700);
   --diff-deletion: var(--color-red-700);
+  --diff-addition-surface: var(--success);
+  --diff-deletion-surface: var(--error);
   --code-background: var(--color-zinc-50);
   --sidebar: var(--color-zinc-50);
   --sidebar-foreground: var(--color-zinc-900);
@@ -142,6 +144,28 @@
   }
 }
 
+:root[data-chat-width="wide"] {
+  --chat-content-max-width: 72rem;
+}
+
+:root[data-chat-width="full"] {
+  --chat-content-max-width: 100%;
+}
+
+:root[data-diff-color-scheme="blue-orange"] {
+  --diff-addition: var(--color-blue-600);
+  --diff-deletion: var(--color-orange-600);
+  --diff-addition-surface: var(--color-blue-500);
+  --diff-deletion-surface: var(--color-orange-500);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-diff-color-scheme="blue-orange"] {
+    --diff-addition: var(--color-blue-400);
+    --diff-deletion: var(--color-orange-400);
+  }
+}
+
 [data-workspace-root] {
   --workspace-titlebar-content-left: calc(
     var(--workspace-controls-left) + var(--workspace-titlebar-control-size) + var(--workspace-titlebar-control-gap)
@@ -201,6 +225,8 @@
   --color-failed-dot: var(--failed-dot);
   --color-diff-addition: var(--diff-addition);
   --color-diff-deletion: var(--diff-deletion);
+  --color-diff-addition-surface: var(--diff-addition-surface);
+  --color-diff-deletion-surface: var(--diff-deletion-surface);
   --color-code: var(--code-background);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);

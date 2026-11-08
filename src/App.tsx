@@ -23,6 +23,7 @@ import { displayTitle, toTask } from "./tasks";
 import type { Chat, Provider, TaskStatus, Toast } from "./types";
 import { collapsedSectionsFrom } from "./collapsedSections";
 import { useChats } from "./useChats";
+import { applyPreferences, areInAppNotificationsOn } from "./preferences";
 import { useProjectBranches } from "./useProjectBranches";
 import { useSettings } from "./useSettings";
 import { useWorkbench } from "./useWorkbench";
@@ -92,12 +93,15 @@ export default function App() {
   const { lastAddedProjectId } = workspaceState;
   const lastProjectSetting = workspace ? lastProjectSettingOf(workspace.id) : null;
   const lastProjectId = lastProjectSetting ? settings?.[lastProjectSetting] : undefined;
+  useEffect(() => {
+    if (settings) applyPreferences(settings);
+  }, [settings]);
   const selectedTaskIdRef = useRef(selectedTaskId);
   selectedTaskIdRef.current = selectedTaskId;
 
   function announce(chat: Chat) {
     const headline = ATTENTION_HEADLINES[chat.state];
-    if (!headline || chat.id === selectedTaskIdRef.current) return;
+    if (!headline || chat.id === selectedTaskIdRef.current || !areInAppNotificationsOn()) return;
     const toast: Toast = {
       id: `${chat.id}-${chat.state}`,
       taskId: chat.id,
