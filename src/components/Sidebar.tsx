@@ -4,8 +4,8 @@ import {
   ChevronDown,
   ChartNoAxesColumn,
   CircleAlert,
-  CircleCheck,
   CircleDashed,
+  Eye,
   FolderPlus,
   GitBranch,
   MessageCircleQuestion,
@@ -68,7 +68,7 @@ const ROW_STATUS: Partial<Record<TaskStatus, RowStatus>> = {
   permission: { label: "Approval", icon: ShieldQuestion, className: "text-warning-foreground" },
   question: { label: "Input", icon: MessageCircleQuestion, className: "text-indigo-600 dark:text-indigo-300" },
   failed: { label: "Failed", icon: CircleAlert, className: "text-error-foreground" },
-  review: { label: "Done", icon: CircleCheck, className: "text-success-foreground" },
+  review: { label: "Review", icon: Eye, className: "text-primary" },
 };
 
 const SIDEBAR_HEADER_ICON_BUTTON = cn(
@@ -128,7 +128,7 @@ interface RowMetaProps {
 
 function RowMeta({ projectName, branch, elapsed }: RowMetaProps) {
   return (
-    <span className="flex min-w-0 items-center gap-1 text-xs text-secondary-label">
+    <span className="flex min-w-0 items-center gap-1 text-xs text-secondary-label group-hover/row:pe-6">
       <span className="max-w-1/2 shrink-0 truncate">{projectName}</span>
       {branch && (
         <>
@@ -176,14 +176,14 @@ function ThreadRow({ task, projectName, branch, isActive, actions }: ThreadRowPr
             isSettled ? "font-normal text-foreground/75 group-hover/row:text-foreground" : "font-medium",
           )}
         >
-          <span className="float-right ms-2 flex h-5 items-center tabular-nums group-hover/row:opacity-0">
+          <span className="float-right ms-2 flex h-5 items-center tabular-nums">
             <RowStatusSlot task={task} />
           </span>
           {task.title}
         </span>
         <RowMeta projectName={projectName} branch={branch} elapsed={task.elapsed} />
       </button>
-      <span className="absolute top-1.5 right-2 flex h-5 items-center">
+      <span className="absolute right-2 bottom-1.5 flex h-4 items-center">
         <SettleButton task={task} actions={actions} />
       </span>
     </li>
