@@ -1,4 +1,10 @@
-import { GitMerge, GitPullRequestArrow, GitPullRequestClosed, GitPullRequestDraft, type LucideIcon } from "lucide-react";
+import {
+  GitMerge,
+  GitPullRequestArrow,
+  GitPullRequestClosed,
+  GitPullRequestDraft,
+  type LucideIcon,
+} from "lucide-react";
 import type { ChecksSummary } from "../types";
 
 export type PrDisplayState = "open" | "draft" | "closed" | "merged";
@@ -34,9 +40,10 @@ function checksCountLabel(checks: ChecksSummary): string {
 
 export function checksPresentation(checks: ChecksSummary): ChecksPresentation | null {
   if (checks.total === 0) return null;
-  if (checks.failed > 0) return { label: `${checks.failed} failing, ${checksCountLabel(checks)}`, dotClass: "bg-error" };
-  if (checks.pending > 0) return { label: `${checks.pending} pending, ${checksCountLabel(checks)}`, dotClass: "bg-warning" };
-  return { label: checksCountLabel(checks), dotClass: "bg-success" };
+  const count = checksCountLabel(checks);
+  if (checks.failed > 0) return { label: `${checks.failed} failing, ${count}`, dotClass: "bg-error" };
+  if (checks.pending > 0) return { label: `${checks.pending} pending, ${count}`, dotClass: "bg-warning" };
+  return { label: count, dotClass: "bg-success" };
 }
 
 const REVIEW_LABELS: Record<string, string> = {

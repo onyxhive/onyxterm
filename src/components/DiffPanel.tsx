@@ -169,7 +169,13 @@ function FileList({ files, selectedPath, onSelect }: FileListProps) {
   );
 }
 
-function SelectedFileDiff({ path, diff, isLoading }: { path: string; diff: ParsedFileDiff | null; isLoading: boolean }) {
+interface SelectedFileDiffProps {
+  path: string;
+  diff: ParsedFileDiff | null;
+  isLoading: boolean;
+}
+
+function SelectedFileDiff({ path, diff, isLoading }: SelectedFileDiffProps) {
   return (
     <section aria-label={`Diff of ${path}`} className="min-h-0 flex-1 overflow-y-auto border-t border-border">
       <header
