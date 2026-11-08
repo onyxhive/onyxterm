@@ -41,7 +41,7 @@ const DEFAULT_CHOICE: AgentChoice = {
 const IS_MAC = navigator.platform.startsWith("Mac");
 const MAC_WINDOW_CONTROLS_INSET = { "--workspace-controls-left": "90px" } as CSSProperties;
 
-const ROOM_FOR_CHANGES_PANEL = "(min-width: 1181px)";
+const CHANGES_PANEL_SETTING = "changesPanelOpen";
 
 const LAST_PROJECT_SETTING_PREFIX = "lastProject:";
 
@@ -72,9 +72,6 @@ export default function App() {
   const [view, setView] = useState<View>("chat");
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const isFullscreen = useIsFullscreen();
-  const [isChangesPanelOpen, setIsChangesPanelOpen] = useState(
-    () => window.matchMedia(ROOM_FOR_CHANGES_PANEL).matches,
-  );
   const [diffScope, setDiffScope] = useState<DiffScope>(LATEST_TURN_SCOPE);
   const workbench = useWorkbench();
   const { closeFilesPanel, toggleFilesPanel, toggleTerminal } = workbench;
@@ -86,6 +83,13 @@ export default function App() {
   }
 
   const { settings, remember } = useSettings();
+  const isChangesPanelOpen = settings?.[CHANGES_PANEL_SETTING] === "true";
+  const isChangesPanelOpenRef = useRef(isChangesPanelOpen);
+  isChangesPanelOpenRef.current = isChangesPanelOpen;
+
+  function setIsChangesPanelOpen(isOpen: boolean) {
+    remember(CHANGES_PANEL_SETTING, String(isOpen));
+  }
   const workspaceState = useWorkspaces({ settings, remember, onError: showError });
   const { workspaces, workspace, actions: workspaceActions } = workspaceState;
   const projects = workspaces.flatMap((candidate) => candidate.projects);
@@ -132,7 +136,7 @@ export default function App() {
 
   function toggleChangesPanel() {
     closeFilesPanel();
-    setIsChangesPanelOpen((isOpen) => !isOpen);
+    setIsChangesPanelOpen(!isChangesPanelOpenRef.current);
   }
 
   function toggleFiles() {
