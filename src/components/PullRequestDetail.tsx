@@ -14,10 +14,10 @@ import {
 } from "lucide-react";
 import { ghProblemOf, prApi } from "../gitApi";
 import { elapsedSince } from "../tasks";
-import type { MergeMethod, PrCheck, PullRequestDetail as Detail } from "../types";
+import type { PrCheck, PullRequestDetail as Detail } from "../types";
 import { usePr } from "../useGit";
 import { useLoaded } from "../useLoaded";
-import { MERGE_METHODS, useMergeMethod } from "../useMergeMethod";
+import { MERGE_METHOD_LABELS, MERGE_METHODS, useMergeMethod } from "../useMergeMethod";
 import { GhProblemState } from "./GhProblemState";
 import { Markdown } from "./Markdown";
 import { PR_STATE_PRESENTATION, prDisplayState, reviewDecisionLabel } from "./prPresentation";
@@ -34,12 +34,6 @@ const DETAIL_TABS = [
   { value: "changes" as const, label: "Changes" },
   { value: "checks" as const, label: "Checks" },
 ];
-
-const MERGE_LABEL: Record<MergeMethod, string> = {
-  merge: "Merge",
-  squash: "Squash and merge",
-  rebase: "Rebase and merge",
-};
 
 const CONFLICTING = "CONFLICTING";
 
@@ -211,7 +205,7 @@ function MergeControl({ detail, projectId, onMerged }: MergeControlProps) {
       <div className="flex flex-col items-end gap-1">
         <div className="flex items-center gap-2">
           <span className="text-sm text-foreground/85">
-            {MERGE_LABEL[method]} into <code className="font-mono text-xs">{detail.baseRefName}</code>?
+            {MERGE_METHOD_LABELS[method]} into <code className="font-mono text-xs">{detail.baseRefName}</code>?
           </span>
           <button type="button" className={GHOST_BUTTON} onClick={() => setIsConfirming(false)}>
             Cancel
@@ -234,7 +228,7 @@ function MergeControl({ detail, projectId, onMerged }: MergeControlProps) {
         className={cn(PRIMARY_BUTTON, "rounded-e-none")}
         onClick={() => setIsConfirming(true)}
       >
-        {MERGE_LABEL[method]}
+        {MERGE_METHOD_LABELS[method]}
       </button>
       <button
         type="button"
@@ -262,7 +256,7 @@ function MergeControl({ detail, projectId, onMerged }: MergeControlProps) {
                 popup.close();
               }}
             >
-              {MERGE_LABEL[candidate]}
+              {MERGE_METHOD_LABELS[candidate]}
               <Check className={cn("ms-auto size-3.5", candidate !== method && "invisible")} />
             </button>
           ))}

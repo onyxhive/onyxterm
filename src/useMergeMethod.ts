@@ -5,6 +5,11 @@ import type { MergeMethod } from "./types";
 export const MERGE_METHOD_SETTING = "pullRequestMergeMethod";
 export const DEFAULT_MERGE_METHOD: MergeMethod = "merge";
 export const MERGE_METHODS: MergeMethod[] = ["merge", "squash", "rebase"];
+export const MERGE_METHOD_LABELS: Record<MergeMethod, string> = {
+  merge: "Merge",
+  squash: "Squash and merge",
+  rebase: "Rebase and merge",
+};
 
 function isMergeMethod(value: string | undefined): value is MergeMethod {
   return MERGE_METHODS.some((method) => method === value);
