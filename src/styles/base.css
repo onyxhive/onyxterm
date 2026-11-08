@@ -85,7 +85,7 @@ kbd {
 }
 
 ::selection {
-  background: var(--accent-soft);
+  background: var(--selection);
 }
 
 ::-webkit-scrollbar {
