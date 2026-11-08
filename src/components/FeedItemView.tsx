@@ -2,8 +2,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { CircleStop } from "lucide-react";
 import remarkGfm from "remark-gfm";
 import { remarkMentions } from "../remarkMentions";
-import type { FeedItem, ImageAttachment, PermissionDecision } from "../types";
-import { ApprovalRow } from "./ApprovalRow";
+import type { FeedItem, ImageAttachment } from "../types";
 import { CopyButton } from "./CopyButton";
 import { ImageThumbnail } from "./ImageThumbnail";
 import { Markdown } from "./Markdown";
@@ -12,16 +11,10 @@ import { QuestionRow } from "./QuestionDrawer";
 import { cn } from "./ui";
 import { WorkGroup } from "./WorkLog";
 
-export interface FeedActions {
-  onDecide: (requestId: string, decision: PermissionDecision) => void;
-}
-
 interface FeedItemViewProps {
   item: FeedItem;
   liveStepId: string | null;
   isTurnReply: boolean;
-  isShortcutTarget: boolean;
-  actions: FeedActions;
 }
 
 type AgentItem = Extract<FeedItem, { kind: "agent" }>;
@@ -166,7 +159,7 @@ function InterruptedDivider() {
   );
 }
 
-export function FeedItemView({ item, liveStepId, isTurnReply, isShortcutTarget, actions }: FeedItemViewProps) {
+export function FeedItemView({ item, liveStepId, isTurnReply }: FeedItemViewProps) {
   switch (item.kind) {
     case "user":
       return <UserMessage text={item.text} time={item.time} images={item.images ?? []} />;
@@ -182,10 +175,9 @@ export function FeedItemView({ item, liveStepId, isTurnReply, isShortcutTarget, 
       );
     case "interrupted":
       return <InterruptedDivider />;
-    case "permission":
-      return <ApprovalRow request={item} isShortcutTarget={isShortcutTarget} onDecide={actions.onDecide} />;
     case "question":
       return <QuestionRow request={item} />;
+    case "permission":
     case "subagent":
       return null;
   }

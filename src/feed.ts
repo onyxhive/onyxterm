@@ -28,7 +28,7 @@ const PRESENT_TENSE: Record<string, string> = {
 const SHELL_VERB = "Ran";
 const FILE_CHANGE_VERBS = new Set(["Edited", "Wrote"]);
 const MAIN_AGENT_REQUESTER = "main agent";
-const GROUP_PASSTHROUGH_KINDS = new Set<FeedItem["kind"]>(["permission"]);
+const GROUP_PASSTHROUGH_KINDS = new Set<FeedItem["kind"]>(["permission", "subagent"]);
 
 type AgentItem = Extract<FeedItem, { kind: "agent" }>;
 type StepsItem = Extract<FeedItem, { kind: "steps" }>;
@@ -120,6 +120,19 @@ function withSubagentStep(items: FeedItem[], parentToolUseId: string, step: Step
   );
 }
 
+function isSubagentLaunch(items: FeedItem[], toolUseId: string): boolean {
+  return items.some((item) => item.kind === "subagent" && item.toolUseId === toolUseId);
+}
+
+function withoutStep(items: FeedItem[], stepId: string): FeedItem[] {
+  return items.flatMap((item): FeedItem[] => {
+    if (item.kind !== "steps") return [item];
+    const steps = item.steps.filter((step) => step.id !== stepId);
+    if (steps.length === item.steps.length) return [item];
+    return steps.length === 0 ? [] : [{ ...item, steps, files: changedFileCount(steps) }];
+  });
+}
+
 function mapSteps(items: FeedItem[], change: (step: Step) => Step): FeedItem[] {
   return items.map((item) => {
     if (item.kind === "steps") return { ...item, steps: item.steps.map(change) };
@@ -134,12 +147,14 @@ function startTool(feed: ChatFeed, event: Extract<AgentEvent, { kind: "toolStart
     id: toolUseId,
     verb: summary.verb,
     detail: summary.detail,
+    description: summary.description,
     isNested: parentToolUseId !== null,
     isFailed: false,
     decision: feed.decisions[toolUseId],
   };
   const files = withFile(feed.files, summary);
   const runningTools = { ...feed.runningTools, [toolUseId]: `${summary.verb} ${summary.detail}` };
+  if (isSubagentLaunch(feed.items, toolUseId)) return { ...feed, files, runningTools };
   const nestedItems = parentToolUseId ? withSubagentStep(feed.items, parentToolUseId, step) : null;
   return { ...feed, files, runningTools, items: nestedItems ?? withGroupedStep(feed.items, step) };
 }
@@ -186,7 +201,7 @@ function startSubagent(feed: ChatFeed, event: Extract<AgentEvent, { kind: "subag
     summary: null,
     steps: [],
   };
-  return withItems(feed, [...feed.items, created]);
+  return withItems(feed, [...withoutStep(feed.items, event.toolUseId), created]);
 }
 
 function updateSubagent(feed: ChatFeed, toolUseId: string, change: (item: SubagentItem) => SubagentItem): ChatFeed {

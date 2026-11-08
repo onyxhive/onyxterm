@@ -9,7 +9,7 @@ import { useNow } from "./useNow";
 import { formatDuration } from "./WorkingRow";
 import { StepRow } from "./WorkLog";
 
-export type SubagentEntry = SubagentView & { toolUseId: string; steps: Step[] };
+export type SubagentEntry = SubagentView & { toolUseId: string; steps: Step[]; needsApproval: boolean };
 
 const MAX_STACKED_AVATARS = 3;
 
@@ -61,10 +61,27 @@ function totalSeconds(agents: SubagentEntry[], now: number): number | null {
   return seconds.length > 0 ? Math.max(...seconds) : null;
 }
 
+const SHELL_VERB = "Ran";
+const LEADING_CD = /^cd\s+\S+\s*&&\s*/;
+const PATH_LIKE = /\S*\/\S*/g;
+
+function shellStep(command: string): string {
+  const words = command.replace(LEADING_CD, "").trim().split(/\s+/);
+  const program = words[0] ?? command;
+  const path = words.slice(1).join(" ").match(PATH_LIKE)?.at(-1);
+  return path ? `${program} in ${path}` : program;
+}
+
+function humanStep(step: Step, isRunning: boolean): string {
+  if (step.description) return step.description;
+  if (step.verb !== SHELL_VERB) return `${step.verb} ${step.detail}`;
+  return `${isRunning ? "Running" : SHELL_VERB} ${shellStep(step.detail)}`;
+}
+
 function activityLine(agent: SubagentEntry): string {
   const latest = agent.steps.at(-1);
-  if (agent.status === "running") return `Running ${latest?.detail ?? agent.lastTool ?? "…"}`;
-  if (latest) return `${latest.verb} ${latest.detail}`;
+  if (latest) return humanStep(latest, agent.status === "running");
+  if (agent.status === "running") return `Running ${agent.lastTool ?? "…"}`;
   return agent.lastTool ?? SUBAGENT_STATUS_LABEL[agent.status];
 }
 
@@ -97,6 +114,12 @@ function AgentCardRow({ agent }: { agent: SubagentEntry }) {
           </span>
         </span>
         <span className="flex shrink-0 items-center gap-2 text-xs text-muted-foreground tabular-nums">
+          {agent.needsApproval && (
+            <span className="inline-flex items-center gap-1.5 text-approval">
+              <span aria-hidden="true" className="size-1.5 animate-status-pulse rounded-full bg-approval-dot" />
+              Needs approval
+            </span>
+          )}
           <span className={cn(agent.status === "failed" && "text-error-foreground")}>
             {SUBAGENT_STATUS_LABEL[agent.status]}
           </span>

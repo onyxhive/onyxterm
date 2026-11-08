@@ -3,6 +3,7 @@ import type { ImageAttachment, Question } from "./types";
 export interface ToolSummary {
   verb: string;
   detail: string;
+  description: string;
   filePath: string | null;
   added: number;
   removed: number;

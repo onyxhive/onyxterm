@@ -50,6 +50,7 @@ export interface Step {
   id: string;
   verb: string;
   detail: string;
+  description: string;
   isNested: boolean;
   isFailed: boolean;
   decision?: PermissionDecision;
