@@ -20,6 +20,7 @@ interface FeedItemViewProps {
   item: FeedItem;
   liveStepId: string | null;
   isTurnReply: boolean;
+  isShortcutTarget: boolean;
   actions: FeedActions;
 }
 
@@ -165,7 +166,7 @@ function InterruptedDivider() {
   );
 }
 
-export function FeedItemView({ item, liveStepId, isTurnReply, actions }: FeedItemViewProps) {
+export function FeedItemView({ item, liveStepId, isTurnReply, isShortcutTarget, actions }: FeedItemViewProps) {
   switch (item.kind) {
     case "user":
       return <UserMessage text={item.text} time={item.time} images={item.images ?? []} />;
@@ -182,7 +183,7 @@ export function FeedItemView({ item, liveStepId, isTurnReply, actions }: FeedIte
     case "interrupted":
       return <InterruptedDivider />;
     case "permission":
-      return <ApprovalRow request={item} onDecide={actions.onDecide} />;
+      return <ApprovalRow request={item} isShortcutTarget={isShortcutTarget} onDecide={actions.onDecide} />;
     case "question":
       return <QuestionRow request={item} />;
     case "subagent":

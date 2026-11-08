@@ -100,6 +100,7 @@ export function ChatView({ task, projectPath, actions }: ChatViewProps) {
   const question = pendingQuestionIn(task.feed);
   const answers = useQuestionAnswers(question);
   const liveStepId = liveStepIdIn(task);
+  const oldestPendingApproval = task.feed.find((item) => item.kind === "permission");
   const lastItem = task.feed.at(-1);
   const scrollKey = lastItem?.kind === "agent" ? lastItem.markdown.length : 0;
   const isRunning = task.status === "running";
@@ -172,6 +173,7 @@ export function ChatView({ task, projectPath, actions }: ChatViewProps) {
                     item={block.item}
                     liveStepId={liveStepId}
                     isTurnReply={turnReplies.has(block.index)}
+                    isShortcutTarget={block.item === oldestPendingApproval}
                     actions={actions}
                   />
                 ),

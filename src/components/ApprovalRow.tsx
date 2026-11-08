@@ -11,7 +11,13 @@ type PermissionRequest = Extract<FeedItem, { kind: "permission" }>;
 
 interface ApprovalRowProps {
   request: PermissionRequest;
+  isShortcutTarget: boolean;
   onDecide: (requestId: string, decision: PermissionDecision) => void;
+}
+
+interface MoreApprovalOptionsProps {
+  hasShortcutHint: boolean;
+  onAlwaysAllow: () => void;
 }
 
 const ACTION_ICONS: Record<string, LucideIcon> = {
@@ -55,7 +61,7 @@ function toolNameOf(action: string): string {
   return TOOL_NAMES[action] ?? capitalized(action);
 }
 
-function MoreApprovalOptions({ onAlwaysAllow }: { onAlwaysAllow: () => void }) {
+function MoreApprovalOptions({ hasShortcutHint, onAlwaysAllow }: MoreApprovalOptionsProps) {
   const popup = usePopup<HTMLSpanElement>();
 
   return (
@@ -75,7 +81,7 @@ function MoreApprovalOptions({ onAlwaysAllow }: { onAlwaysAllow: () => void }) {
         <div role="menu" className={cn(MENU_POPUP, "absolute right-0 bottom-full mb-1 w-max")}>
           <button type="button" role="menuitem" className={MENU_ITEM} onClick={onAlwaysAllow}>
             <span className="min-w-0 flex-1 whitespace-normal">Always allow this session</span>
-            <Kbd>⌥⌘↵</Kbd>
+            {hasShortcutHint && <Kbd>⌥⌘↵</Kbd>}
           </button>
         </div>
       )}
@@ -123,10 +129,11 @@ function CommandBlock({ command, isShell }: { command: string; isShell: boolean 
   );
 }
 
-export function ApprovalRow({ request, onDecide }: ApprovalRowProps) {
+export function ApprovalRow({ request, isShortcutTarget, onDecide }: ApprovalRowProps) {
   const shortPaths = useShortPaths();
 
   useEffect(() => {
+    if (!isShortcutTarget) return;
     function decideByShortcut(event: KeyboardEvent) {
       if (event.defaultPrevented) return;
       const decision = decisionForKey(event);
@@ -136,7 +143,7 @@ export function ApprovalRow({ request, onDecide }: ApprovalRowProps) {
     }
     window.addEventListener("keydown", decideByShortcut);
     return () => window.removeEventListener("keydown", decideByShortcut);
-  }, [onDecide, request.requestId]);
+  }, [isShortcutTarget, onDecide, request.requestId]);
 
   const Icon = ACTION_ICONS[request.action] ?? Wrench;
   const decide = (decision: PermissionDecision) => () => onDecide(request.requestId, decision);
@@ -163,14 +170,14 @@ export function ApprovalRow({ request, onDecide }: ApprovalRowProps) {
         )}
         <CommandBlock command={shortPaths(request.target)} isShell={request.isShell} />
         <div className="flex flex-wrap items-center justify-end gap-1.5 px-3 pt-2.5 pb-3">
-          <MoreApprovalOptions onAlwaysAllow={decide("always")} />
+          <MoreApprovalOptions hasShortcutHint={isShortcutTarget} onAlwaysAllow={decide("always")} />
           <button type="button" className={cn(GHOST_BUTTON, "h-7 gap-2 px-2.5 text-xs")} onClick={decide("deny")}>
             Decline
-            <Kbd className="h-4 text-3xs">esc</Kbd>
+            {isShortcutTarget && <Kbd className="h-4 text-3xs">esc</Kbd>}
           </button>
           <button type="button" className={cn(PRIMARY_BUTTON, "h-7 gap-2 px-2.5 text-xs")} onClick={decide("once")}>
             Approve
-            <Kbd className="h-4 bg-white/20 text-3xs text-primary-foreground">⌘↵</Kbd>
+            {isShortcutTarget && <Kbd className="h-4 bg-white/20 text-3xs text-primary-foreground">⌘↵</Kbd>}
           </button>
         </div>
       </div>
