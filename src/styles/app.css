@@ -6,7 +6,17 @@
   --provider-claude: #d97757;
   --control-radius: 0.5rem;
   --topbar-height: 52px;
-  --traffic-light-inset: 5rem;
+  --workspace-controls-left: calc(env(safe-area-inset-left) + 0.75rem);
+  --workspace-titlebar-control-size: 1.75rem;
+  --workspace-titlebar-control-gap: 0.75rem;
+  --workspace-gutter: 0.75rem;
+  --workspace-gutter-start: calc(env(safe-area-inset-left) + var(--workspace-gutter));
+  --workspace-gutter-end: calc(env(safe-area-inset-right) + var(--workspace-gutter));
+
+  @variant sm {
+    --workspace-gutter: 1.25rem;
+  }
+
   --sidebar-width: 16rem;
   --chat-content-max-width: 46rem;
   --changes-panel-width: clamp(20rem, 32vw, 28rem);
@@ -128,6 +138,12 @@
     --popover-shadow: 0 18px 44px -18px rgb(0 0 0 / 80%);
     --popover-outline: color-mix(in srgb, var(--color-white) 10%, transparent);
   }
+}
+
+[data-workspace-root] {
+  --workspace-titlebar-content-left: calc(
+    var(--workspace-controls-left) + var(--workspace-titlebar-control-size) + var(--workspace-titlebar-control-gap)
+  );
 }
 
 @theme {

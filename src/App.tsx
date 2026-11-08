@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { DEFAULT_EFFORT, DEFAULT_MODEL } from "./agentOptions";
 import { Board } from "./components/Board";
 import { ChangesPanel } from "./components/ChangesPanel";
@@ -9,6 +9,7 @@ import { NewChat, type ChatStart } from "./components/NewChat";
 import { Sidebar, type SidebarActions } from "./components/Sidebar";
 import { SidebarToggle, TopBar, TopBarHeading, type View } from "./components/TitleBar";
 import { Toasts } from "./components/Toasts";
+import { useIsFullscreen } from "./components/useIsFullscreen";
 import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher";
 import { EMPTY_FEED } from "./feed";
 import { toTask } from "./tasks";
@@ -24,6 +25,9 @@ const DEFAULT_CHOICE: AgentChoice = {
   model: DEFAULT_MODEL,
   effort: DEFAULT_EFFORT,
 };
+
+const IS_MAC = navigator.platform.startsWith("Mac");
+const MAC_WINDOW_CONTROLS_INSET = { "--workspace-controls-left": "90px" } as CSSProperties;
 
 const ROOM_FOR_CHANGES_PANEL = "(min-width: 1181px)";
 
@@ -47,6 +51,7 @@ export default function App() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [view, setView] = useState<View>("chat");
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const isFullscreen = useIsFullscreen();
   const [isChangesPanelOpen, setIsChangesPanelOpen] = useState(
     () => window.matchMedia(ROOM_FOR_CHANGES_PANEL).matches,
   );
@@ -210,12 +215,12 @@ export default function App() {
   if (!workspace) return <div className="h-full bg-background" />;
 
   return (
-    <div className="flex h-full overflow-hidden bg-background text-foreground">
-      <SidebarToggle
-        isSidebarOpen={isSidebarOpen}
-        onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)}
-        onNewChat={() => openNewChat()}
-      />
+    <div
+      style={isFullscreen || !IS_MAC ? undefined : MAC_WINDOW_CONTROLS_INSET}
+      data-workspace-root
+      className="flex h-full overflow-hidden bg-background text-foreground"
+    >
+      <SidebarToggle isSidebarOpen={isSidebarOpen} onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
       <Sidebar
         workspace={workspace}
         tasks={workspaceTasks}

@@ -141,7 +141,7 @@ export function WorkspaceSwitcher({ workspaces, current, tasks, actions }: Works
       {isOpen && (
         <div role="menu" aria-label="Workspaces" className={cn(
             MENU_POPUP,
-            "fixed top-[calc(var(--topbar-height)-0.5rem)] left-[calc(var(--traffic-light-inset)+2.25rem)] w-72",
+            "fixed top-[calc(var(--topbar-height)-0.5rem)] left-(--workspace-titlebar-content-left) w-72",
           )}>
           <MenuLabel>Workspaces</MenuLabel>
           {workspaces.map((workspace, index) => (

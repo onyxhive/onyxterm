@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { PanelLeft, PanelLeftClose, SquarePen } from "lucide-react";
+import { PanelLeft, PanelLeftClose } from "lucide-react";
 import { cn, ICON_BUTTON } from "./ui";
 
 export type View = "chat" | "board";
@@ -7,38 +7,26 @@ export type View = "chat" | "board";
 interface SidebarToggleProps {
   isSidebarOpen: boolean;
   onToggleSidebar: () => void;
-  onNewChat: () => void;
 }
 
-export function SidebarToggle({ isSidebarOpen, onToggleSidebar, onNewChat }: SidebarToggleProps) {
+export function SidebarToggle({ isSidebarOpen, onToggleSidebar }: SidebarToggleProps) {
   return (
     <div
       className={cn(
-        "pointer-events-none fixed top-0 left-(--traffic-light-inset) z-40 flex h-(--topbar-height) items-center",
-        "gap-1",
+        "pointer-events-none fixed top-0 left-(--workspace-controls-left) z-50 ml-px flex h-(--topbar-height)",
+        "items-center transition-[left] duration-200 ease-out motion-reduce:transition-none",
       )}
     >
       <button
         type="button"
         className={cn(ICON_BUTTON, "pointer-events-auto")}
         aria-label="Toggle sidebar"
-        aria-pressed={isSidebarOpen}
+        aria-expanded={isSidebarOpen}
         title="Toggle sidebar (⌘B)"
         onClick={onToggleSidebar}
       >
         {isSidebarOpen ? <PanelLeftClose /> : <PanelLeft />}
       </button>
-      {!isSidebarOpen && (
-        <button
-          type="button"
-          className={cn(ICON_BUTTON, "pointer-events-auto")}
-          aria-label="New chat"
-          title="New chat (⌘N)"
-          onClick={onNewChat}
-        >
-          <SquarePen />
-        </button>
-      )}
     </div>
   );
 }
@@ -53,9 +41,9 @@ export function TopBar({ isSidebarOpen, children }: TopBarProps) {
     <header
       data-tauri-drag-region
       className={cn(
-        "relative flex h-(--topbar-height) shrink-0 items-center gap-3 bg-background pe-3",
-        "transition-[padding] duration-200 ease-out motion-reduce:transition-none",
-        isSidebarOpen ? "ps-5" : "ps-[calc(var(--traffic-light-inset)+4.25rem)]",
+        "relative flex h-(--topbar-height) shrink-0 items-center gap-3 bg-background pr-(--workspace-gutter-end)",
+        "transition-[padding-left,padding-right] duration-200 ease-out motion-reduce:transition-none",
+        isSidebarOpen ? "pl-(--workspace-gutter-start)" : "pl-(--workspace-titlebar-content-left)",
       )}
     >
       {children}

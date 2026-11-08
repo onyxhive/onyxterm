@@ -66,6 +66,13 @@ const ROW_STATUS: Partial<Record<TaskStatus, RowStatus>> = {
   review: { label: "Done", icon: CircleCheck, className: "text-success-foreground" },
 };
 
+const SIDEBAR_HEADER_ICON_BUTTON = cn(
+  "relative flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-(--control-radius)",
+  "font-medium text-sidebar-muted-foreground/80 hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
+  "[&>svg]:size-4 [&>svg]:shrink-0",
+  FOCUS_RING,
+);
+
 const ROW_ACTION_CLASS = cn(
   "pointer-events-none absolute inset-y-0 right-0 inline-flex cursor-pointer items-center rounded-md px-2",
   "text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:pointer-events-auto",
@@ -239,8 +246,9 @@ function SearchField({ query, onChange }: { query: string; onChange: (query: str
   return (
     <div
       className={cn(
-        "flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md px-2 text-sm font-medium text-sidebar-muted-foreground",
-        "hover:bg-sidebar-row-hover focus-within:bg-sidebar-row-hover focus-within:text-sidebar-foreground",
+        "flex h-8 min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium",
+        "text-sidebar-muted-foreground hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
+        "focus-within:bg-sidebar-row-hover focus-within:text-sidebar-foreground",
         "focus-within:ring-1 focus-within:ring-ring/70 focus-within:ring-inset",
       )}
     >
@@ -329,7 +337,10 @@ export function Sidebar(props: SidebarProps) {
       >
         <div
           data-tauri-drag-region
-          className="flex h-(--topbar-height) shrink-0 items-center ps-[calc(var(--traffic-light-inset)+2.25rem)] pe-3"
+          className={cn(
+            "flex h-(--topbar-height) shrink-0 items-center gap-2 pr-3 pl-(--workspace-titlebar-content-left)",
+            "transition-[padding-left] duration-200 ease-out motion-reduce:transition-none",
+          )}
         >
           {header}
         </div>
@@ -337,7 +348,7 @@ export function Sidebar(props: SidebarProps) {
           <SearchField query={query} onChange={setQuery} />
           <button
             type="button"
-            className={ICON_BUTTON}
+            className={SIDEBAR_HEADER_ICON_BUTTON}
             aria-label="Add project"
             title="Add project"
             onClick={actions.onAddProject}
@@ -346,7 +357,7 @@ export function Sidebar(props: SidebarProps) {
           </button>
           <button
             type="button"
-            className={ICON_BUTTON}
+            className={SIDEBAR_HEADER_ICON_BUTTON}
             aria-label="New chat"
             title="New chat (⌘N)"
             onClick={() => actions.onNewChat()}
