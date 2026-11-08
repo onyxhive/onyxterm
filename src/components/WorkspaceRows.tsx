@@ -1,40 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import {
-  Check,
-  ChevronDown,
-  CodeXml,
-  FolderOpen,
-  Laptop,
-  Play,
-  Plus,
-  Square,
-  SquareTerminal,
-  X,
-  type LucideIcon,
-} from "lucide-react";
+import { FolderOpen, Laptop, Play, Plus, Square, SquareTerminal, X } from "lucide-react";
 import { desktopApi, scriptApi, type GitTarget } from "../gitApi";
-import type { Editor, EditorId, ProjectScript } from "../types";
-import { useEditors, useMachineName, useScripts, type ScriptRunState } from "../useProjectTools";
-import {
-  DETAILS_ANCHORED_POPUP,
-  DETAILS_ICON,
-  DETAILS_ICON_ACTION,
-  DETAILS_LABEL,
-  DETAILS_ROW,
-  DETAILS_SPLIT_GROUP,
-  DETAILS_SPLIT_PRIMARY,
-  DETAILS_SPLIT_SECONDARY,
-  DETAILS_SPLIT_SEPARATOR,
-  DETAILS_STATIC_ROW,
-} from "./detailsStyles";
-import { cn, GHOST_BUTTON, MENU_ITEM, MENU_POPUP, PRIMARY_BUTTON, TEXT_INPUT } from "./ui";
-import { usePopup } from "./usePopup";
-
-const TERMINAL_EDITORS = new Set<EditorId>(["terminal", "ghostty", "iterm", "warp"]);
-
-function editorIcon(editorId: EditorId): LucideIcon {
-  return TERMINAL_EDITORS.has(editorId) ? SquareTerminal : CodeXml;
-}
+import type { Editor, ProjectScript } from "../types";
+import { useMachineName, useScripts, type ScriptRunState } from "../useProjectTools";
+import { DETAILS_ICON, DETAILS_ICON_ACTION, DETAILS_LABEL, DETAILS_ROW, DETAILS_STATIC_ROW } from "./detailsStyles";
+import { cn, GHOST_BUTTON, PRIMARY_BUTTON, TEXT_INPUT } from "./ui";
 
 interface WorkspaceRowsProps {
   projectId: string;
@@ -65,70 +35,8 @@ export function MachineRow({ target, onError }: TargetRowProps) {
   );
 }
 
-interface OpenInRowProps extends TargetRowProps {
-  preferredEditor: string | undefined;
-  onPreferEditor: (editorId: EditorId) => void;
-}
-
 export function preferredOf(editors: Editor[], preferred: string | undefined): Editor | null {
   return editors.find((editor) => editor.id === preferred) ?? editors[0] ?? null;
-}
-
-export function OpenInRow({ target, preferredEditor, onPreferEditor, onError }: OpenInRowProps) {
-  const editors = useEditors().data ?? [];
-  const popup = usePopup();
-  const editor = preferredOf(editors, preferredEditor);
-  const Icon = editor ? editorIcon(editor.id) : CodeXml;
-
-  function open(editor: Editor) {
-    onPreferEditor(editor.id);
-    desktopApi.openInEditor(target, editor.id).catch((error) => onError(String(error)));
-  }
-
-  return (
-    <div role="group" aria-label="Open in editor" className={DETAILS_SPLIT_GROUP} ref={popup.rootRef}>
-      <button type="button" className={DETAILS_SPLIT_PRIMARY} disabled={!editor} onClick={() => editor && open(editor)}>
-        <Icon aria-hidden className={DETAILS_ICON} />
-        <span className={DETAILS_LABEL}>{editor ? `Open in ${editor.name}` : "No editor found"}</span>
-      </button>
-      <span aria-hidden="true" className={DETAILS_SPLIT_SEPARATOR} />
-      <button
-        type="button"
-        aria-label="Choose editor"
-        aria-haspopup="menu"
-        aria-expanded={popup.isOpen}
-        disabled={editors.length === 0}
-        className={DETAILS_SPLIT_SECONDARY}
-        onClick={popup.toggle}
-      >
-        <ChevronDown aria-hidden className={DETAILS_ICON} />
-      </button>
-      {popup.isOpen && (
-        <div role="menu" aria-label="Editors" className={cn(MENU_POPUP, DETAILS_ANCHORED_POPUP)}>
-          {editors.map((candidate) => {
-            const CandidateIcon = editorIcon(candidate.id);
-            return (
-              <button
-                key={candidate.id}
-                type="button"
-                role="menuitemradio"
-                aria-checked={candidate.id === editor?.id}
-                className={MENU_ITEM}
-                onClick={() => {
-                  open(candidate);
-                  popup.close();
-                }}
-              >
-                <CandidateIcon />
-                <span className="min-w-0 flex-1 truncate">{candidate.name}</span>
-                <Check className={cn("size-3.5", candidate.id !== editor?.id && "invisible")} />
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
 }
 
 export interface ScriptRunner {

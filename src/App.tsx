@@ -211,7 +211,6 @@ export default function App() {
   };
 
   const threadDetailsActions: ThreadDetailsActions = {
-    onPreferEditor: (editorId) => remember(PREFERRED_EDITOR_SETTING, editorId),
     onOpenDiff: () => {
       setDiffScope({ kind: "workingTree" });
       closeFilesPanel();
@@ -254,7 +253,6 @@ export default function App() {
               key={selectedTask.id}
               task={selectedTask}
               project={project}
-              preferredEditor={settings?.[PREFERRED_EDITOR_SETTING]}
               actions={threadDetailsActions}
             />
           )

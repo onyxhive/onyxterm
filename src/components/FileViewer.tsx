@@ -86,7 +86,7 @@ function ViewerBody({ content, error, path }: Pick<FileViewerProps, "content" | 
 }
 
 export function FileViewer({ path, content, error, editorName, actions }: FileViewerProps) {
-  const openTitle = editorName ? `Open in ${editorName}` : "Pick an editor in thread details first";
+  const openTitle = editorName ? `Open in ${editorName}` : "Pick an editor in Settings first";
   return (
     <section aria-label={`File ${path}`} className="flex min-h-0 flex-1 flex-col border-t border-border">
       <header className="flex h-9 shrink-0 items-center gap-2 border-b border-border px-3">

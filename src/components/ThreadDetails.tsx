@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { SquareMenu } from "lucide-react";
 import type { GitTarget } from "../gitApi";
-import type { Chat, EditorId, Project, Task } from "../types";
+import type { Chat, Project, Task } from "../types";
 import { useGitStatus } from "../useGit";
 import { useScriptRun } from "../useProjectTools";
 import { BranchRow } from "./BranchRow";
@@ -11,11 +11,10 @@ import { DETAILS_SECTION } from "./detailsStyles";
 import { PreviousAgents } from "./PreviousAgents";
 import { cn, ICON_BUTTON } from "./ui";
 import { usePopup } from "./usePopup";
-import { MachineRow, OpenInRow, ScriptRows, type ScriptRunner } from "./WorkspaceRows";
+import { MachineRow, ScriptRows, type ScriptRunner } from "./WorkspaceRows";
 import { WorktreeRow } from "./WorktreeRow";
 
 export interface ThreadDetailsActions {
-  onPreferEditor: (editorId: EditorId) => void;
   onOpenDiff: () => void;
   onBranchChanged: () => void;
   onWorktreeRemoved: (chat: Chat) => void;
@@ -26,7 +25,6 @@ export interface ThreadDetailsActions {
 interface ThreadDetailsProps {
   task: Task;
   project: Project;
-  preferredEditor: string | undefined;
   actions: ThreadDetailsActions;
 }
 
@@ -54,7 +52,7 @@ function useScriptRunner(runInTerminal: (command: string) => void): ScriptRunner
   };
 }
 
-export function ThreadDetails({ task, project, preferredEditor, actions }: ThreadDetailsProps) {
+export function ThreadDetails({ task, project, actions }: ThreadDetailsProps) {
   const popup = usePopup();
   const target: GitTarget = { chat: task.id };
   const status = useGitStatus(target);
@@ -109,12 +107,6 @@ export function ThreadDetails({ task, project, preferredEditor, actions }: Threa
           <section aria-label="Workspace" className={DETAILS_SECTION}>
             <MachineRow target={target} onError={actions.onError} />
             <WorktreeRow task={task} onRemoved={actions.onWorktreeRemoved} />
-            <OpenInRow
-              target={target}
-              preferredEditor={preferredEditor}
-              onPreferEditor={actions.onPreferEditor}
-              onError={actions.onError}
-            />
             <ScriptRows projectId={project.id} runner={runner} onError={actions.onError} />
           </section>
           <section aria-label="Version control" className={DETAILS_SECTION}>
