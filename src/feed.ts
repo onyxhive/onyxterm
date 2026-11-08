@@ -184,6 +184,9 @@ export function reduceFeed(feed: ChatFeed, event: AgentEvent): ChatFeed {
     case "session":
     case "initialized":
     case "titleChanged":
+    case "subagentStarted":
+    case "subagentProgress":
+    case "subagentFinished":
       return feed;
   }
 }

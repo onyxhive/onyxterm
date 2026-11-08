@@ -10,6 +10,7 @@ export interface ChatDraft {
   model: string;
   effort: string;
   title: string;
+  newBranch?: boolean;
 }
 
 export type Settings = Record<string, string>;
