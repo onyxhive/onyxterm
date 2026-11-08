@@ -204,7 +204,7 @@ function SectionHeader({ title, count, isExpanded, onToggle }: SectionHeaderProp
       aria-expanded={isExpanded}
       onClick={onToggle}
       className={cn(
-        "flex h-8 w-full cursor-pointer items-center gap-2 rounded-md px-2 text-left text-xs font-medium",
+        "flex h-7 w-full cursor-pointer items-center gap-1 rounded-md px-2 text-left text-xs font-medium",
         "text-sidebar-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset",
         "focus-visible:ring-ring/70",
       )}
@@ -237,7 +237,7 @@ function StatusSection({ group, tasks, isExpanded, onToggle, row }: StatusSectio
         isExpanded={isExpanded}
         onToggle={onToggle}
       />
-      {isExpanded && <ul className="flex flex-col gap-px pb-1">{tasks.map(row)}</ul>}
+      {isExpanded && <ul className="flex flex-col gap-0.5 pt-0.5">{tasks.map(row)}</ul>}
     </li>
   );
 }
@@ -409,7 +409,7 @@ export function Sidebar(props: SidebarProps) {
               No chats found
             </p>
           )}
-          <ul className="flex flex-col gap-1">
+          <ul className="flex flex-col gap-2">
             {sectionTasks.map((section) => (
               <StatusSection
                 key={section.group.id}
@@ -422,7 +422,7 @@ export function Sidebar(props: SidebarProps) {
             ))}
           </ul>
         </nav>
-        <div className="flex shrink-0 flex-row items-center px-2 pt-1 pb-2">
+        <div className="flex shrink-0 flex-row items-center gap-1 px-2 pt-1 pb-2">
           <UtilityItem icon={<Settings />} label="Settings" disabledReason="Settings coming later" />
           <UtilityItem
             icon={<SquareKanban />}
