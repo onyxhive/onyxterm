@@ -1,6 +1,7 @@
 import {
   useId,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type ClipboardEvent,
@@ -10,6 +11,7 @@ import {
 } from "react";
 import { Paperclip } from "lucide-react";
 import { useComposerInsertions, withInsertion } from "../composerInsertions";
+import { mentionTargetsOf } from "../mentions";
 import { sendNeedsModifier } from "../preferences";
 import { ACCEPTED_IMAGE_TYPES, isImageFile } from "../imageAttachments";
 import type { ImageAttachment, Suggestion } from "../types";
@@ -119,6 +121,7 @@ export function Composer(props: ComposerProps) {
     inputRef.current?.focus();
   });
 
+  const mentionTargets = useMemo(() => mentionTargetsOf(suggestionSources.mentions), [suggestionSources]);
   const trigger = findTrigger(text, caret, suggestionSources);
   const suggestions = trigger ? matchSuggestions(trigger) : [];
   const isMenuOpen = trigger !== null && dismissedStart !== trigger.start;
@@ -268,7 +271,7 @@ export function Composer(props: ComposerProps) {
         <div className="relative px-3.5 pt-3 pb-1">
           <div className="relative max-h-[40vh] overflow-y-auto">
             <div aria-hidden className={cn(COMPOSER_TEXT, "pointer-events-none absolute inset-0 text-foreground")}>
-              <MentionText text={text} />
+              <MentionText text={text} targets={mentionTargets} />
             </div>
             <textarea
               ref={inputRef}

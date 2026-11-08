@@ -25,17 +25,14 @@ function nodeOf(segment: TextSegment): MarkdownNode {
   return segment.isMention ? mentionNode(segment.text) : { type: "text", value: segment.text };
 }
 
-function withMentions(node: MarkdownNode): MarkdownNode[] {
-  if (node.type !== "text" || !node.value) return [node];
-  return splitMentions(node.value).map(nodeOf);
-}
-
-function highlightMentionsIn(node: MarkdownNode) {
+function highlightMentionsIn(node: MarkdownNode, targets: ReadonlySet<string>) {
   if (!node.children || SKIPPED_PARENTS.has(node.type)) return;
-  node.children = node.children.flatMap(withMentions);
-  node.children.forEach(highlightMentionsIn);
+  node.children = node.children.flatMap((child) =>
+    child.type === "text" && child.value ? splitMentions(child.value, targets).map(nodeOf) : [child],
+  );
+  node.children.forEach((child) => highlightMentionsIn(child, targets));
 }
 
-export function remarkMentions() {
-  return highlightMentionsIn;
+export function remarkMentions(targets: ReadonlySet<string>) {
+  return (tree: MarkdownNode) => highlightMentionsIn(tree, targets);
 }

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { CircleStop } from "lucide-react";
 import remarkGfm from "remark-gfm";
 import { remarkMentions } from "../remarkMentions";
@@ -7,6 +7,7 @@ import { ApprovalRow } from "./ApprovalRow";
 import { CopyButton } from "./CopyButton";
 import { ImageThumbnail } from "./ImageThumbnail";
 import { Markdown } from "./Markdown";
+import { useMentionTargets } from "./MentionText";
 import { QuestionRow } from "./QuestionDrawer";
 import { cn } from "./ui";
 import { WorkGroup } from "./WorkLog";
@@ -28,7 +29,6 @@ const MAX_COLLAPSED_USER_MESSAGE_LINES = 8;
 const MAX_COLLAPSED_USER_MESSAGE_LENGTH = 600;
 const COLLAPSED_USER_MESSAGE_FADE_MASK = "linear-gradient(to bottom, black calc(100% - 1.75rem), transparent)";
 const COPY_MESSAGE_LABEL = "Copy message";
-const USER_MESSAGE_PLUGINS = [remarkGfm, remarkMentions];
 
 const ACTIONS_REVEAL = cn(
   "items-center text-xs tabular-nums opacity-0 transition-opacity duration-200 pointer-coarse:opacity-100",
@@ -56,6 +56,8 @@ function UserMessageBody({ text }: { text: string }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const canCollapse = shouldCollapseUserMessage(text);
   const isCollapsed = canCollapse && !isExpanded;
+  const mentionTargets = useMentionTargets();
+  const plugins = useMemo(() => [remarkGfm, () => remarkMentions(mentionTargets)], [mentionTargets]);
   const fade = isCollapsed
     ? { WebkitMaskImage: COLLAPSED_USER_MESSAGE_FADE_MASK, maskImage: COLLAPSED_USER_MESSAGE_FADE_MASK }
     : undefined;
@@ -65,7 +67,7 @@ function UserMessageBody({ text }: { text: string }) {
         <Markdown
           source={text}
           className="chat-markdown-line-breaks text-foreground"
-          remarkPlugins={USER_MESSAGE_PLUGINS}
+          remarkPlugins={plugins}
         />
       </div>
       {canCollapse && (

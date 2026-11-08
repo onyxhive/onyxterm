@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { effortOptionsFor, modelChoices } from "../agentChoices";
 import { CODEX_COMMAND } from "../agentOptions";
+import { mentionTargetsOf } from "../mentions";
 import type { PermissionMode } from "../permissionModes";
 import type { FeedItem, ImageAttachment, Subagent, Task, TaskStatus } from "../types";
 import { suggestionSources, useCapabilities } from "../useCapabilities";
@@ -11,6 +12,7 @@ import { Composer, COMPOSER_PLACEHOLDER, QUESTION_PLACEHOLDER } from "./Composer
 import { AgentPicker } from "./AgentPicker";
 import { ChatWorkspaceControls, type AgentChoice } from "./ComposerControls";
 import { FeedItemView, type FeedActions } from "./FeedItemView";
+import { MentionTargetsContext } from "./MentionText";
 import { ProjectRootsContext } from "./projectPaths";
 import { QuestionDrawer, useQuestionAnswers, type QuestionRequest } from "./QuestionDrawer";
 import { SubagentGroup, type SubagentEntry } from "./SubagentGroup";
@@ -94,6 +96,7 @@ export function ChatView({ task, projectPath, actions }: ChatViewProps) {
   const { capabilities } = useCapabilities(task.command, task.projectId);
   const files = useProjectFiles({ chat: task.id });
   const sources = useMemo(() => suggestionSources(capabilities, files), [capabilities, files]);
+  const mentionTargets = useMemo(() => mentionTargetsOf(sources.mentions), [sources]);
   const question = pendingQuestionIn(task.feed);
   const answers = useQuestionAnswers(question);
   const liveStepId = liveStepIdIn(task);
@@ -147,59 +150,61 @@ export function ChatView({ task, projectPath, actions }: ChatViewProps) {
 
   return (
     <ProjectRootsContext value={projectRoots}>
-      <div className="relative flex min-h-0 flex-1 flex-col">
-        <div
-          ref={scrollRef}
-          style={{ paddingBottom: dockHeight + TIMELINE_END_GAP }}
-          className="scroll-fade-top min-h-0 flex-1 overflow-y-auto px-5 [overflow-anchor:none]"
-        >
-          {task.feed.length === 0 && !isRunning && (
-            <div className="flex h-full items-center justify-center">
-              <p className="text-sm text-muted-foreground">Send a message to start the conversation.</p>
+      <MentionTargetsContext value={mentionTargets}>
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          <div
+            ref={scrollRef}
+            style={{ paddingBottom: dockHeight + TIMELINE_END_GAP }}
+            className="scroll-fade-top min-h-0 flex-1 overflow-y-auto px-5 [overflow-anchor:none]"
+          >
+            {task.feed.length === 0 && !isRunning && (
+              <div className="flex h-full items-center justify-center">
+                <p className="text-sm text-muted-foreground">Send a message to start the conversation.</p>
+              </div>
+            )}
+            <div className="mx-auto w-full max-w-(--chat-content-max-width) pt-4">
+              {feedBlocks(task.feed, subagents).map((block) =>
+                block.kind === "subagents" ? (
+                  <SubagentGroup key={block.index} agents={block.agents} />
+                ) : (
+                  <FeedItemView
+                    key={block.index}
+                    item={block.item}
+                    liveStepId={liveStepId}
+                    isTurnReply={turnReplies.has(block.index)}
+                    actions={actions}
+                  />
+                ),
+              )}
+              {isRunning && <WorkingRow key={task.id} since={task.workingSince} />}
+              {isTurnSettled && task.work.files.length > 0 && (
+                <ChangedFilesCard files={task.work.files} className="mt-4" onOpenDiff={actions.onOpenChanges} />
+              )}
             </div>
-          )}
-          <div className="mx-auto w-full max-w-(--chat-content-max-width) pt-4">
-            {feedBlocks(task.feed, subagents).map((block) =>
-              block.kind === "subagents" ? (
-                <SubagentGroup key={block.index} agents={block.agents} />
-              ) : (
-                <FeedItemView
-                  key={block.index}
-                  item={block.item}
-                  liveStepId={liveStepId}
-                  isTurnReply={turnReplies.has(block.index)}
-                  actions={actions}
-                />
-              ),
-            )}
-            {isRunning && <WorkingRow key={task.id} since={task.workingSince} />}
-            {isTurnSettled && task.work.files.length > 0 && (
-              <ChangedFilesCard files={task.work.files} className="mt-4" onOpenDiff={actions.onOpenChanges} />
-            )}
+          </div>
+          <div
+            ref={dockRef}
+            className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-background px-5 pt-2 pb-4"
+          >
+            <div className="pointer-events-auto">
+              <Composer
+                key={task.id}
+                variant="reply"
+                placeholder={question ? QUESTION_PLACEHOLDER : COMPOSER_PLACEHOLDER}
+                suggestionSources={sources}
+                onSubmit={submit}
+                controls={controls}
+                agentControls={agentControls}
+                drawer={question ? <QuestionDrawer answers={answers} /> : undefined}
+                canSubmitEmpty={question !== null && answers.canSubmit("")}
+                submitLabel={question ? "Submit answer" : undefined}
+                onStop={isRunning ? actions.onStop : undefined}
+                sendBlockedReason={task.command === CODEX_COMMAND ? CODEX_COMING : undefined}
+              />
+            </div>
           </div>
         </div>
-        <div
-          ref={dockRef}
-          className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-background px-5 pt-2 pb-4"
-        >
-          <div className="pointer-events-auto">
-            <Composer
-              key={task.id}
-              variant="reply"
-              placeholder={question ? QUESTION_PLACEHOLDER : COMPOSER_PLACEHOLDER}
-              suggestionSources={sources}
-              onSubmit={submit}
-              controls={controls}
-              agentControls={agentControls}
-              drawer={question ? <QuestionDrawer answers={answers} /> : undefined}
-              canSubmitEmpty={question !== null && answers.canSubmit("")}
-              submitLabel={question ? "Submit answer" : undefined}
-              onStop={isRunning ? actions.onStop : undefined}
-              sendBlockedReason={task.command === CODEX_COMMAND ? CODEX_COMING : undefined}
-            />
-          </div>
-        </div>
-      </div>
+      </MentionTargetsContext>
     </ProjectRootsContext>
   );
 }
