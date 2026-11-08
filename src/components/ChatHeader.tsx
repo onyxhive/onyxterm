@@ -105,7 +105,7 @@ export function ChatHeader({ task, project, branch, isChangesPanelOpen, actions 
           type="button"
           className={ICON_BUTTON}
           aria-label="Toggle changed files"
-          title="Changed files (⌘D)"
+          title="Diff (⌘D)"
           aria-pressed={isChangesPanelOpen}
           onClick={actions.onToggleChangesPanel}
         >

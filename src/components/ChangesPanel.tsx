@@ -1,11 +1,6 @@
-import { FileDiff, FileText, FolderOpen, SquareTerminal } from "lucide-react";
-import type { ChangedFile, Project, Work } from "../types";
+import { FileDiff, FileText } from "lucide-react";
+import type { ChangedFile } from "../types";
 import { cn, FOCUS_RING } from "./ui";
-
-interface ChangesPanelProps {
-  work: Work;
-  project: Project | undefined;
-}
 
 function totalLines(files: ChangedFile[], key: "added" | "removed"): number {
   return files.reduce((sum, file) => sum + file[key], 0);
@@ -92,44 +87,5 @@ export function ChangedFilesCard({ files, className, onOpenDiff }: ChangedFilesC
         ))}
       </ul>
     </div>
-  );
-}
-
-export function ChangesPanel({ work, project }: ChangesPanelProps) {
-  return (
-    <aside
-      aria-label="Changed files"
-      className="flex h-full w-(--changes-panel-width) shrink-0 flex-col border-l border-border bg-background"
-    >
-      <header
-        data-tauri-drag-region
-        className="flex h-(--topbar-height) shrink-0 items-center gap-2 border-b border-border px-4 text-sm"
-      >
-        <span className="font-medium">Changed files</span>
-        <DiffStat
-          added={totalLines(work.files, "added")}
-          removed={totalLines(work.files, "removed")}
-          className="text-xs"
-        />
-      </header>
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
-        <div className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground" title={project?.path}>
-          <FolderOpen className="size-3.5 shrink-0" />
-          <span className="shrink-0 font-medium text-foreground/85">{project?.name ?? "Removed project"}</span>
-          <span className="min-w-0 truncate">{project?.path}</span>
-        </div>
-        {work.runningNow && (
-          <div className="flex min-w-0 items-center gap-1.5 text-sm">
-            <SquareTerminal className="size-4 shrink-0 text-icon-muted" />
-            <code className="live-tool-shine min-w-0 truncate font-mono text-xs">{work.runningNow}</code>
-          </div>
-        )}
-        {work.files.length > 0 ? (
-          <ChangedFilesCard files={work.files} />
-        ) : (
-          <p className="py-8 text-center text-xs text-muted-foreground">No changes yet</p>
-        )}
-      </div>
-    </aside>
   );
 }

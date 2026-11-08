@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { DEFAULT_EFFORT, DEFAULT_MODEL } from "./agentOptions";
 import { Board } from "./components/Board";
-import { ChangesPanel } from "./components/ChangesPanel";
 import { ChatHeader, type ChatHeaderActions } from "./components/ChatHeader";
 import { ChatView, type ChatActions } from "./components/ChatView";
+import { DiffPanel, LATEST_TURN_SCOPE, type DiffScope } from "./components/DiffPanel";
 import type { AgentChoice } from "./components/ComposerControls";
 import { NewChat, type ChatStart } from "./components/NewChat";
 import { Sidebar, type SidebarActions } from "./components/Sidebar";
@@ -59,6 +59,7 @@ export default function App() {
   const [isChangesPanelOpen, setIsChangesPanelOpen] = useState(
     () => window.matchMedia(ROOM_FOR_CHANGES_PANEL).matches,
   );
+  const [diffScope, setDiffScope] = useState<DiffScope>(LATEST_TURN_SCOPE);
   const [newChatProjectId, setNewChatProjectId] = useState<string | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
@@ -171,7 +172,10 @@ export default function App() {
     onDecide: (requestId, decision) => withSelectedChat((chatId) => chatState.decide(chatId, requestId, decision)),
     onAnswer: (requestId, answers) => withSelectedChat((chatId) => chatState.answer(chatId, requestId, answers)),
     onStop: () => withSelectedChat(chatState.stop),
-    onOpenChanges: () => setIsChangesPanelOpen(true),
+    onOpenChanges: () => {
+      setDiffScope(LATEST_TURN_SCOPE);
+      setIsChangesPanelOpen(true);
+    },
   };
 
   const chatHeaderActions: ChatHeaderActions = {
@@ -272,9 +276,12 @@ export default function App() {
           {renderMain()}
         </div>
         {isChangesPanelVisible && (
-          <ChangesPanel
-            work={selectedTask.work}
+          <DiffPanel
+            key={selectedTask.id}
+            task={selectedTask}
             project={projects.find((project) => project.id === selectedTask.projectId)}
+            scope={diffScope}
+            onScopeChange={setDiffScope}
           />
         )}
       </main>

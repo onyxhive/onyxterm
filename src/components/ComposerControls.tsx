@@ -1,9 +1,9 @@
-import { useCallback, useRef, useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Asterisk, Box, Check, ChevronDown, Gauge, GitBranchPlus, SquareTerminal } from "lucide-react";
 import { CLAUDE_COMMANDS } from "../agentOptions";
 import type { Provider } from "../types";
 import { cn, MENU_ITEM, MENU_POPUP, MenuLabel } from "./ui";
-import { useDismiss } from "./useDismiss";
+import { usePopup } from "./usePopup";
 
 export interface ModelChoice {
   value: string;
@@ -39,14 +39,6 @@ const STATIC_CONTROL_CLASS = cn(
 
 export function ProviderIcon({ provider }: { provider: Provider }) {
   return provider === "Codex" ? <Box /> : <Asterisk className="text-(--provider-claude)" />;
-}
-
-function usePopup() {
-  const [isOpen, setIsOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-  const close = useCallback(() => setIsOpen(false), []);
-  useDismiss(rootRef, isOpen, close);
-  return { isOpen, rootRef, close, toggle: () => setIsOpen(!isOpen) };
 }
 
 export function EffortGlyph({ levels, current }: { levels: string[]; current: string }) {
