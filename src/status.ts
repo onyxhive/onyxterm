@@ -36,3 +36,18 @@ export function taskLabel(task: Task): string {
   const commandName = task.command.replace(/^claude-/, "");
   return [commandName, task.model.toLowerCase(), task.effort].join(" · ");
 }
+
+export interface StatusTone {
+  textClass: string;
+  dotClass: string;
+  isPulsing: boolean;
+}
+
+export const STATUS_TONE: Record<TaskStatus, StatusTone> = {
+  permission: { textClass: "text-approval", dotClass: "bg-approval-dot", isPulsing: false },
+  question: { textClass: "text-input-request", dotClass: "bg-input-request-dot", isPulsing: false },
+  review: { textClass: "text-success-foreground", dotClass: "bg-success", isPulsing: false },
+  running: { textClass: "text-working", dotClass: "bg-working-dot", isPulsing: true },
+  failed: { textClass: "text-failed", dotClass: "bg-failed-dot", isPulsing: false },
+  done: { textClass: "text-muted-foreground", dotClass: "bg-muted-foreground/50", isPulsing: false },
+};
