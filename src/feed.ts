@@ -1,6 +1,6 @@
 import type { AgentEvent, ToolSummary } from "./agentEvents";
 import { clockTime } from "./tasks";
-import type { ChangedFile, FeedItem, PermissionDecision, Step } from "./types";
+import type { ChangedFile, FeedItem, ImageAttachment, PermissionDecision, Step } from "./types";
 
 export interface ChatFeed {
   items: FeedItem[];
@@ -217,7 +217,7 @@ function endTurn(feed: ChatFeed, isError: boolean, message: string | null): Chat
 export function reduceFeed(feed: ChatFeed, event: AgentEvent): ChatFeed {
   switch (event.kind) {
     case "userText":
-      return withItems(feed, [...feed.items, { kind: "user", text: event.text, time: "" }]);
+      return withItems(feed, [...feed.items, { kind: "user", text: event.text, time: "", images: event.images }]);
     case "textDelta":
       return appendDelta(feed, event.messageId, event.index, event.text);
     case "text":
@@ -278,11 +278,11 @@ export function reduceLiveFeed(feed: ChatFeed, event: AgentEvent): ChatFeed {
   return withItems(reduced, items);
 }
 
-export function withSentMessage(feed: ChatFeed, text: string): ChatFeed {
+export function withSentMessage(feed: ChatFeed, text: string, images: ImageAttachment[]): ChatFeed {
   return {
     ...feed,
     turnStartedAt: feed.turnStartedAt ?? Date.now(),
-    items: [...feed.items, { kind: "user", text, time: clockTime() }],
+    items: [...feed.items, { kind: "user", text, time: clockTime(), images }],
   };
 }
 

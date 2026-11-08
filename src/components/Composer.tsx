@@ -1,18 +1,30 @@
-import { useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import {
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ClipboardEvent,
+  type DragEvent,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 import { Paperclip } from "lucide-react";
 import { useComposerInsertions, withInsertion } from "../composerInsertions";
 import { sendNeedsModifier } from "../preferences";
-import type { Suggestion } from "../types";
+import { ACCEPTED_IMAGE_TYPES, isImageFile } from "../imageAttachments";
+import type { ImageAttachment, Suggestion } from "../types";
 import { findTrigger, matchSuggestions, type SuggestionSources } from "./composerTrigger";
+import { ImageThumbnail } from "./ImageThumbnail";
 import { MentionText } from "./MentionText";
 import { SuggestionList, suggestionOptionId } from "./SuggestionPopup";
 import { cn, ICON_BUTTON } from "./ui";
+import { useImageAttachments } from "./useImageAttachments";
 
 interface ComposerProps {
   placeholder: string;
   variant: "hero" | "reply";
   suggestionSources: SuggestionSources;
-  onSubmit: (text: string) => void;
+  onSubmit: (text: string, images: ImageAttachment[]) => void;
   controls?: ReactNode;
   agentControls?: ReactNode;
   drawer?: ReactNode;
@@ -24,8 +36,7 @@ interface ComposerProps {
 }
 
 const DEFAULT_SUBMIT_LABEL = "Send message";
-const MENTION_TRIGGER = "@";
-const WHITESPACE_END = /\s$/;
+const ATTACH_IMAGES_LABEL = "Attach images";
 const COMPOSER_TEXT = "text-sm leading-relaxed whitespace-pre-wrap break-words";
 
 export const COMPOSER_PLACEHOLDER = "Ask anything. @ files, / commands";
@@ -57,7 +68,7 @@ function StopButton({ onStop }: { onStop: () => void }) {
       title="Stop"
       onClick={onStop}
       className={cn(
-        "flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-destructive/90 text-white",
+        "flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-full bg-destructive/90 text-white",
         "shadow-xs shadow-destructive/24 transition-colors duration-150 hover:bg-destructive",
       )}
     >
@@ -101,6 +112,9 @@ export function Composer(props: ComposerProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const pendingCaret = useRef<number | null>(null);
   const listId = useId();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const attachments = useImageAttachments();
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
 
   useComposerInsertions((inserted) => {
     const next = withInsertion(text, inserted);
@@ -117,8 +131,9 @@ export function Composer(props: ComposerProps) {
   const isListOpen = isMenuOpen && hasSuggestions;
   const highlighted = Math.min(activeIndex, suggestions.length - 1);
   const hasText = text.trim().length > 0;
-  const canSubmit = (hasText || canSubmitEmpty) && sendBlockedReason === undefined;
-  const showsStop = !hasText && !canSubmitEmpty;
+  const hasImages = attachments.images.length > 0;
+  const canSubmit = (hasText || hasImages || canSubmitEmpty) && sendBlockedReason === undefined;
+  const showsStop = !hasText && !hasImages && !canSubmitEmpty;
 
   useLayoutEffect(() => {
     const input = inputRef.current;
@@ -145,20 +160,38 @@ export function Composer(props: ComposerProps) {
     inputRef.current?.focus();
   }
 
-  function startMention() {
-    const before = text.slice(0, caret);
-    const inserted = before === "" || WHITESPACE_END.test(before) ? MENTION_TRIGGER : ` ${MENTION_TRIGGER}`;
-    const nextCaret = caret + inserted.length;
-    pendingCaret.current = nextCaret;
-    setText(before + inserted + text.slice(caret));
-    setCaret(nextCaret);
-    setDismissedStart(null);
-    inputRef.current?.focus();
+  function attachFiles(files: FileList | null) {
+    if (files && files.length > 0) void attachments.add([...files]);
+  }
+
+  function pasteImages(event: ClipboardEvent<HTMLTextAreaElement>) {
+    const images = [...event.clipboardData.files].filter(isImageFile);
+    if (images.length === 0) return;
+    event.preventDefault();
+    void attachments.add(images);
+  }
+
+  function hasDraggedFiles(event: DragEvent) {
+    return event.dataTransfer.types.includes("Files");
+  }
+
+  function allowFileDrop(event: DragEvent<HTMLDivElement>) {
+    if (!hasDraggedFiles(event)) return;
+    event.preventDefault();
+    setIsDraggingFiles(true);
+  }
+
+  function dropFiles(event: DragEvent<HTMLDivElement>) {
+    setIsDraggingFiles(false);
+    if (!hasDraggedFiles(event)) return;
+    event.preventDefault();
+    attachFiles(event.dataTransfer.files);
   }
 
   function submit() {
     if (!canSubmit) return;
-    onSubmit(text.trim());
+    onSubmit(text.trim(), attachments.images);
+    attachments.clear();
     setText("");
     setCaret(0);
   }
@@ -206,15 +239,44 @@ export function Composer(props: ComposerProps) {
   return (
     <div className="relative mx-auto w-full max-w-(--chat-content-max-width)">
       {drawerContent && <AttachedDrawer>{drawerContent}</AttachedDrawer>}
-      <div className="glass composer-outline relative z-10 rounded-[1.25rem]">
-        <div className={cn("relative px-4.5 pb-2", variant === "hero" ? "pt-4.5" : "pt-4")}>
+      <div
+        className={cn(
+          "glass composer-outline relative z-10 rounded-2xl transition-shadow",
+          isDraggingFiles && "ring-2 ring-ring/60",
+        )}
+        onDragOver={allowFileDrop}
+        onDragLeave={() => setIsDraggingFiles(false)}
+        onDrop={dropFiles}
+      >
+        {(hasImages || attachments.problem) && (
+          <div className="flex flex-col gap-1.5 px-3.5 pt-3">
+            {hasImages && (
+              <div className="flex flex-wrap gap-2">
+                {attachments.images.map((image, index) => (
+                  <ImageThumbnail
+                    key={index}
+                    image={image}
+                    className="size-14"
+                    onRemove={() => attachments.remove(index)}
+                  />
+                ))}
+              </div>
+            )}
+            {attachments.problem && (
+              <p role="alert" className="text-xs text-warning-foreground">
+                {attachments.problem}
+              </p>
+            )}
+          </div>
+        )}
+        <div className="relative px-3.5 pt-3 pb-1">
           <div className="relative max-h-[40vh] overflow-y-auto">
             <div aria-hidden className={cn(COMPOSER_TEXT, "pointer-events-none absolute inset-0 text-foreground")}>
               <MentionText text={text} />
             </div>
             <textarea
               ref={inputRef}
-              rows={variant === "hero" ? 3 : 1}
+              rows={variant === "hero" ? 2 : 1}
               value={text}
               placeholder={placeholder}
               aria-label={placeholder}
@@ -231,6 +293,7 @@ export function Composer(props: ComposerProps) {
               }}
               onSelect={syncCaret}
               onKeyDown={handleKeyDown}
+              onPaste={pasteImages}
               className={cn(
                 COMPOSER_TEXT,
                 "relative block w-full resize-none overflow-hidden bg-transparent text-transparent caret-foreground",
@@ -239,17 +302,28 @@ export function Composer(props: ComposerProps) {
             />
           </div>
         </div>
-        <div className="@container flex min-w-0 items-center gap-2 px-2.5 pb-2.5">
+        <div className="@container flex min-w-0 items-center gap-2 px-2 pb-2">
           <div className="flex min-w-0 flex-1 items-center gap-0.5">
             <button
               type="button"
-              aria-label="Attach a file or folder"
-              title="Attach a file or folder (@)"
+              aria-label={ATTACH_IMAGES_LABEL}
+              title={ATTACH_IMAGES_LABEL}
               className={ICON_BUTTON}
-              onClick={startMention}
+              onClick={() => fileInputRef.current?.click()}
             >
               <Paperclip />
             </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={ACCEPTED_IMAGE_TYPES.join(",")}
+              multiple
+              hidden
+              onChange={(event) => {
+                attachFiles(event.target.files);
+                event.target.value = "";
+              }}
+            />
             {controls}
           </div>
           <div className="flex shrink-0 items-center gap-0.5">{agentControls}</div>
@@ -263,7 +337,7 @@ export function Composer(props: ComposerProps) {
                 disabled={!canSubmit}
                 onClick={submit}
                 className={cn(
-                  "relative flex size-8 items-center justify-center rounded-full bg-message-action shadow-xs",
+                  "relative flex size-7 items-center justify-center rounded-full bg-message-action shadow-xs",
                   "text-message-action-foreground shadow-message-action/24 transition-all duration-150",
                   "enabled:cursor-pointer enabled:hover:scale-105 enabled:hover:bg-message-action-hover",
                   "disabled:bg-foreground/12 disabled:text-muted-foreground disabled:shadow-none",

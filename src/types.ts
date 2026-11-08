@@ -40,6 +40,12 @@ export interface Chat {
 
 export type PermissionDecision = "once" | "always" | "deny";
 
+export interface ImageAttachment {
+  mediaType: string;
+  dataBase64: string;
+  name?: string;
+}
+
 export interface Step {
   id: string;
   verb: string;
@@ -62,7 +68,7 @@ export interface Question {
 }
 
 export type FeedItem =
-  | { kind: "user"; text: string; time: string }
+  | { kind: "user"; text: string; time: string; images?: ImageAttachment[] }
   | { kind: "agent"; messageId: string; blockIndex: number; markdown: string; isFinal: boolean; time: string }
   | { kind: "steps"; files: number; steps: Step[]; time: string }
   | { kind: "interrupted" }

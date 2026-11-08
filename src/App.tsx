@@ -207,7 +207,7 @@ export default function App() {
   }
 
   const chatActions: ChatActions = {
-    onReply: (text) => withSelectedChat((chatId) => chatState.send(chatId, text)),
+    onReply: (text, images) => withSelectedChat((chatId) => chatState.send(chatId, text, images)),
     onDecide: (requestId, decision) => withSelectedChat((chatId) => chatState.decide(chatId, requestId, decision)),
     onAnswer: (requestId, answers) => withSelectedChat((chatId) => chatState.answer(chatId, requestId, answers)),
     onStop: () => withSelectedChat(chatState.stop),

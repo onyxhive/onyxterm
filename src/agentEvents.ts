@@ -1,4 +1,4 @@
-import type { Question } from "./types";
+import type { ImageAttachment, Question } from "./types";
 
 export interface ToolSummary {
   verb: string;
@@ -42,7 +42,7 @@ export interface Capabilities {
 
 export type AgentEvent =
   | { kind: "session"; sessionId: string }
-  | { kind: "userText"; text: string }
+  | { kind: "userText"; text: string; images?: ImageAttachment[] }
   | { kind: "textDelta"; messageId: string; index: number; text: string }
   | { kind: "text"; messageId: string; text: string }
   | { kind: "toolStarted"; toolUseId: string; parentToolUseId: string | null; summary: ToolSummary }

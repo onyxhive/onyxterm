@@ -2,15 +2,15 @@ import { useEffect, useMemo, useRef } from "react";
 import { effortOptionsFor, modelChoices } from "../agentChoices";
 import { CODEX_COMMAND } from "../agentOptions";
 import type { PermissionMode } from "../permissionModes";
-import type { FeedItem, Subagent, Task, TaskStatus } from "../types";
+import type { FeedItem, ImageAttachment, Subagent, Task, TaskStatus } from "../types";
 import { suggestionSources, useCapabilities } from "../useCapabilities";
 import { useSubagents } from "../useGit";
 import { useProjectFiles } from "../useProjectFiles";
 import { ChangedFilesCard } from "./ChangesPanel";
 import { Composer, COMPOSER_PLACEHOLDER, QUESTION_PLACEHOLDER } from "./Composer";
-import { ChatWorkspaceControls, EffortPicker, ModelPicker, type AgentChoice } from "./ComposerControls";
+import { AgentPicker } from "./AgentPicker";
+import { ChatWorkspaceControls, type AgentChoice } from "./ComposerControls";
 import { FeedItemView, type FeedActions } from "./FeedItemView";
-import { PERMISSION_MODE_LOCKED, PermissionModePicker } from "./PermissionModePicker";
 import { ProjectRootsContext } from "./projectPaths";
 import { QuestionDrawer, useQuestionAnswers, type QuestionRequest } from "./QuestionDrawer";
 import { SubagentGroup, type SubagentEntry } from "./SubagentGroup";
@@ -18,7 +18,7 @@ import { useDockHeight } from "./useDockHeight";
 import { WorkingRow } from "./WorkingRow";
 
 export interface ChatActions extends FeedActions {
-  onReply: (text: string) => void;
+  onReply: (text: string, images: ImageAttachment[]) => void;
   onAnswer: (requestId: string, answers: Record<string, string>) => void;
   onStop: () => void;
   onOpenChanges: () => void;
@@ -27,7 +27,7 @@ export interface ChatActions extends FeedActions {
 }
 
 const ACTIVE_TURN_STATUSES: TaskStatus[] = ["running", "permission", "question"];
-const CHOICE_LOCKED = "Wait for this turn to finish or stop it to change the model, effort or command";
+const CHOICE_LOCKED = "Wait for this turn to finish or stop it to change the model, effort, permissions or command";
 const SETTLED_STATUSES: TaskStatus[] = ["review", "done", "failed"];
 
 interface ChatViewProps {
@@ -112,9 +112,9 @@ export function ChatView({ task, projectPath, actions }: ChatViewProps) {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [task.id, task.feed.length, scrollKey, isRunning, dockHeight]);
 
-  function submit(text: string) {
+  function submit(text: string, images: ImageAttachment[]) {
     if (!question) {
-      actions.onReply(text);
+      actions.onReply(text, images);
       return;
     }
     const completed = answers.submit(text);
@@ -124,36 +124,21 @@ export function ChatView({ task, projectPath, actions }: ChatViewProps) {
   const isTurnSettled = SETTLED_STATUSES.includes(task.status);
 
   const agentControls = (
-    <>
-      <ModelPicker
-        choice={choice}
-        models={modelChoices(models)}
-        side="top"
-        align="end"
-        disabledReason={choiceLockReason}
-        onChange={(update) => actions.onChangeChoice({ ...choice, ...update })}
-      />
-      {efforts.length > 0 && (
-        <EffortPicker
-          effort={task.effort}
-          levels={efforts}
-          side="top"
-          align="end"
-          disabledReason={choiceLockReason}
-          onChange={(effort) => actions.onChangeChoice({ ...choice, effort })}
-        />
-      )}
-    </>
+    <AgentPicker
+      choice={choice}
+      models={modelChoices(models)}
+      efforts={efforts}
+      permissionMode={task.permissionMode}
+      side="top"
+      align="end"
+      disabledReason={choiceLockReason}
+      onChange={(update) => actions.onChangeChoice({ ...choice, ...update })}
+      onPermissionModeChange={actions.onChangePermissionMode}
+    />
   );
 
   const controls = (
     <>
-      <PermissionModePicker
-        mode={task.permissionMode}
-        side="top"
-        disabledReason={choiceLockReason && PERMISSION_MODE_LOCKED}
-        onChange={actions.onChangePermissionMode}
-      />
       <ChatWorkspaceControls worktreePath={task.worktreePath} branch={task.branch} />
     </>
   );

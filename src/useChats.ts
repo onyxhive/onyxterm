@@ -21,7 +21,7 @@ import {
   type ChatFeed,
 } from "./feed";
 import { titleFrom } from "./tasks";
-import type { Chat, PermissionDecision, TaskStatus } from "./types";
+import type { Chat, ImageAttachment, PermissionDecision, TaskStatus } from "./types";
 
 export interface ChatsInput {
   onError: (message: string) => void;
@@ -69,10 +69,10 @@ export function useChats(input: ChatsInput) {
     return () => subscriptions.forEach((subscription) => subscription.then((unlisten) => unlisten()));
   }, []);
 
-  async function send(chatId: string, text: string) {
-    updateFeed(chatId, (feed) => withSentMessage(feed, text));
+  async function send(chatId: string, text: string, attachments: ImageAttachment[]) {
+    updateFeed(chatId, (feed) => withSentMessage(feed, text, attachments));
     try {
-      await api.sendMessage(chatId, text);
+      await api.sendMessage(chatId, text, attachments);
     } catch (error) {
       updateFeed(chatId, (feed) => reduceFeed(feed, { kind: "processExited", message: String(error) }));
       report(error);
@@ -80,13 +80,13 @@ export function useChats(input: ChatsInput) {
   }
 
   async function startChat(start: ChatStart): Promise<Chat | null> {
-    const { text, ...choice } = start;
+    const { text, attachments, ...choice } = start;
     try {
       const chat = await api.createChat({ ...choice, title: titleFrom(text) });
       upsertChat(chat);
       requestedHistories.current.add(chat.id);
       setFeeds((current) => ({ ...current, [chat.id]: EMPTY_FEED }));
-      void send(chat.id, text);
+      void send(chat.id, text, attachments);
       return chat;
     } catch (error) {
       report(error);

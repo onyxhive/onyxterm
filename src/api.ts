@@ -2,7 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { AgentEvent, Capabilities } from "./agentEvents";
 import type { GitTarget } from "./gitApi";
 import type { PermissionMode } from "./permissionModes";
-import type { Chat, PermissionDecision, Project, Provider, TaskStatus, Workspace } from "./types";
+import type { Chat, ImageAttachment, PermissionDecision, Project, Provider, TaskStatus, Workspace } from "./types";
 
 export interface ChatDraft {
   projectId: string;
@@ -34,7 +34,8 @@ export const api = {
   setChatState: (chatId: string, state: TaskStatus) => invoke<Chat>("set_chat_state", { chatId, state }),
   getSettings: () => invoke<Settings>("get_settings"),
   setSetting: (key: string, value: string) => invoke<void>("set_setting", { key, value }),
-  sendMessage: (chatId: string, text: string) => invoke<void>("send_message", { chatId, text }),
+  sendMessage: (chatId: string, text: string, attachments: ImageAttachment[]) =>
+    invoke<void>("send_message", { chatId, text, attachments }),
   interruptChat: (chatId: string) => invoke<void>("interrupt_chat", { chatId }),
   updateChatOptions: (chatId: string, options: ChatOptions) =>
     invoke<Chat>("update_chat_options", { chatId, options }),

@@ -99,7 +99,7 @@ interface ModelPickerProps extends PickerPlacement {
   onChange: (update: Partial<AgentChoice>) => void;
 }
 
-function OptionCheck({ isSelected }: { isSelected: boolean }) {
+export function OptionCheck({ isSelected }: { isSelected: boolean }) {
   return <Check className={cn("ms-auto size-3.5", !isSelected && "invisible")} />;
 }
 
@@ -114,6 +114,72 @@ function GroupLabel({ provider, children }: { provider: Provider; children: Reac
       <ProviderLogo provider={provider} size={14} />
       {children}
     </div>
+  );
+}
+
+interface ChoiceOptionsProps {
+  choice: AgentChoice;
+  onChoose: (update: Partial<AgentChoice>) => void;
+}
+
+export function CommandOptions({ choice, onChoose }: ChoiceOptionsProps) {
+  return (
+    <div className="flex flex-col gap-px">
+      <GroupLabel provider="Claude Code">Claude Code</GroupLabel>
+      {CLAUDE_COMMANDS.map((command) => {
+        const isSelected = choice.provider === "Claude Code" && choice.command === command;
+        return (
+          <button
+            key={command}
+            type="button"
+            role="menuitemradio"
+            aria-checked={isSelected}
+            className={MENU_ITEM}
+            onClick={() => onChoose({ provider: "Claude Code", command })}
+          >
+            <SquareTerminal />
+            <span className="truncate">{command}</span>
+            <OptionCheck isSelected={isSelected} />
+          </button>
+        );
+      })}
+      <GroupLabel provider="Codex">Codex</GroupLabel>
+      <button type="button" role="menuitemradio" aria-checked={false} className={MENU_ITEM} disabled>
+        <SquareTerminal />
+        <span className="truncate">codex</span>
+        <span className="ms-auto text-2xs text-muted-foreground">{CODEX_COMING}</span>
+      </button>
+    </div>
+  );
+}
+
+export function ModelOptions({ choice, models, onChoose }: ChoiceOptionsProps & { models: ModelChoice[] }) {
+  return (
+    <>
+      <MenuLabel>Model</MenuLabel>
+      <div className="flex max-h-60 flex-col gap-px overflow-y-auto">
+        {models.map((model) => (
+          <button
+            key={model.value}
+            type="button"
+            role="menuitemradio"
+            aria-checked={model.value === choice.model}
+            className={MODEL_ROW}
+            onClick={() => onChoose({ model: model.value })}
+          >
+            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="truncate leading-5">{model.label}</span>
+              {model.description && (
+                <span className="line-clamp-2 text-xs leading-4 text-muted-foreground">{model.description}</span>
+              )}
+            </span>
+            <span className="flex h-5 shrink-0 items-center">
+              <OptionCheck isSelected={model.value === choice.model} />
+            </span>
+          </button>
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -155,56 +221,11 @@ export function ModelPicker(props: ModelPickerProps) {
             POPUP_ALIGN_CLASS[align],
           )}
         >
-          <div className="flex flex-col gap-px border-r border-border/70 bg-muted/40 p-1">
-            <GroupLabel provider="Claude Code">Claude Code</GroupLabel>
-            {CLAUDE_COMMANDS.map((command) => {
-              const isSelected = choice.provider === "Claude Code" && choice.command === command;
-              return (
-                <button
-                  key={command}
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={isSelected}
-                  className={MENU_ITEM}
-                  onClick={() => choose({ provider: "Claude Code", command })}
-                >
-                  <SquareTerminal />
-                  <span className="truncate">{command}</span>
-                  <OptionCheck isSelected={isSelected} />
-                </button>
-              );
-            })}
-            <GroupLabel provider="Codex">Codex</GroupLabel>
-            <button type="button" role="menuitemradio" aria-checked={false} className={MENU_ITEM} disabled>
-              <SquareTerminal />
-              <span className="truncate">codex</span>
-              <span className="ms-auto text-2xs text-muted-foreground">{CODEX_COMING}</span>
-            </button>
+          <div className="border-r border-border/70 bg-muted/40 p-1">
+            <CommandOptions choice={choice} onChoose={choose} />
           </div>
           <div className="flex min-w-0 flex-col p-1">
-            <div className="flex h-7 shrink-0 items-center px-2 text-xs font-medium text-muted-foreground">Model</div>
-            <div className="flex max-h-72 flex-col gap-px overflow-y-auto">
-              {models.map((model) => (
-                <button
-                  key={model.value}
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={model.value === choice.model}
-                  className={MODEL_ROW}
-                  onClick={() => choose({ model: model.value })}
-                >
-                  <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                    <span className="truncate leading-5">{model.label}</span>
-                    {model.description && (
-                      <span className="line-clamp-2 text-xs leading-4 text-muted-foreground">{model.description}</span>
-                    )}
-                  </span>
-                  <span className="flex h-5 shrink-0 items-center">
-                    <OptionCheck isSelected={model.value === choice.model} />
-                  </span>
-                </button>
-              ))}
-            </div>
+            <ModelOptions choice={choice} models={models} onChoose={choose} />
           </div>
         </div>
       )}

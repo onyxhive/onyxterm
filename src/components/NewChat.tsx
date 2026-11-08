@@ -3,17 +3,18 @@ import { Check, ChevronDown, Folder, FolderGit2, FolderOpen, FolderPlus, Triangl
 import { effortOptionsFor, modelChoices, pickOption } from "../agentChoices";
 import { CODEX_COMMAND, DEFAULT_EFFORT, DEFAULT_MODEL } from "../agentOptions";
 import type { PermissionMode } from "../permissionModes";
-import type { Project, Workspace } from "../types";
+import type { ImageAttachment, Project, Workspace } from "../types";
 import { suggestionSources, useCapabilities } from "../useCapabilities";
 import { useProjectFiles } from "../useProjectFiles";
 import { Composer, COMPOSER_PLACEHOLDER } from "./Composer";
-import { CONTROL_CLASS, EffortPicker, ModelPicker, type AgentChoice } from "./ComposerControls";
-import { PermissionModePicker } from "./PermissionModePicker";
+import { AgentPicker } from "./AgentPicker";
+import { CONTROL_CLASS, type AgentChoice } from "./ComposerControls";
 import { cn, MENU_ITEM, MENU_POPUP, MenuLabel, MenuSeparator, OUTLINE_BUTTON } from "./ui";
 import { usePopup } from "./usePopup";
 
 export interface ChatStart extends AgentChoice {
   text: string;
+  attachments: ImageAttachment[];
   projectId: string;
   permissionMode: PermissionMode;
 }
@@ -117,9 +118,9 @@ export function NewChat(props: NewChatProps) {
   const effort = pickOption(effortOptions, choice.effort, DEFAULT_EFFORT);
   const resolvedChoice: AgentChoice = { ...choice, command, model, effort };
 
-  function start(text: string) {
+  function start(text: string, attachments: ImageAttachment[]) {
     if (!project) return;
-    onStart({ ...resolvedChoice, text, projectId: project.id, permissionMode });
+    onStart({ ...resolvedChoice, text, attachments, projectId: project.id, permissionMode });
   }
 
   function sendBlockedReason(): string | undefined {
@@ -138,27 +139,19 @@ export function NewChat(props: NewChatProps) {
           onAddProject={onAddProject}
         />
       )}
-      <PermissionModePicker mode={permissionMode} onChange={setPermissionMode} />
     </>
   );
 
   const agentControls = (
-    <>
-      <ModelPicker
-        choice={resolvedChoice}
-        models={choices}
-        align="end"
-        onChange={(update) => setChoice({ ...choice, ...update })}
-      />
-      {effortOptions.length > 0 && (
-        <EffortPicker
-          effort={effort}
-          levels={effortOptions}
-          align="end"
-          onChange={(next) => setChoice({ ...choice, effort: next })}
-        />
-      )}
-    </>
+    <AgentPicker
+      choice={resolvedChoice}
+      models={choices}
+      efforts={effortOptions}
+      permissionMode={permissionMode}
+      align="end"
+      onChange={(update) => setChoice({ ...choice, ...update })}
+      onPermissionModeChange={setPermissionMode}
+    />
   );
 
   const footnote = (

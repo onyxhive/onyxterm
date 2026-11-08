@@ -2,9 +2,10 @@ import { useState, type ReactNode } from "react";
 import { CircleStop } from "lucide-react";
 import remarkGfm from "remark-gfm";
 import { remarkMentions } from "../remarkMentions";
-import type { FeedItem, PermissionDecision } from "../types";
+import type { FeedItem, ImageAttachment, PermissionDecision } from "../types";
 import { ApprovalRow } from "./ApprovalRow";
 import { CopyButton } from "./CopyButton";
+import { ImageThumbnail } from "./ImageThumbnail";
 import { Markdown } from "./Markdown";
 import { QuestionRow } from "./QuestionDrawer";
 import { cn } from "./ui";
@@ -83,13 +84,28 @@ function UserMessageBody({ text }: { text: string }) {
   );
 }
 
-function UserMessage({ text, time }: { text: string; time: string }) {
+interface UserMessageProps {
+  text: string;
+  time: string;
+  images: ImageAttachment[];
+}
+
+function UserMessage({ text, time, images }: UserMessageProps) {
   return (
     <div className="group flex flex-col items-end gap-1 pb-4">
-      <div className="relative max-w-[80%] min-w-0 rounded-2xl bg-message p-3 text-message-foreground">
-        <h3 className="sr-only">You</h3>
-        <UserMessageBody text={text} />
-      </div>
+      {images.length > 0 && (
+        <div className="flex max-w-[80%] flex-wrap justify-end gap-2">
+          {images.map((image, index) => (
+            <ImageThumbnail key={index} image={image} className="size-28" />
+          ))}
+        </div>
+      )}
+      {text && (
+        <div className="relative max-w-[80%] min-w-0 rounded-2xl bg-message p-3 text-message-foreground">
+          <h3 className="sr-only">You</h3>
+          <UserMessageBody text={text} />
+        </div>
+      )}
       <div className={cn("flex w-full max-w-[80%] justify-end pe-1 group-hover:opacity-100", ACTIONS_REVEAL)}>
         <div className="flex shrink-0 items-center justify-end gap-x-2 gap-y-0.5">
           <Timestamp time={time} />
@@ -150,7 +166,7 @@ function InterruptedDivider() {
 export function FeedItemView({ item, liveStepId, isTurnReply, actions }: FeedItemViewProps) {
   switch (item.kind) {
     case "user":
-      return <UserMessage text={item.text} time={item.time} />;
+      return <UserMessage text={item.text} time={item.time} images={item.images ?? []} />;
     case "agent":
       return <AssistantMessage item={item} isTurnReply={isTurnReply} />;
     case "steps":
