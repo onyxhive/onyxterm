@@ -1499,7 +1499,7 @@
 .board__lanes {
   display: grid;
   flex: 1;
-  grid-template-columns: repeat(4, minmax(220px, 1fr));
+  grid-template-columns: repeat(4, minmax(168px, 1fr));
   gap: var(--space-3);
   min-height: 0;
   padding: var(--space-4) var(--space-6) var(--space-6);
