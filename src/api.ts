@@ -13,6 +13,12 @@ export interface ChatDraft {
   title: string;
 }
 
+export interface ChatOptions {
+  command: string;
+  model: string;
+  effort: string;
+}
+
 export type Settings = Record<string, string>;
 
 export const api = {
@@ -28,6 +34,8 @@ export const api = {
   setSetting: (key: string, value: string) => invoke<void>("set_setting", { key, value }),
   sendMessage: (chatId: string, text: string) => invoke<void>("send_message", { chatId, text }),
   interruptChat: (chatId: string) => invoke<void>("interrupt_chat", { chatId }),
+  updateChatOptions: (chatId: string, options: ChatOptions) =>
+    invoke<Chat>("update_chat_options", { chatId, options }),
   answerPermission: (chatId: string, requestId: string, decision: PermissionDecision) =>
     invoke<void>("answer_permission", { chatId, requestId, decision }),
   answerQuestion: (chatId: string, requestId: string, answers: Record<string, string>) =>

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { CHAT_EVENT, CHAT_UPDATED, type ChatEventPayload } from "./agentEvents";
-import { api } from "./api";
+import { api, type ChatOptions } from "./api";
 import type { ChatStart } from "./components/NewChat";
 import type { PermissionDecision } from "./components/ApprovalRow";
 import {
@@ -127,6 +127,14 @@ export function useChats(input: ChatsInput) {
     }
   }
 
+  async function changeOptions(chatId: string, options: ChatOptions) {
+    try {
+      upsertChat(await api.updateChatOptions(chatId, options));
+    } catch (error) {
+      report(error);
+    }
+  }
+
   async function setState(chatId: string, state: TaskStatus) {
     try {
       upsertChat(await api.setChatState(chatId, state));
@@ -135,5 +143,5 @@ export function useChats(input: ChatsInput) {
     }
   }
 
-  return { chats, feeds, startChat, send, decide, answer, stop, setState, loadHistory, upsertChat };
+  return { chats, feeds, startChat, send, decide, answer, stop, setState, loadHistory, upsertChat, changeOptions };
 }

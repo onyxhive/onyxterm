@@ -73,7 +73,19 @@ export function EffortGlyph({ levels, current }: { levels: string[]; current: st
   );
 }
 
-interface ModelPickerProps {
+export type PopupSide = "top" | "bottom";
+
+const POPUP_SIDE_CLASS: Record<PopupSide, string> = {
+  top: "bottom-full mb-2",
+  bottom: "top-full mt-2",
+};
+
+interface PickerPlacement {
+  side?: PopupSide;
+  disabledReason?: string;
+}
+
+interface ModelPickerProps extends PickerPlacement {
   choice: AgentChoice;
   models: ModelChoice[];
   onChange: (update: Partial<AgentChoice>) => void;
@@ -97,7 +109,7 @@ function GroupLabel({ provider, children }: { provider: Provider; children: Reac
   );
 }
 
-export function ModelPicker({ choice, models, onChange }: ModelPickerProps) {
+export function ModelPicker({ choice, models, onChange, side = "bottom", disabledReason }: ModelPickerProps) {
   const popup = usePopup();
   const selectedModel = models.find((model) => model.value === choice.model);
   const commandName = choice.command.replace(/^claude-?/, "") || "claude";
@@ -108,13 +120,14 @@ export function ModelPicker({ choice, models, onChange }: ModelPickerProps) {
   }
 
   return (
-    <div className="relative" ref={popup.rootRef}>
+    <div className="relative" ref={popup.rootRef} title={disabledReason}>
       <button
         type="button"
         aria-haspopup="dialog"
         aria-expanded={popup.isOpen}
         aria-label={`Agent: ${choice.provider}, ${choice.command}, ${selectedModel?.label ?? choice.model}`}
         className={CONTROL_CLASS}
+        disabled={disabledReason !== undefined}
         onClick={popup.toggle}
       >
         <ProviderLogo provider={choice.provider} size={15} />
@@ -128,7 +141,8 @@ export function ModelPicker({ choice, models, onChange }: ModelPickerProps) {
           aria-label="Choose the agent and model"
           className={cn(
             MENU_POPUP,
-            "absolute top-full left-0 mt-2 grid w-[32rem] grid-cols-[12rem_minmax(0,1fr)] overflow-hidden p-0",
+            "absolute left-0 grid w-[32rem] grid-cols-[12rem_minmax(0,1fr)] overflow-hidden p-0",
+            POPUP_SIDE_CLASS[side],
           )}
         >
           <div className="flex flex-col gap-px border-r border-border/70 bg-muted/40 p-1">
@@ -188,22 +202,23 @@ export function ModelPicker({ choice, models, onChange }: ModelPickerProps) {
   );
 }
 
-interface EffortPickerProps {
+interface EffortPickerProps extends PickerPlacement {
   effort: string;
   levels: string[];
   onChange: (effort: string) => void;
 }
 
-export function EffortPicker({ effort, levels, onChange }: EffortPickerProps) {
+export function EffortPicker({ effort, levels, onChange, side = "bottom", disabledReason }: EffortPickerProps) {
   const popup = usePopup();
   return (
-    <div className="relative" ref={popup.rootRef}>
+    <div className="relative" ref={popup.rootRef} title={disabledReason}>
       <button
         type="button"
         aria-haspopup="menu"
         aria-expanded={popup.isOpen}
         aria-label={`Effort: ${effort}`}
         className={CONTROL_CLASS}
+        disabled={disabledReason !== undefined}
         onClick={popup.toggle}
       >
         <Gauge />
@@ -211,7 +226,7 @@ export function EffortPicker({ effort, levels, onChange }: EffortPickerProps) {
         <EffortGlyph levels={levels} current={effort} />
       </button>
       {popup.isOpen && (
-        <div role="menu" aria-label="Effort" className={cn(MENU_POPUP, "absolute top-full left-0 mt-2 w-44")}>
+        <div role="menu" aria-label="Effort" className={cn(MENU_POPUP, "absolute left-0 w-44", POPUP_SIDE_CLASS[side])}>
           <MenuLabel>Effort</MenuLabel>
           {levels.map((level) => (
             <button

@@ -192,6 +192,8 @@ export default function App() {
     onDecide: (requestId, decision) => withSelectedChat((chatId) => chatState.decide(chatId, requestId, decision)),
     onAnswer: (requestId, answers) => withSelectedChat((chatId) => chatState.answer(chatId, requestId, answers)),
     onStop: () => withSelectedChat(chatState.stop),
+    onChangeChoice: ({ command, model, effort }) =>
+      withSelectedChat((chatId) => chatState.changeOptions(chatId, { command, model, effort })),
     onOpenChanges: () => {
       setDiffScope(LATEST_TURN_SCOPE);
       closeFilesPanel();

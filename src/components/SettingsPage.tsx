@@ -1,13 +1,14 @@
 import type { ReactNode } from "react";
 import { Check, ChevronDown } from "lucide-react";
-import { CLAUDE_COMMANDS, DEFAULT_EFFORT, FALLBACK_EFFORTS, FALLBACK_MODELS } from "../agentOptions";
+import { effortOptionsFor, modelChoices } from "../agentChoices";
+import { CLAUDE_COMMANDS, DEFAULT_EFFORT } from "../agentOptions";
 import type { Settings } from "../api";
 import { GH_NOT_INSTALLED, ghProblemOf, PREFERRED_EDITOR_SETTING, prApi, WORK_IN_WORKTREES_SETTING } from "../gitApi";
 import type { Project } from "../types";
 import { useCapabilities } from "../useCapabilities";
 import { useLoaded } from "../useLoaded";
 import { useEditors } from "../useProjectTools";
-import { EffortPicker, ModelPicker, type AgentChoice, type ModelChoice } from "./ComposerControls";
+import { EffortPicker, ModelPicker, type AgentChoice } from "./ComposerControls";
 import { cn, MENU_ITEM, MENU_POPUP } from "./ui";
 import { usePopup } from "./usePopup";
 
@@ -57,11 +58,6 @@ function SettingsRow({ title, description, control, children }: SettingsRowProps
   );
 }
 
-function modelChoices(models: { value: string; displayName: string; description: string }[]): ModelChoice[] {
-  if (models.length === 0) return FALLBACK_MODELS.map((value) => ({ value, label: value, description: "" }));
-  return models.map((model) => ({ value: model.value, label: model.displayName, description: model.description }));
-}
-
 interface DefaultAgentRowProps {
   choice: AgentChoice;
   projectId: string | undefined;
@@ -71,8 +67,7 @@ interface DefaultAgentRowProps {
 function DefaultAgentRow({ choice, projectId, onChange }: DefaultAgentRowProps) {
   const { capabilities } = useCapabilities(choice.command, projectId);
   const models = capabilities?.models ?? [];
-  const selected = models.find((model) => model.value === choice.model);
-  const efforts = selected ? (selected.supportsEffort ? selected.supportedEffortLevels : []) : FALLBACK_EFFORTS;
+  const efforts = effortOptionsFor(models.find((model) => model.value === choice.model));
   return (
     <SettingsRow
       title="Default agent"

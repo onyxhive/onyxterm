@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
-import { Gauge, SquareTerminal } from "lucide-react";
+import { effortOptionsFor, modelChoices } from "../agentChoices";
 import { CODEX_COMMAND } from "../agentOptions";
 import type { FeedItem, Subagent, Task, TaskStatus } from "../types";
 import { suggestionSources, useCapabilities } from "../useCapabilities";
@@ -7,8 +7,7 @@ import { useSubagents } from "../useGit";
 import { useProjectFiles } from "../useProjectFiles";
 import { ChangedFilesCard } from "./ChangesPanel";
 import { Composer, COMPOSER_PLACEHOLDER, QUESTION_PLACEHOLDER } from "./Composer";
-import { ChatWorkspaceControls, StaticControl } from "./ComposerControls";
-import { ProviderLogo } from "./ProviderLogo";
+import { ChatWorkspaceControls, EffortPicker, ModelPicker, type AgentChoice } from "./ComposerControls";
 import { FeedItemView, type FeedActions } from "./FeedItemView";
 import { QuestionDrawer, useQuestionAnswers, type QuestionRequest } from "./QuestionDrawer";
 import { useDockHeight } from "./useDockHeight";
@@ -19,8 +18,11 @@ export interface ChatActions extends FeedActions {
   onAnswer: (requestId: string, answers: Record<string, string>) => void;
   onStop: () => void;
   onOpenChanges: () => void;
+  onChangeChoice: (choice: AgentChoice) => void;
 }
 
+const ACTIVE_TURN_STATUSES: TaskStatus[] = ["running", "permission", "question"];
+const CHOICE_LOCKED = "Wait for this turn to finish or stop it to change the model, effort or command";
 const SETTLED_STATUSES: TaskStatus[] = ["review", "done", "failed"];
 
 interface ChatViewProps {
@@ -75,7 +77,11 @@ export function ChatView({ task, actions }: ChatViewProps) {
   const isRunning = task.status === "running";
   const turnReplies = turnReplyIndexes(task.feed, isRunning);
   const { subagents } = useSubagents(task.id);
-  const modelLabel = capabilities?.models.find((model) => model.value === task.model)?.displayName ?? task.model;
+  const models = capabilities?.models ?? [];
+  const efforts = effortOptionsFor(models.find((model) => model.value === task.model));
+  const { provider, command, model, effort } = task;
+  const choice: AgentChoice = { provider, command, model, effort };
+  const choiceLockReason = ACTIVE_TURN_STATUSES.includes(task.status) ? CHOICE_LOCKED : undefined;
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
@@ -94,17 +100,22 @@ export function ChatView({ task, actions }: ChatViewProps) {
 
   const controls = (
     <>
-      <StaticControl icon={<ProviderLogo provider={task.provider} size={14} />} title="Model, fixed for this chat">
-        <span className="font-medium text-foreground/70">{modelLabel}</span>
-      </StaticControl>
-      {task.effort && (
-        <StaticControl icon={<Gauge />} title="Effort, fixed for this chat">
-          <span className="capitalize">{task.effort}</span>
-        </StaticControl>
+      <ModelPicker
+        choice={choice}
+        models={modelChoices(models)}
+        side="top"
+        disabledReason={choiceLockReason}
+        onChange={(update) => actions.onChangeChoice({ ...choice, ...update })}
+      />
+      {efforts.length > 0 && (
+        <EffortPicker
+          effort={task.effort}
+          levels={efforts}
+          side="top"
+          disabledReason={choiceLockReason}
+          onChange={(effort) => actions.onChangeChoice({ ...choice, effort })}
+        />
       )}
-      <StaticControl icon={<SquareTerminal />} title="Command">
-        {task.command}
-      </StaticControl>
       <ChatWorkspaceControls worktreePath={task.worktreePath} branch={task.branch} />
     </>
   );

@@ -1,12 +1,12 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { Folder, FolderGit2, FolderOpen, FolderPlus, TriangleAlert } from "lucide-react";
-import { CODEX_COMMAND, DEFAULT_EFFORT, DEFAULT_MODEL, FALLBACK_EFFORTS, FALLBACK_MODELS } from "../agentOptions";
-import type { ModelOption } from "../agentEvents";
+import { effortOptionsFor, modelChoices, pickOption } from "../agentChoices";
+import { CODEX_COMMAND, DEFAULT_EFFORT, DEFAULT_MODEL } from "../agentOptions";
 import type { Project, Workspace } from "../types";
 import { suggestionSources, useCapabilities } from "../useCapabilities";
 import { useProjectFiles } from "../useProjectFiles";
 import { Composer, COMPOSER_PLACEHOLDER } from "./Composer";
-import { EffortPicker, ModelPicker, type AgentChoice, type ModelChoice } from "./ComposerControls";
+import { EffortPicker, ModelPicker, type AgentChoice } from "./ComposerControls";
 import { cn, INLINE_BUTTON, MENU_ITEM, MENU_POPUP, MenuSeparator, OUTLINE_BUTTON } from "./ui";
 import { useDismiss } from "./useDismiss";
 
@@ -26,22 +26,6 @@ interface NewChatProps {
 
 const CODEX_COMING = "Codex support coming next";
 const ADD_PROJECT_FIRST = "Add a project first";
-
-function effortOptionsFor(model: ModelOption | undefined): string[] {
-  if (!model) return FALLBACK_EFFORTS;
-  return model.supportsEffort ? model.supportedEffortLevels : [];
-}
-
-function pickOption(options: string[], preferred: string, fallback: string): string {
-  if (options.includes(preferred)) return preferred;
-  if (options.includes(fallback)) return fallback;
-  return options[0] ?? "";
-}
-
-function modelChoices(models: ModelOption[]): ModelChoice[] {
-  if (models.length === 0) return FALLBACK_MODELS.map((value) => ({ value, label: value, description: "" }));
-  return models.map((model) => ({ value: model.value, label: model.displayName, description: model.description }));
-}
 
 interface ProjectPickerProps {
   project: Project;
