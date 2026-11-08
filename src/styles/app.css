@@ -19,7 +19,7 @@
 
   --sidebar-width: 16rem;
   --chat-content-max-width: 46rem;
-  --diff-panel-width: clamp(22rem, 40vw, 40rem);
+  --diff-panel-width: clamp(21rem, 34vw, 40rem);
   --glass-blur: 12px;
   --glass-opacity: 80%;
   --glass-saturation: 1.14;

@@ -49,7 +49,7 @@ function BranchLabel({ branch }: { branch: string }) {
   return (
     <li
       title={branch}
-      className="-ms-2 flex min-w-0 shrink items-center gap-1 text-xs font-normal text-muted-foreground/70"
+      className="-ms-2 flex min-w-0 shrink-[4] items-center gap-1 text-xs font-normal text-muted-foreground/70"
     >
       <span aria-hidden="true" className="shrink-0 text-muted-foreground/50">
         ·
@@ -81,13 +81,13 @@ export function ChatHeader({ task, project, details, branch, isChangesPanelOpen,
                   <span className="truncate">{project.name}</span>
                 </button>
               </li>
-              {branch && <BranchLabel branch={branch} />}
+              {branch && !task.pr && <BranchLabel branch={branch} />}
               <li aria-hidden="true" className="shrink-0 text-icon-muted">
                 /
               </li>
             </>
           )}
-          <li aria-current="page" className="flex min-w-0 items-center gap-3 text-foreground">
+          <li aria-current="page" className="flex min-w-28 items-center gap-3 text-foreground">
             <h2 className="truncate" title={task.title}>
               {task.title}
             </h2>
