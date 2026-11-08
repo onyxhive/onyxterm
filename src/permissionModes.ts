@@ -1,5 +1,4 @@
 import type { Settings } from "./api";
-import { choiceOf } from "./preferences";
 
 export const PERMISSION_MODES = ["default", "acceptEdits", "plan", "bypassPermissions"] as const;
 export type PermissionMode = (typeof PERMISSION_MODES)[number];
@@ -39,6 +38,8 @@ export function isFullAccess(mode: PermissionMode): boolean {
   return mode === "bypassPermissions";
 }
 
+export const DEFAULT_PERMISSION_MODE: PermissionMode = "acceptEdits";
+
 export function defaultPermissionModeOf(settings: Settings | null): PermissionMode {
-  return choiceOf(PERMISSION_MODES, settings?.[PERMISSION_MODE_SETTING]);
+  return PERMISSION_MODES.find((mode) => mode === settings?.[PERMISSION_MODE_SETTING]) ?? DEFAULT_PERMISSION_MODE;
 }

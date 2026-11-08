@@ -27,6 +27,7 @@ interface NewChatProps {
   isWorktreeMode: boolean;
   onStart: (start: ChatStart) => void;
   onPickProject: (projectId: string) => void;
+  onPickPermissionMode: (mode: PermissionMode) => void;
   onAddProject: () => void;
 }
 
@@ -118,6 +119,11 @@ export function NewChat(props: NewChatProps) {
   const effort = pickOption(effortOptions, choice.effort, DEFAULT_EFFORT);
   const resolvedChoice: AgentChoice = { ...choice, command, model, effort };
 
+  function pickPermissionMode(mode: PermissionMode) {
+    setPermissionMode(mode);
+    props.onPickPermissionMode(mode);
+  }
+
   function start(text: string, attachments: ImageAttachment[]) {
     if (!project) return;
     onStart({ ...resolvedChoice, text, attachments, projectId: project.id, permissionMode });
@@ -150,7 +156,7 @@ export function NewChat(props: NewChatProps) {
       permissionMode={permissionMode}
       align="end"
       onChange={(update) => setChoice({ ...choice, ...update })}
-      onPermissionModeChange={setPermissionMode}
+      onPermissionModeChange={pickPermissionMode}
     />
   );
 

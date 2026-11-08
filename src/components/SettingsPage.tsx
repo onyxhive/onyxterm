@@ -26,6 +26,8 @@ import {
   type TimestampFormat,
 } from "../preferences";
 import {
+  DEFAULT_PERMISSION_MODE,
+  defaultPermissionModeOf,
   PERMISSION_MODE_INFO,
   PERMISSION_MODE_SETTING,
   PERMISSION_MODES,
@@ -81,7 +83,7 @@ const SEND_SHORTCUT_OPTIONS: SelectOption<SendShortcut>[] = [
 
 const PERMISSION_MODE_OPTIONS: SelectOption<PermissionMode>[] = PERMISSION_MODES.map((mode) => ({
   value: mode,
-  label: mode === "default" ? `${PERMISSION_MODE_INFO[mode].label} (default)` : PERMISSION_MODE_INFO[mode].label,
+  label: mode === DEFAULT_PERMISSION_MODE ? `${PERMISSION_MODE_INFO[mode].label} (default)` : PERMISSION_MODE_INFO[mode].label,
 }));
 
 const MERGE_METHOD_OPTIONS = MERGE_METHODS.map((method) => ({ value: method, label: MERGE_METHOD_LABELS[method] }));
@@ -423,7 +425,7 @@ export function SettingsPage(props: SettingsPageProps) {
               <SettingsSelect
                 label="Permission mode"
                 options={PERMISSION_MODE_OPTIONS}
-                value={settings[PERMISSION_MODE_SETTING]}
+                value={defaultPermissionModeOf(settings)}
                 onChange={(mode) => onRemember(PERMISSION_MODE_SETTING, mode)}
               />
             }
