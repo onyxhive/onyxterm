@@ -22,6 +22,7 @@ const CHOICES: &[(&str, &[&str])] = &[
     ("timestampFormat", &["locale", "12-hour", "24-hour"]),
     ("sendShortcut", &["enter", "mod-enter-multiline", "mod-enter"]),
     ("pullRequestMergeMethod", &["merge", "squash", "rebase"]),
+    ("prAuthorFilter", &["everyone", "mine", "review-requested"]),
     ("inAppNotifications", TOGGLE_VALUES),
     (WORK_IN_WORKTREES_SETTING, TOGGLE_VALUES),
     (START_FROM_REMOTE_SETTING, TOGGLE_VALUES),
@@ -106,6 +107,8 @@ mod tests {
         store_setting(&connection, COLOR_SCHEME_SETTING, "dark").unwrap();
         assert!(store_setting(&connection, COLOR_SCHEME_SETTING, "purple").is_err());
         assert!(store_setting(&connection, WORK_IN_WORKTREES_SETTING, "yes").is_err());
+        store_setting(&connection, "prAuthorFilter", "review-requested").unwrap();
+        assert!(store_setting(&connection, "prAuthorFilter", "someone-else").is_err());
         store_setting(&connection, "preferredEditor", "zed").unwrap();
         assert_eq!(stored_setting(&connection, COLOR_SCHEME_SETTING).unwrap().as_deref(), Some("dark"));
         assert_eq!(stored_setting(&connection, "missing").unwrap(), None);
