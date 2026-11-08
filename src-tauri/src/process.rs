@@ -4,6 +4,8 @@ use std::process::{Child, Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use serde_json::{Map, Value};
+
 use crate::chats::{AgentCommand, PermissionMode};
 
 pub const STRIPPED_ENV: &[&str] = &[
@@ -48,6 +50,8 @@ pub struct Launch<'a> {
     pub model: &'a str,
     pub effort: &'a str,
     pub permission_mode: PermissionMode,
+    pub is_fast_mode: bool,
+    pub is_ultracode: bool,
     pub session: SessionFlag,
     pub cwd: &'a Path,
 }
@@ -61,6 +65,17 @@ pub fn shell_quote(argument: &str) -> String {
     format!("'{}'", argument.replace('\'', r"'\''"))
 }
 
+fn flag_settings(launch: &Launch<'_>) -> Option<String> {
+    let mut settings = Map::new();
+    if launch.is_fast_mode {
+        settings.insert("fastMode".into(), Value::Bool(true));
+    }
+    if launch.is_ultracode {
+        settings.insert("ultracode".into(), Value::Bool(true));
+    }
+    (!settings.is_empty()).then(|| Value::Object(settings).to_string())
+}
+
 fn arguments(launch: &Launch<'_>) -> Vec<String> {
     let mut arguments: Vec<String> =
         std::iter::once(launch.command.as_str()).chain(STREAM_FLAGS.iter().copied()).map(String::from).collect();
@@ -71,6 +86,9 @@ fn arguments(launch: &Launch<'_>) -> Vec<String> {
         arguments.extend(["--effort".to_string(), launch.effort.to_string()]);
     }
     arguments.extend(["--permission-mode".to_string(), launch.permission_mode.as_str().to_string()]);
+    if let Some(settings) = flag_settings(launch) {
+        arguments.extend(["--settings".to_string(), settings]);
+    }
     match &launch.session {
         SessionFlag::Start(session_id) => arguments.extend(["--session-id".to_string(), session_id.clone()]),
         SessionFlag::Resume(session_id) => arguments.extend(["--resume".to_string(), session_id.clone()]),
@@ -150,6 +168,8 @@ mod tests {
             model: "haiku",
             effort: "low",
             permission_mode: PermissionMode::AcceptEdits,
+            is_fast_mode: false,
+            is_ultracode: false,
             session: SessionFlag::Start("abc".into()),
             cwd,
         };
@@ -164,6 +184,8 @@ mod tests {
             model: "default",
             effort: "",
             permission_mode: PermissionMode::BypassPermissions,
+            is_fast_mode: false,
+            is_ultracode: false,
             session: SessionFlag::Resume("abc".into()),
             cwd,
         };
@@ -171,5 +193,9 @@ mod tests {
         assert!(!command_line(&resume).contains("exec"));
         let auto = Launch { permission_mode: PermissionMode::Auto, ..resume };
         assert!(command_line(&auto).contains(" --permission-mode auto --resume abc"));
+        let fast = Launch { is_fast_mode: true, ..auto };
+        assert!(command_line(&fast).ends_with(r#"auto --settings '{"fastMode":true}' --resume abc"#));
+        let both = Launch { is_ultracode: true, ..fast };
+        assert!(command_line(&both).contains(r#"--settings '{"fastMode":true,"ultracode":true}'"#));
     }
 }

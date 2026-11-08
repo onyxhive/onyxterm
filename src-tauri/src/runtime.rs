@@ -30,6 +30,7 @@ pub const CHAT_OPTION_REJECTED: &str = "chat-option-rejected";
 const IDLE_LIMIT: Duration = Duration::from_secs(10 * 60);
 const REAP_INTERVAL: Duration = Duration::from_secs(30);
 const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(45);
+const SETTINGS_TIMEOUT: Duration = Duration::from_secs(10);
 const EXIT_WAIT: Duration = Duration::from_secs(5);
 const EXIT_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const STDERR_TAIL_LENGTH: usize = 2000;
@@ -40,10 +41,62 @@ const RULE_NEEDS_ALWAYS: &str = "a rule scope only applies to an always-allow an
 const CODEX_UNSUPPORTED: &str = "Codex support coming next";
 const TURN_IS_RUNNING: &str = "the agent is working; wait for this turn to finish or stop it before changing settings";
 
+const LIVE_EFFORT_LEVELS: [&str; 4] = ["low", "medium", "high", "xhigh"];
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct FlagChange {
+    effort: Option<String>,
+    is_fast_mode: Option<bool>,
+    is_ultracode: Option<bool>,
+}
+
+impl FlagChange {
+    fn between(chat: &Chat, options: &ChatOptions) -> Option<FlagChange> {
+        let change = FlagChange {
+            effort: (chat.effort != options.effort).then(|| options.effort.clone()),
+            is_fast_mode: (chat.is_fast_mode != options.is_fast_mode).then_some(options.is_fast_mode),
+            is_ultracode: (chat.is_ultracode != options.is_ultracode).then_some(options.is_ultracode),
+        };
+        (change != FlagChange::default()).then_some(change)
+    }
+
+    fn settings(&self) -> serde_json::Value {
+        let mut settings = serde_json::Map::new();
+        if let Some(effort) = &self.effort {
+            settings.insert("effortLevel".into(), effort.clone().into());
+        }
+        if let Some(is_fast_mode) = self.is_fast_mode {
+            settings.insert("fastMode".into(), is_fast_mode.into());
+        }
+        if let Some(is_ultracode) = self.is_ultracode {
+            settings.insert("ultracode".into(), is_ultracode.into());
+        }
+        serde_json::Value::Object(settings)
+    }
+
+    fn undo_from(&self, before: &Chat) -> FlagChange {
+        FlagChange {
+            effort: self.effort.as_ref().map(|_| before.effort.clone()),
+            is_fast_mode: self.is_fast_mode.map(|_| before.is_fast_mode),
+            is_ultracode: self.is_ultracode.map(|_| before.is_ultracode),
+        }
+    }
+
+    fn applied_to(&self, options: ChatOptions) -> ChatOptions {
+        ChatOptions {
+            effort: self.effort.clone().unwrap_or(options.effort.clone()),
+            is_fast_mode: self.is_fast_mode.unwrap_or(options.is_fast_mode),
+            is_ultracode: self.is_ultracode.unwrap_or(options.is_ultracode),
+            ..options
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum LiveSwitch {
     Model(String),
     PermissionMode(PermissionMode),
+    Flags(FlagChange),
 }
 
 impl LiveSwitch {
@@ -51,6 +104,7 @@ impl LiveSwitch {
         match self {
             LiveSwitch::Model(model) => protocol::set_model_request(request_id, model),
             LiveSwitch::PermissionMode(mode) => protocol::set_permission_mode_request(request_id, mode.as_str()),
+            LiveSwitch::Flags(change) => protocol::apply_flag_settings_request(request_id, change.settings()),
         }
     }
 
@@ -58,6 +112,7 @@ impl LiveSwitch {
         match self {
             LiveSwitch::Model(_) => LiveSwitch::Model(before.model.clone()),
             LiveSwitch::PermissionMode(_) => LiveSwitch::PermissionMode(before.permission_mode),
+            LiveSwitch::Flags(change) => LiveSwitch::Flags(change.undo_from(before)),
         }
     }
 
@@ -65,6 +120,7 @@ impl LiveSwitch {
         match self {
             LiveSwitch::Model(model) => ChatOptions { model: model.clone(), ..options },
             LiveSwitch::PermissionMode(permission_mode) => ChatOptions { permission_mode: *permission_mode, ..options },
+            LiveSwitch::Flags(change) => change.applied_to(options),
         }
     }
 
@@ -72,6 +128,7 @@ impl LiveSwitch {
         let setting = match self {
             LiveSwitch::Model(_) => "model",
             LiveSwitch::PermissionMode(_) => "permission mode",
+            LiveSwitch::Flags(_) => "effort and speed settings",
         };
         format!("Claude Code kept the previous {setting}: {reason}")
     }
@@ -86,7 +143,8 @@ enum LiveChange {
 fn needs_respawn(chat: &Chat, options: &ChatOptions) -> bool {
     let enters_launch_only_mode =
         chat.permission_mode != options.permission_mode && options.permission_mode.needs_launch_flag();
-    chat.command != options.command || chat.effort != options.effort || enters_launch_only_mode
+    let needs_effort_flag = chat.effort != options.effort && !LIVE_EFFORT_LEVELS.contains(&options.effort.as_str());
+    chat.command != options.command || needs_effort_flag || enters_launch_only_mode
 }
 
 fn live_change(chat: &Chat, options: &ChatOptions) -> LiveChange {
@@ -96,7 +154,8 @@ fn live_change(chat: &Chat, options: &ChatOptions) -> LiveChange {
     let model = (chat.model != options.model).then(|| LiveSwitch::Model(options.model.clone()));
     let mode = (chat.permission_mode != options.permission_mode)
         .then_some(LiveSwitch::PermissionMode(options.permission_mode));
-    LiveChange::Switch(model.into_iter().chain(mode).collect())
+    let flags = FlagChange::between(chat, options).map(LiveSwitch::Flags);
+    LiveChange::Switch(model.into_iter().chain(mode).chain(flags).collect())
 }
 
 fn chat_options(chat: &Chat) -> ChatOptions {
@@ -105,6 +164,8 @@ fn chat_options(chat: &Chat) -> ChatOptions {
         model: chat.model.clone(),
         effort: chat.effort.clone(),
         permission_mode: chat.permission_mode,
+        is_fast_mode: chat.is_fast_mode,
+        is_ultracode: chat.is_ultracode,
     }
 }
 
@@ -241,6 +302,7 @@ fn apply_notice(app: &AppHandle, chat_id: &str, process: &AgentProcess, notice: 
         ControlNotice::RequestFailed { request_id, message } => {
             undo_refused_switch(app, chat_id, process, &request_id, &message)
         }
+        ControlNotice::UltracodeAvailability(_) => {}
     }
 }
 
@@ -410,11 +472,15 @@ fn discover(command: AgentCommand, cwd: &Path) -> AppResult<Capabilities> {
         model: "",
         effort: "",
         permission_mode: PermissionMode::Default,
+        is_fast_mode: false,
+        is_ultracode: false,
         session: SessionFlag::Discover,
         cwd,
     };
     let (process, stdout) = spawn_process(&launch)?;
+    process.write_line(&protocol::get_settings_request(&new_id()))?;
     let (sender, receiver) = mpsc::channel();
+    let (ultracode_sender, ultracode_receiver) = mpsc::channel();
     thread::spawn(move || {
         let mut parser = StreamParser::new(Source::Live);
         read_lines(stdout, |line| {
@@ -423,13 +489,20 @@ fn discover(command: AgentCommand, cwd: &Path) -> AppResult<Capabilities> {
                     let _ = sender.send(capabilities);
                 }
             }
+            for notice in parser.take_control_notices() {
+                if let ControlNotice::UltracodeAvailability(is_available) = notice {
+                    let _ = ultracode_sender.send(is_available);
+                }
+            }
         });
     });
     let outcome = receiver.recv_timeout(DISCOVERY_TIMEOUT);
+    let is_ultracode_available = ultracode_receiver.recv_timeout(SETTINGS_TIMEOUT).unwrap_or(false);
     close_processes(vec![process.clone()]);
-    outcome.map_err(|_| {
+    let capabilities = outcome.map_err(|_| {
         AppError::Agent(format!("{} did not answer the handshake: {}", command.as_str(), exit_message(&process)))
-    })
+    })?;
+    Ok(Capabilities { is_ultracode_available, ..capabilities })
 }
 
 impl AgentRuntime {
@@ -457,6 +530,8 @@ impl AgentRuntime {
             model: &chat.model,
             effort: &chat.effort,
             permission_mode: chat.permission_mode,
+            is_fast_mode: chat.is_fast_mode,
+            is_ultracode: chat.is_ultracode,
             session: session_flag(chat),
             cwd,
         };
@@ -696,11 +771,20 @@ mod tests {
             worktree_path: None,
             is_worktree_removed: false,
             permission_mode: PermissionMode::Default,
+            is_fast_mode: false,
+            is_ultracode: false,
         }
     }
 
     fn options(command: AgentCommand, model: &str, effort: &str) -> ChatOptions {
-        ChatOptions { command, model: model.into(), effort: effort.into(), permission_mode: PermissionMode::Default }
+        ChatOptions {
+            command,
+            model: model.into(),
+            effort: effort.into(),
+            permission_mode: PermissionMode::Default,
+            is_fast_mode: false,
+            is_ultracode: false,
+        }
     }
 
     fn with_mode(options: ChatOptions, permission_mode: PermissionMode) -> ChatOptions {
@@ -708,7 +792,7 @@ mod tests {
     }
 
     #[test]
-    fn switches_models_live_but_respawns_for_effort_or_command_changes() {
+    fn switches_models_live_but_respawns_for_max_effort_or_command_changes() {
         let chat = chat_with(AgentCommand::Claude, "sonnet", "high");
         assert_eq!(live_change(&chat, &options(AgentCommand::Claude, "sonnet", "high")), LiveChange::Switch(vec![]));
         assert_eq!(
@@ -717,6 +801,32 @@ mod tests {
         );
         assert_eq!(live_change(&chat, &options(AgentCommand::Claude, "opus", "max")), LiveChange::Respawn);
         assert_eq!(live_change(&chat, &options(AgentCommand::ClaudeLyxa, "sonnet", "high")), LiveChange::Respawn);
+        assert_eq!(live_change(&chat, &options(AgentCommand::Claude, "sonnet", "")), LiveChange::Respawn);
+    }
+
+    #[test]
+    fn applies_effort_fast_mode_and_ultracode_live_as_flag_settings() {
+        let chat = chat_with(AgentCommand::Claude, "sonnet", "high");
+        let faster =
+            ChatOptions { is_fast_mode: true, is_ultracode: true, ..options(AgentCommand::Claude, "sonnet", "xhigh") };
+        let LiveChange::Switch(switches) = live_change(&chat, &faster) else { panic!("expected a live switch") };
+        let expected = FlagChange { effort: Some("xhigh".into()), is_fast_mode: Some(true), is_ultracode: Some(true) };
+        assert_eq!(switches, vec![LiveSwitch::Flags(expected.clone())]);
+        let request: serde_json::Value = serde_json::from_str(&switches[0].request("f1")).unwrap();
+        assert_eq!(
+            request["request"],
+            serde_json::json!({"subtype": "apply_flag_settings",
+                "settings": {"effortLevel": "xhigh", "fastMode": true, "ultracode": true}})
+        );
+        let undo = switches[0].undo_from(&chat);
+        let undo_expected =
+            FlagChange { effort: Some("high".into()), is_fast_mode: Some(false), is_ultracode: Some(false) };
+        assert_eq!(undo, LiveSwitch::Flags(undo_expected));
+        assert_eq!(undo.applied_to(faster), chat_options(&chat));
+        let only_fast = ChatOptions { is_fast_mode: true, ..options(AgentCommand::Claude, "sonnet", "high") };
+        let LiveChange::Switch(fast_switch) = live_change(&chat, &only_fast) else { panic!("expected a live switch") };
+        let request: serde_json::Value = serde_json::from_str(&fast_switch[0].request("f2")).unwrap();
+        assert_eq!(request["request"]["settings"], serde_json::json!({"fastMode": true}));
     }
 
     #[test]
@@ -839,8 +949,16 @@ mod live_tests {
     }
 
     fn start(command: AgentCommand, session: SessionFlag, cwd: &Path) -> LiveChat {
-        let launch =
-            Launch { command, model: MODEL, effort: "", permission_mode: PermissionMode::Default, session, cwd };
+        let launch = Launch {
+            command,
+            model: MODEL,
+            effort: "",
+            permission_mode: PermissionMode::Default,
+            is_fast_mode: false,
+            is_ultracode: false,
+            session,
+            cwd,
+        };
         let (process, stdout) = spawn_process(&launch).unwrap();
         let (sender, events) = mpsc::channel();
         thread::spawn(move || {

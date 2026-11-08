@@ -19,6 +19,8 @@ const ASYNC_LAUNCH_PREFIX: &str = "Async agent launched";
 const REPORT_MARKER: &str = "The report follows:";
 const AGENT_ID_TRAILER: &str = "\nagentId:";
 const ERROR_SUBTYPE: &str = "error";
+const APPLIED_SETTINGS_FIELD: &str = "applied";
+const ULTRACODE_AVAILABLE_FIELD: &str = "ultracodeAvailable";
 const UNKNOWN_CONTROL_ERROR: &str = "the agent refused the request";
 pub const SUMMARY_LENGTH: usize = 400;
 
@@ -52,6 +54,10 @@ pub struct ModelOption {
     pub supports_effort: bool,
     #[serde(default)]
     pub supported_effort_levels: Vec<String>,
+    #[serde(default)]
+    pub supports_fast_mode: bool,
+    #[serde(default)]
+    pub supports_auto_mode: bool,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -78,6 +84,8 @@ pub struct Capabilities {
     pub models: Vec<ModelOption>,
     #[serde(default)]
     pub account: Account,
+    #[serde(default, rename = "ultracodeAvailable")]
+    pub is_ultracode_available: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -423,6 +431,7 @@ struct ControlResponseBody {
 pub enum ControlNotice {
     PermissionModeReported(PermissionMode),
     RequestFailed { request_id: String, message: String },
+    UltracodeAvailability(bool),
 }
 
 #[derive(Debug, Deserialize)]
@@ -873,6 +882,11 @@ impl StreamParser {
         if let Some(title) = payload.get(TITLE_FIELD).and_then(Value::as_str) {
             return vec![AgentEvent::TitleChanged { title: title.to_string() }];
         }
+        if let Some(applied) = payload.get(APPLIED_SETTINGS_FIELD) {
+            let is_available = applied.get(ULTRACODE_AVAILABLE_FIELD).and_then(Value::as_bool).unwrap_or(false);
+            self.notices.push(ControlNotice::UltracodeAvailability(is_available));
+            return Vec::new();
+        }
         serde_json::from_value::<Capabilities>(payload)
             .map(|capabilities| vec![AgentEvent::Initialized { capabilities }])
             .unwrap_or_default()
@@ -883,6 +897,10 @@ impl StreamParser {
         let message = body.error.unwrap_or_else(|| UNKNOWN_CONTROL_ERROR.into());
         self.notices.push(ControlNotice::RequestFailed { request_id, message });
     }
+}
+
+pub fn get_settings_request(request_id: &str) -> String {
+    json!({"type": "control_request", "request_id": request_id, "request": {"subtype": "get_settings"}}).to_string()
 }
 
 pub fn initialize_request(request_id: &str) -> String {
@@ -908,6 +926,15 @@ pub fn set_permission_mode_request(request_id: &str, mode: &str) -> String {
         "type": "control_request",
         "request_id": request_id,
         "request": {"subtype": "set_permission_mode", "mode": mode},
+    })
+    .to_string()
+}
+
+pub fn apply_flag_settings_request(request_id: &str, settings: Value) -> String {
+    json!({
+        "type": "control_request",
+        "request_id": request_id,
+        "request": {"subtype": "apply_flag_settings", "settings": settings},
     })
     .to_string()
 }
@@ -1403,6 +1430,31 @@ mod tests {
         assert!(StreamParser::new(Source::Live).parse_line(&line.replace('\n', "")).is_empty());
         let wire = serde_json::to_value(AgentEvent::UserText { text: "t".into(), images: Vec::new() }).unwrap();
         assert_eq!(wire, json!({"kind": "userText", "text": "t", "images": []}));
+    }
+
+    #[test]
+    fn reads_fast_and_auto_support_per_model_and_whether_ultracode_is_available() {
+        let mut parser = StreamParser::new(Source::Live);
+        let initialized = r#"{"type":"control_response","response":{"subtype":"success","request_id":"i1",
+            "response":{"commands":[],"models":[{"value":"opus","displayName":"Opus","description":"",
+            "supportsEffort":true,"supportedEffortLevels":["low","medium","high","xhigh","max"],
+            "supportsFastMode":true,"supportsAutoMode":true},{"value":"haiku","displayName":"Haiku"}]}}}"#;
+        let events = parser.parse_line(&initialized.replace('\n', ""));
+        let AgentEvent::Initialized { capabilities } = &events[0] else { panic!("{events:?}") };
+        let (opus, haiku) = (&capabilities.models[0], &capabilities.models[1]);
+        assert!(opus.supports_fast_mode && opus.supports_auto_mode);
+        assert_eq!(opus.supported_effort_levels, vec!["low", "medium", "high", "xhigh", "max"]);
+        assert!(!haiku.supports_fast_mode && !haiku.supports_auto_mode && haiku.supported_effort_levels.is_empty());
+        assert!(!capabilities.is_ultracode_available);
+        let wire = serde_json::to_value(capabilities).unwrap();
+        assert_eq!(wire["ultracodeAvailable"], false);
+        assert_eq!(wire["models"][0]["supportsFastMode"], true);
+        let settings = r#"{"type":"control_response","response":{"subtype":"success","request_id":"g1",
+            "response":{"effective":{},"applied":{"model":"opus","effort":null,"ultracodeAvailable":true}}}}"#;
+        assert!(parser.parse_line(&settings.replace('\n', "")).is_empty());
+        assert_eq!(parser.take_control_notices(), vec![ControlNotice::UltracodeAvailability(true)]);
+        let request: Value = serde_json::from_str(&get_settings_request("g1")).unwrap();
+        assert_eq!(request["request"], json!({"subtype": "get_settings"}));
     }
 
     #[test]

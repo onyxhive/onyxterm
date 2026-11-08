@@ -157,6 +157,10 @@ pub struct Chat {
     pub model: String,
     pub effort: String,
     pub permission_mode: PermissionMode,
+    #[serde(rename = "fastMode")]
+    pub is_fast_mode: bool,
+    #[serde(rename = "ultracode")]
+    pub is_ultracode: bool,
     pub session_id: String,
     pub title: String,
     pub state: ChatState,
@@ -199,6 +203,10 @@ pub struct NewChat {
     pub model: String,
     pub effort: String,
     pub permission_mode: PermissionMode,
+    #[serde(default, rename = "fastMode")]
+    pub is_fast_mode: bool,
+    #[serde(default, rename = "ultracode")]
+    pub is_ultracode: bool,
     pub title: String,
 }
 
@@ -209,10 +217,14 @@ pub struct ChatOptions {
     pub model: String,
     pub effort: String,
     pub permission_mode: PermissionMode,
+    #[serde(rename = "fastMode")]
+    pub is_fast_mode: bool,
+    #[serde(rename = "ultracode")]
+    pub is_ultracode: bool,
 }
 
 const CHAT_COLUMNS: &str = "id, workspace_id, project_id, provider, command, model, effort, session_id, title, \
-    state, created_at, updated_at, branch, worktree_path, permission_mode";
+    state, created_at, updated_at, branch, worktree_path, permission_mode, fast_mode, ultracode";
 
 fn chat_from_row(row: &Row<'_>) -> rusqlite::Result<Chat> {
     let worktree_path: Option<String> = row.get(13)?;
@@ -233,6 +245,8 @@ fn chat_from_row(row: &Row<'_>) -> rusqlite::Result<Chat> {
         is_worktree_removed: worktree_path.as_deref().is_some_and(|path| !Path::new(path).is_dir()),
         worktree_path,
         permission_mode: PermissionMode::parse(&row.get::<_, String>(14)?),
+        is_fast_mode: row.get(15)?,
+        is_ultracode: row.get(16)?,
     })
 }
 
@@ -288,6 +302,8 @@ pub fn insert_chat(connection: &Connection, draft: NewChat, checkout: ChatChecko
         model: draft.model,
         effort: draft.effort,
         permission_mode: draft.permission_mode,
+        is_fast_mode: draft.is_fast_mode,
+        is_ultracode: draft.is_ultracode,
         session_id: new_id(),
         title: draft.title,
         state: ChatState::Review,
@@ -300,7 +316,7 @@ pub fn insert_chat(connection: &Connection, draft: NewChat, checkout: ChatChecko
     connection.execute(
         &format!(
             "INSERT INTO chats ({CHAT_COLUMNS}) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)"
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)"
         ),
         params![
             created.id,
@@ -317,7 +333,9 @@ pub fn insert_chat(connection: &Connection, draft: NewChat, checkout: ChatChecko
             created.updated_at,
             created.branch,
             created.worktree_path,
-            created.permission_mode.as_str()
+            created.permission_mode.as_str(),
+            created.is_fast_mode,
+            created.is_ultracode
         ],
     )?;
     Ok(created)
@@ -331,8 +349,17 @@ pub fn update_options(connection: &Connection, chat_id: &str, options: &ChatOpti
         return Err(AppError::Invalid("a Claude Code chat cannot switch to codex".into()));
     }
     let changed = connection.execute(
-        "UPDATE chats SET command = ?2, model = ?3, effort = ?4, permission_mode = ?5 WHERE id = ?1",
-        params![chat_id, options.command.as_str(), options.model, options.effort, options.permission_mode.as_str()],
+        "UPDATE chats SET command = ?2, model = ?3, effort = ?4, permission_mode = ?5, fast_mode = ?6, ultracode = ?7 \
+         WHERE id = ?1",
+        params![
+            chat_id,
+            options.command.as_str(),
+            options.model,
+            options.effort,
+            options.permission_mode.as_str(),
+            options.is_fast_mode,
+            options.is_ultracode
+        ],
     )?;
     if changed == 0 {
         return Err(AppError::NotFound("chat"));
@@ -491,6 +518,8 @@ mod tests {
             model: "default".into(),
             effort: "high".into(),
             permission_mode: PermissionMode::AcceptEdits,
+            is_fast_mode: false,
+            is_ultracode: false,
             title: " Fix the sort ".into(),
         }
     }
@@ -540,11 +569,16 @@ mod tests {
             model: "opus".into(),
             effort: "max".into(),
             permission_mode: PermissionMode::Plan,
+            is_fast_mode: true,
+            is_ultracode: true,
         };
         update_options(&connection, &created.id, &options).unwrap();
         let loaded = chat(&connection, &created.id).unwrap();
         let saved = (loaded.command, loaded.model.as_str(), loaded.effort.as_str(), loaded.permission_mode);
         assert_eq!(saved, (AgentCommand::Claude, "opus", "max", PermissionMode::Plan));
+        assert!(loaded.is_fast_mode && loaded.is_ultracode);
+        let wire = serde_json::to_value(&loaded).unwrap();
+        assert_eq!((&wire["fastMode"], &wire["ultracode"]), (&serde_json::json!(true), &serde_json::json!(true)));
         let shell = ChatOptions { model: "opus; rm -rf /".into(), ..options.clone() };
         assert!(update_options(&connection, &created.id, &shell).is_err());
         let codex = ChatOptions { command: AgentCommand::Codex, ..options };
@@ -583,7 +617,9 @@ mod tests {
                 [&created.id],
             )
             .unwrap();
-        assert_eq!(chat(&connection, "old").unwrap().permission_mode, PermissionMode::Default);
+        let old = chat(&connection, "old").unwrap();
+        assert_eq!(old.permission_mode, PermissionMode::Default);
+        assert!(!old.is_fast_mode && !old.is_ultracode);
     }
 
     #[test]

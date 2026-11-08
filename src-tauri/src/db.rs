@@ -53,6 +53,8 @@ CREATE INDEX project_scripts_by_project ON project_scripts (project_id, position
 "#,
     "ALTER TABLE chats ADD COLUMN worktree_path TEXT;",
     "ALTER TABLE chats ADD COLUMN permission_mode TEXT NOT NULL DEFAULT 'default';",
+    "ALTER TABLE chats ADD COLUMN fast_mode INTEGER NOT NULL DEFAULT 0; \
+     ALTER TABLE chats ADD COLUMN ultracode INTEGER NOT NULL DEFAULT 0;",
 ];
 
 pub struct Db(Mutex<Connection>);
