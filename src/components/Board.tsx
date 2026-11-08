@@ -1,16 +1,25 @@
-import { Folder } from "lucide-react";
+import { Folder, GitBranch } from "lucide-react";
 import type { Task } from "../types";
 import { STATUS_GROUPS, tasksInGroup, taskLabel } from "../status";
+import { PrBadge } from "./PrBadge";
 import { StatusDot } from "./StatusBadge";
 import { cn, FOCUS_RING } from "./ui";
 
 interface BoardProps {
   tasks: Task[];
   projectName: (projectId: string) => string;
+  projectBranch: (projectId: string) => string | null;
   onOpen: (taskId: string) => void;
 }
 
-function BoardCard({ task, projectName, onOpen }: { task: Task; projectName: string; onOpen: () => void }) {
+interface BoardCardProps {
+  task: Task;
+  projectName: string;
+  branch: string | null;
+  onOpen: () => void;
+}
+
+function BoardCard({ task, projectName, branch, onOpen }: BoardCardProps) {
   return (
     <button
       type="button"
@@ -29,7 +38,14 @@ function BoardCard({ task, projectName, onOpen }: { task: Task; projectName: str
       </span>
       <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
         <Folder className="size-3 shrink-0" />
-        <span className="truncate">{projectName}</span>
+        <span className="max-w-1/2 shrink-0 truncate">{projectName}</span>
+        {branch && (
+          <span className="flex min-w-0 items-center gap-1" title={branch}>
+            <GitBranch aria-hidden className="size-3 shrink-0" />
+            <span className="min-w-0 truncate">{branch}</span>
+          </span>
+        )}
+        {task.pr && <PrBadge pr={task.pr} className="ms-auto" />}
       </span>
       <span className="flex min-w-0 items-center gap-2 text-xs text-secondary-label">
         <span className="min-w-0 flex-1 truncate">{taskLabel(task)}</span>
@@ -39,7 +55,7 @@ function BoardCard({ task, projectName, onOpen }: { task: Task; projectName: str
   );
 }
 
-export function Board({ tasks, projectName, onOpen }: BoardProps) {
+export function Board({ tasks, projectName, projectBranch, onOpen }: BoardProps) {
   return (
     <div className="min-h-0 flex-1 overflow-auto px-5 pb-5">
       <div className="grid min-w-[44rem] grid-cols-4 gap-3">
@@ -54,7 +70,12 @@ export function Board({ tasks, projectName, onOpen }: BoardProps) {
               <ul className="flex flex-col gap-2">
                 {laneTasks.map((task) => (
                   <li key={task.id}>
-                    <BoardCard task={task} projectName={projectName(task.projectId)} onOpen={() => onOpen(task.id)} />
+                    <BoardCard
+                      task={task}
+                      projectName={projectName(task.projectId)}
+                      branch={task.branch ?? projectBranch(task.projectId)}
+                      onOpen={() => onOpen(task.id)}
+                    />
                   </li>
                 ))}
                 {laneTasks.length === 0 && (

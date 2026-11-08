@@ -21,8 +21,9 @@ import {
 } from "lucide-react";
 import type { CollapsedSections } from "../collapsedSections";
 import { STATUS_GROUPS, tasksInGroup, type StatusGroup } from "../status";
-import type { Task, TaskStatus, Workspace } from "../types";
+import type { ChatPullRequest, Task, TaskStatus, Workspace } from "../types";
 import type { ProjectBranches } from "../useProjectBranches";
+import { PrBadge } from "./PrBadge";
 import { cn, FOCUS_RING, ICON_BUTTON } from "./ui";
 
 export interface SidebarActions {
@@ -116,10 +117,11 @@ function MetaDot() {
 interface RowMetaProps {
   projectName: string;
   branch: string | null;
+  pr: ChatPullRequest | null;
   elapsed: string;
 }
 
-function RowMeta({ projectName, branch, elapsed }: RowMetaProps) {
+function RowMeta({ projectName, branch, pr, elapsed }: RowMetaProps) {
   return (
     <span className="flex min-w-0 items-center gap-1 text-xs text-secondary-label group-hover/row:pe-6">
       <span className="max-w-1/2 shrink-0 truncate">{projectName}</span>
@@ -130,6 +132,12 @@ function RowMeta({ projectName, branch, elapsed }: RowMetaProps) {
             <GitBranch aria-hidden className="size-3 shrink-0" />
             <span className="min-w-0 truncate">{branch}</span>
           </span>
+        </>
+      )}
+      {pr && (
+        <>
+          <MetaDot />
+          <PrBadge pr={pr} />
         </>
       )}
       <MetaDot />
@@ -174,7 +182,7 @@ function ThreadRow({ task, projectName, branch, isActive, actions }: ThreadRowPr
           </span>
           {task.title}
         </span>
-        <RowMeta projectName={projectName} branch={branch} elapsed={task.elapsed} />
+        <RowMeta projectName={projectName} branch={branch} pr={task.pr} elapsed={task.elapsed} />
       </button>
       <span className="absolute right-2 bottom-1.5 flex h-4 items-center">
         <SettleButton task={task} actions={actions} />
@@ -342,7 +350,7 @@ export function Sidebar(props: SidebarProps) {
         key={task.id}
         task={task}
         projectName={projectName(task.projectId)}
-        branch={branches[task.projectId] ?? null}
+        branch={task.branch ?? branches[task.projectId] ?? null}
         isActive={task.id === selectedTaskId}
         actions={actions}
       />

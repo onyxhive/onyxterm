@@ -1,5 +1,6 @@
 import { CheckCheck, Folder, GitBranch, PanelRight, RotateCcw, SquareTerminal } from "lucide-react";
 import type { Project, Task } from "../types";
+import { PrBadge } from "./PrBadge";
 import { StatusLabel } from "./StatusBadge";
 import { cn, ICON_BUTTON } from "./ui";
 
@@ -88,6 +89,7 @@ export function ChatHeader({ task, project, branch, isChangesPanelOpen, actions 
             <h2 className="truncate" title={task.title}>
               {task.title}
             </h2>
+            {task.pr && <PrBadge pr={task.pr} />}
             {!HIDDEN_HEADER_STATUSES.has(task.status) && <StatusLabel status={task.status} />}
           </li>
         </ol>

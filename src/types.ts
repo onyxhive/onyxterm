@@ -94,6 +94,8 @@ export interface Task {
   workingSince: number;
   feed: FeedItem[];
   work: Work;
+  branch: string | null;
+  pr: ChatPullRequest | null;
 }
 
 export type SuggestionKind = "command" | "agent" | "folder" | "file";

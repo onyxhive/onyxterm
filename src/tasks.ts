@@ -71,5 +71,7 @@ export function toTask(chat: Chat, feed: ChatFeed, now: number): Task {
     workingSince: feed.turnStartedAt ?? chat.updatedAt,
     feed: feed.items,
     work: { runningNow: runningActivity(feed), files: Object.values(feed.files) },
+    branch: chat.branch,
+    pr: chat.pr ?? null,
   };
 }

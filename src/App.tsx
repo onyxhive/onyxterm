@@ -197,7 +197,7 @@ export default function App() {
       <ChatHeader
         task={selectedTask}
         project={projects.find((project) => project.id === selectedTask.projectId)}
-        branch={branches[selectedTask.projectId] ?? null}
+        branch={selectedTask.branch ?? branches[selectedTask.projectId] ?? null}
         isChangesPanelOpen={isChangesPanelOpen}
         actions={chatHeaderActions}
       />
@@ -206,7 +206,16 @@ export default function App() {
 
   function renderMain() {
     if (!workspace || !settings) return null;
-    if (view === "board") return <Board tasks={workspaceTasks} projectName={projectName} onOpen={openTask} />;
+    if (view === "board") {
+      return (
+        <Board
+          tasks={workspaceTasks}
+          projectName={projectName}
+          projectBranch={(projectId) => branches[projectId] ?? null}
+          onOpen={openTask}
+        />
+      );
+    }
     if (!selectedTask) {
       return (
         <NewChat
