@@ -35,4 +35,5 @@ export const api = {
   discoverCapabilities: (command: string, projectId: string) =>
     invoke<Capabilities>("discover_capabilities", { command, projectId }),
   listProjectFiles: (projectId: string) => invoke<string[]>("list_project_files", { projectId }),
+  projectBranch: (projectId: string) => invoke<string | null>("project_branch", { projectId }),
 };

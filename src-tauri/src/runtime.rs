@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 
+use crate::branches::ProjectBranches;
 use crate::chats::{self, AgentCommand, Chat, ChatState, Provider};
 use crate::db::{Db, new_id};
 use crate::error::{AppError, AppResult};
@@ -121,6 +122,12 @@ pub fn rename_chat(app: &AppHandle, chat_id: &str, title: &str) {
     }
 }
 
+fn forget_branch(app: &AppHandle, chat_id: &str) {
+    if let Ok(chat) = chats::chat(&app.state::<Db>().connection(), chat_id) {
+        app.state::<ProjectBranches>().forget(&chat.project_id);
+    }
+}
+
 fn remember_session(app: &AppHandle, chat_id: &str, session_id: &str) {
     let _ = chats::update_session_id(&app.state::<Db>().connection(), chat_id, session_id);
 }
@@ -142,6 +149,7 @@ fn apply_event(app: &AppHandle, chat_id: &str, process: &AgentProcess, event: &A
             change_state(app, chat_id, ChatState::Running);
         }
         AgentEvent::TurnEnded { is_error, .. } => {
+            forget_branch(app, chat_id);
             let state = state_after_turn(&mut locked(&process.activity), *is_error);
             change_state(app, chat_id, state);
         }
