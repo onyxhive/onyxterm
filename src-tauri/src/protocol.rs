@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -13,6 +13,8 @@ const PERSISTABLE_RULE_TYPES: [&str; 2] = ["addRules", "addDirectories"];
 const SESSION_DESTINATION: &str = "session";
 const TITLE_FIELD: &str = "title";
 const SUBAGENT_TOOLS: [&str; 2] = ["Task", "Agent"];
+const SHELL_TOOL: &str = "Bash";
+const BACKGROUND_FIELD: &str = "run_in_background";
 const AGENT_TASK_TYPE: &str = "local_agent";
 const DEFAULT_AGENT_TYPE: &str = "general-purpose";
 const COMPLETED_STATUS: &str = "completed";
@@ -197,6 +199,12 @@ pub enum AgentEvent {
         tool_use_id: String,
         is_error: bool,
         summary: String,
+    },
+    ShellBackgrounded {
+        tool_use_id: String,
+    },
+    ShellFinished {
+        tool_use_id: String,
     },
 }
 
@@ -455,6 +463,7 @@ pub struct StreamParser {
     pending_permissions: Vec<PermissionRequest>,
     notices: Vec<ControlNotice>,
     subagents: HashMap<String, SubagentTrack>,
+    background_shells: HashSet<String>,
 }
 
 fn json_start(line: &str) -> Option<&str> {
@@ -567,6 +576,8 @@ pub fn describe_tool(name: &str, input: &Value) -> ToolSummary {
         "NotebookEdit" => file_summary("Edited", text_field(input, "notebook_path"), 0, 0),
         "Grep" => plain_summary("Searched", text_field(input, "pattern")),
         "Glob" => plain_summary("Listed", text_field(input, "pattern")),
+        "BashOutput" => plain_summary("Read output of", "a background shell"),
+        "KillShell" | "TaskStop" => plain_summary("Stopped", "a background task"),
         "Task" | "Agent" => plain_summary("Started", &format!("subagent {}", text_field(input, "subagent_type"))),
         "WebFetch" => plain_summary("Fetched", text_field(input, "url")),
         "WebSearch" => plain_summary("Searched the web for", text_field(input, "query")),
@@ -604,6 +615,7 @@ impl StreamParser {
             pending_permissions: Vec::new(),
             notices: Vec::new(),
             subagents: HashMap::new(),
+            background_shells: HashSet::new(),
         }
     }
 
@@ -690,6 +702,9 @@ impl StreamParser {
 
     fn task_notification(&mut self, system: SystemLine) -> Option<AgentEvent> {
         let tool_use_id = system.tool_use_id?;
+        if self.background_shells.remove(&tool_use_id) {
+            return Some(AgentEvent::ShellFinished { tool_use_id });
+        }
         let track = self.subagents.get_mut(&tool_use_id).filter(|track| !track.is_finished)?;
         track.is_finished = true;
         Some(AgentEvent::SubagentFinished {
@@ -757,12 +772,30 @@ impl StreamParser {
                         summary: describe_tool(&name, &input),
                     });
                     events.extend(parent.as_deref().map(|parent| tool_progress(parent, &name, &input)));
+                    self.track_background_shell(&id, &name, &input);
                     events.extend(self.subagent_launch(id, &name, &input));
                 }
                 _ => {}
             }
         }
         events
+    }
+
+    fn track_background_shell(&mut self, tool_use_id: &str, name: &str, input: &Value) {
+        if name == SHELL_TOOL && input.get(BACKGROUND_FIELD).and_then(Value::as_bool).unwrap_or(false) {
+            self.background_shells.insert(tool_use_id.to_string());
+        }
+    }
+
+    fn shell_backgrounded(&mut self, tool_use_id: &str, is_error: bool) -> Option<AgentEvent> {
+        if !self.background_shells.contains(tool_use_id) {
+            return None;
+        }
+        if is_error {
+            self.background_shells.remove(tool_use_id);
+            return None;
+        }
+        Some(AgentEvent::ShellBackgrounded { tool_use_id: tool_use_id.to_string() })
     }
 
     fn subagent_launch(&mut self, tool_use_id: String, name: &str, input: &Value) -> Option<AgentEvent> {
@@ -797,6 +830,7 @@ impl StreamParser {
                 ContentBlock::ToolResult { tool_use_id, is_error, content } => {
                     let is_error = is_error.unwrap_or(false);
                     let finished = self.finish_by_result(&tool_use_id, is_error, &content);
+                    events.extend(self.shell_backgrounded(&tool_use_id, is_error));
                     events.push(AgentEvent::ToolFinished { tool_use_id, is_error });
                     events.extend(finished);
                 }
@@ -1077,6 +1111,7 @@ mod tests {
     const PROBE_TWO: &str = include_str!("fixtures/probe2.jsonl");
     const TITLES: &str = include_str!("fixtures/titles.jsonl");
     const SUBAGENTS: &str = include_str!("fixtures/subagents.jsonl");
+    const BACKGROUND_SHELL: &str = include_str!("fixtures/background_shell.jsonl");
 
     fn subagent_events(source: Source) -> Vec<AgentEvent> {
         let (events, _) = parse_all(source, SUBAGENTS);
@@ -1537,6 +1572,22 @@ mod tests {
                 ("toolu_late".into(), true, "Agent type not found".into()),
             ]
         );
+    }
+
+    #[test]
+    fn keeps_a_background_shell_running_until_its_task_notification() {
+        let (events, _) = parse_all(Source::Live, BACKGROUND_SHELL);
+        let backgrounded = AgentEvent::ShellBackgrounded { tool_use_id: "toolu_server".into() };
+        let launched = AgentEvent::ToolFinished { tool_use_id: "toolu_server".into(), is_error: false };
+        let finished = AgentEvent::ShellFinished { tool_use_id: "toolu_server".into() };
+        let shell_events: Vec<_> = events
+            .iter()
+            .filter(|event| matches!(event, AgentEvent::ShellBackgrounded { .. } | AgentEvent::ShellFinished { .. }))
+            .collect();
+        assert_eq!(shell_events, vec![&backgrounded, &finished]);
+        let position = |wanted: &AgentEvent| events.iter().position(|event| event == wanted);
+        assert_eq!(position(&backgrounded).map(|at| at + 1), position(&launched));
+        assert_eq!(describe_tool("TaskStop", &json!({"task_id": "bo545qe1c"})).verb, "Stopped");
     }
 
     #[test]

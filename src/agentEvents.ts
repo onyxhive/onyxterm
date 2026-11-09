@@ -67,7 +67,9 @@ export type AgentEvent =
   | { kind: "processExited"; message: string }
   | { kind: "subagentStarted"; toolUseId: string; agentType: string; description: string }
   | { kind: "subagentProgress"; toolUseId: string; lastTool: string | null; text: string }
-  | { kind: "subagentFinished"; toolUseId: string; isError: boolean; summary: string };
+  | { kind: "subagentFinished"; toolUseId: string; isError: boolean; summary: string }
+  | { kind: "shellBackgrounded"; toolUseId: string }
+  | { kind: "shellFinished"; toolUseId: string };
 
 export interface ChatEventPayload {
   chatId: string;

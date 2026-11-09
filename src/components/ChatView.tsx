@@ -8,6 +8,7 @@ import type {
   ImageAttachment,
   PermissionDecision,
   RuleScope,
+  RunningShell,
   Subagent,
   Task,
   TaskStatus,
@@ -94,6 +95,11 @@ function subagentEntries(feed: FeedItem[], subagents: Subagent[]): SubagentEntry
     const needsApproval = item.steps.some((step) => awaited.has(step.id));
     return [{ ...item, ...subagentWith(subagents, item.toolUseId), steps: item.steps, needsApproval }];
   });
+}
+
+function runningShells(task: Task): RunningShell[] {
+  const awaited = pendingToolIds(task.feed);
+  return task.work.shells.filter((shell) => !awaited.has(shell.toolUseId));
 }
 
 function feedBlocks(feed: FeedItem[]): FeedBlock[] {
@@ -189,7 +195,7 @@ export function ChatView({ task, projectPath, actions }: ChatViewProps) {
     <ProjectRootsContext value={projectRoots}>
       <MentionTargetsContext value={mentionTargets}>
         <div className="relative flex min-h-0 flex-1 flex-col">
-          <ActivityPanel agents={subagentEntries(task.feed, subagents)} />
+          <ActivityPanel agents={subagentEntries(task.feed, subagents)} shells={runningShells(task)} />
           <div
             ref={scrollRef}
             style={{ paddingBottom: dockHeight + TIMELINE_END_GAP }}

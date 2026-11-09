@@ -1,16 +1,24 @@
 import type { AgentEvent, ToolSummary } from "./agentEvents";
 import { clockTime } from "./tasks";
-import type { ChangedFile, FeedItem, ImageAttachment, PermissionDecision, Step } from "./types";
+import type { ChangedFile, FeedItem, ImageAttachment, PermissionDecision, RunningShell, Step } from "./types";
 
 export interface ChatFeed {
   items: FeedItem[];
   runningTools: Record<string, string>;
   files: Record<string, ChangedFile>;
+  shells: Record<string, RunningShell>;
   turnStartedAt: number | null;
   decisions: Record<string, PermissionDecision>;
 }
 
-export const EMPTY_FEED: ChatFeed = { items: [], runningTools: {}, files: {}, turnStartedAt: null, decisions: {} };
+export const EMPTY_FEED: ChatFeed = {
+  items: [],
+  runningTools: {},
+  files: {},
+  shells: {},
+  turnStartedAt: null,
+  decisions: {},
+};
 
 const PRESENT_TENSE: Record<string, string> = {
   Ran: "run",
@@ -141,6 +149,31 @@ function mapSteps(items: FeedItem[], change: (step: Step) => Step): FeedItem[] {
   });
 }
 
+type Shells = Record<string, RunningShell>;
+
+function withShell(shells: Shells, event: Extract<AgentEvent, { kind: "toolStarted" }>): Shells {
+  const { toolUseId, parentToolUseId, summary } = event;
+  if (summary.verb !== SHELL_VERB || parentToolUseId !== null) return shells;
+  const shell: RunningShell = {
+    toolUseId,
+    command: summary.detail,
+    description: summary.description,
+    startedAt: Date.now(),
+    isBackground: false,
+  };
+  return { ...shells, [toolUseId]: shell };
+}
+
+function withoutShells(shells: Shells, isGone: (shell: RunningShell) => boolean): Shells {
+  return Object.fromEntries(Object.entries(shells).filter(([, shell]) => !isGone(shell)));
+}
+
+function backgroundShell(feed: ChatFeed, toolUseId: string): ChatFeed {
+  const shell = feed.shells[toolUseId];
+  if (!shell) return feed;
+  return { ...feed, shells: { ...feed.shells, [toolUseId]: { ...shell, isBackground: true } } };
+}
+
 function startTool(feed: ChatFeed, event: Extract<AgentEvent, { kind: "toolStarted" }>): ChatFeed {
   const { toolUseId, parentToolUseId, summary } = event;
   const step: Step = {
@@ -154,17 +187,19 @@ function startTool(feed: ChatFeed, event: Extract<AgentEvent, { kind: "toolStart
   };
   const files = withFile(feed.files, summary);
   const runningTools = { ...feed.runningTools, [toolUseId]: `${summary.verb} ${summary.detail}` };
-  if (isSubagentLaunch(feed.items, toolUseId)) return { ...feed, files, runningTools };
+  const shells = withShell(feed.shells, event);
+  if (isSubagentLaunch(feed.items, toolUseId)) return { ...feed, files, runningTools, shells };
   const nestedItems = parentToolUseId ? withSubagentStep(feed.items, parentToolUseId, step) : null;
-  return { ...feed, files, runningTools, items: nestedItems ?? withGroupedStep(feed.items, step) };
+  return { ...feed, files, runningTools, shells, items: nestedItems ?? withGroupedStep(feed.items, step) };
 }
 
 function finishTool(feed: ChatFeed, toolUseId: string, isError: boolean): ChatFeed {
   const runningTools = { ...feed.runningTools };
   delete runningTools[toolUseId];
-  if (!isError) return { ...feed, runningTools };
+  const shells = withoutShells(feed.shells, (shell) => shell.toolUseId === toolUseId && !shell.isBackground);
+  if (!isError) return { ...feed, runningTools, shells };
   const items = mapSteps(feed.items, (step) => (step.id === toolUseId ? { ...step, isFailed: true } : step));
-  return { ...feed, runningTools, items };
+  return { ...feed, runningTools, shells, items };
 }
 
 function requesterOf(feed: ChatFeed, toolUseId: string | null): string {
@@ -225,7 +260,8 @@ function replaceRequest(feed: ChatFeed, requestId: string, replacement: FeedItem
 }
 
 function endTurn(feed: ChatFeed, isError: boolean, message: string | null): ChatFeed {
-  const settled = { ...feed, runningTools: {}, turnStartedAt: null };
+  const shells = withoutShells(feed.shells, (shell) => !shell.isBackground);
+  const settled = { ...feed, runningTools: {}, shells, turnStartedAt: null };
   if (!isError || !message) return settled;
   return withItems(settled, [...settled.items, { kind: "note", text: `The turn failed: ${message}` }]);
 }
@@ -254,7 +290,7 @@ export function reduceFeed(feed: ChatFeed, event: AgentEvent): ChatFeed {
     case "turnEnded":
       return endTurn(feed, event.isError, event.message);
     case "processExited":
-      return withItems({ ...feed, runningTools: {}, turnStartedAt: null }, [
+      return withItems({ ...feed, runningTools: {}, shells: {}, turnStartedAt: null }, [
         ...feed.items,
         { kind: "note", text: event.message },
       ]);
@@ -268,6 +304,10 @@ export function reduceFeed(feed: ChatFeed, event: AgentEvent): ChatFeed {
         status: event.isError ? "failed" : "completed",
         summary: event.summary || item.summary,
       }));
+    case "shellBackgrounded":
+      return backgroundShell(feed, event.toolUseId);
+    case "shellFinished":
+      return { ...feed, shells: withoutShells(feed.shells, (shell) => shell.toolUseId === event.toolUseId) };
     case "session":
     case "initialized":
     case "titleChanged":
@@ -327,7 +367,7 @@ export function withStop(feed: ChatFeed): ChatFeed {
 
 export function feedFromHistory(events: AgentEvent[]): ChatFeed {
   const replayed = events.reduce(reduceFeed, EMPTY_FEED);
-  return { ...replayed, runningTools: {}, turnStartedAt: null };
+  return { ...replayed, runningTools: {}, shells: {}, turnStartedAt: null };
 }
 
 export function runningActivity(feed: ChatFeed): string {

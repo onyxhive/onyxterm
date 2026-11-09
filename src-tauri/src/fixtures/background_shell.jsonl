@@ -1,0 +1,11 @@
+{"type":"assistant","message":{"id":"msg_1","content":[{"type":"tool_use","id":"toolu_server","name":"Bash","input":{"command":"pnpm api","description":"Start the Relay API server","run_in_background":true}}]},"parent_tool_use_id":null}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_server","type":"tool_result","content":"Command running in background with ID: bo545qe1c. Output is being written to: /private/tmp/claude-501/tasks/bo545qe1c.output. You will be notified when it completes","is_error":false}]},"parent_tool_use_id":null}
+{"type":"system","subtype":"task_started","task_id":"bo545qe1c","tool_use_id":"toolu_server","description":"Start the Relay API server","task_type":"local_bash"}
+{"type":"assistant","message":{"id":"msg_2","content":[{"type":"tool_use","id":"toolu_ls","name":"Bash","input":{"command":"ls src","description":"List the sources"}}]},"parent_tool_use_id":null}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_ls","type":"tool_result","content":"index.ts","is_error":false}]},"parent_tool_use_id":null}
+{"type":"assistant","message":{"id":"msg_3","content":[{"type":"tool_use","id":"toolu_denied","name":"Bash","input":{"command":"rm -rf build","run_in_background":true}}]},"parent_tool_use_id":null}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_denied","type":"tool_result","content":"The user denied this tool use.","is_error":true}]},"parent_tool_use_id":null}
+{"type":"assistant","message":{"id":"msg_4","content":[{"type":"tool_use","id":"toolu_stop","name":"TaskStop","input":{"task_id":"bo545qe1c"}}]},"parent_tool_use_id":null}
+{"type":"user","message":{"role":"user","content":[{"tool_use_id":"toolu_stop","type":"tool_result","content":"Successfully stopped task: bo545qe1c (pnpm api)"}]},"parent_tool_use_id":null}
+{"type":"system","subtype":"task_notification","task_id":"bo545qe1c","tool_use_id":"toolu_server","status":"killed","summary":"Background command \"Start the Relay API server\" was stopped"}
+{"type":"system","subtype":"task_notification","task_id":"b9","tool_use_id":"toolu_denied","status":"completed","summary":"never ran"}

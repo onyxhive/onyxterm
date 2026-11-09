@@ -80,7 +80,7 @@ export function toTask(chat: Chat, feed: ChatFeed, now: number): Task {
     elapsed: elapsedSince(chat.updatedAt, now),
     workingSince: feed.turnStartedAt ?? chat.updatedAt,
     feed: feed.items,
-    work: { runningNow: runningActivity(feed), files: Object.values(feed.files) },
+    work: { runningNow: runningActivity(feed), files: Object.values(feed.files), shells: Object.values(feed.shells) },
     branch: chat.branch,
     worktreePath: chat.worktreePath ?? null,
     isWorktreeRemoved: chat.isWorktreeRemoved ?? false,

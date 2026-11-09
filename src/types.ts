@@ -113,9 +113,18 @@ export interface ChangedFile {
   removed: number;
 }
 
+export interface RunningShell {
+  toolUseId: string;
+  command: string;
+  description: string;
+  startedAt: number;
+  isBackground: boolean;
+}
+
 export interface Work {
   runningNow: string;
   files: ChangedFile[];
+  shells: RunningShell[];
 }
 
 export interface Task {
