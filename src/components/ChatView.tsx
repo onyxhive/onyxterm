@@ -183,11 +183,7 @@ export function ChatView({ task, projectPath, actions }: ChatViewProps) {
     />
   );
 
-  const controls = (
-    <>
-      <ChatWorkspaceControls worktreePath={task.worktreePath} branch={task.branch} />
-    </>
-  );
+  const controls = <ChatWorkspaceControls worktreePath={task.worktreePath} />;
 
   const projectRoots = [task.worktreePath, projectPath].filter((root): root is string => root !== null);
 

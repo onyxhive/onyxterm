@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { Provider } from "../types";
-import { Check, ChevronDown, FolderGit2, Gauge, GitBranch, SquareTerminal } from "lucide-react";
+import { Check, ChevronDown, FolderGit2, Gauge, SquareTerminal } from "lucide-react";
 import { CLAUDE_COMMANDS } from "../agentOptions";
 import { ProviderLogo } from "./ProviderLogo";
 import { cn, MENU_ITEM, MENU_POPUP, MenuLabel } from "./ui";
@@ -286,25 +286,12 @@ export function EffortPicker(props: EffortPickerProps) {
   );
 }
 
-interface ChatWorkspaceControlsProps {
-  worktreePath: string | null;
-  branch: string | null;
-}
-
-export function ChatWorkspaceControls({ worktreePath, branch }: ChatWorkspaceControlsProps) {
+export function ChatWorkspaceControls({ worktreePath }: { worktreePath: string | null }) {
+  if (!worktreePath) return null;
   return (
-    <>
-      {worktreePath && (
-        <StaticControl icon={<FolderGit2 />} title={`Worktree: ${worktreePath}`}>
-          Worktree
-        </StaticControl>
-      )}
-      {branch && (
-        <StaticControl icon={<GitBranch />} title={`Branch: ${branch}`}>
-          <span className="max-w-28 truncate">{branch}</span>
-        </StaticControl>
-      )}
-    </>
+    <StaticControl icon={<FolderGit2 />} title={`Worktree: ${worktreePath}`}>
+      Worktree
+    </StaticControl>
   );
 }
 

@@ -287,7 +287,6 @@ export default function App() {
             />
           )
         }
-        branch={selectedTask.branch ?? branches[selectedTask.projectId] ?? null}
         isChangesPanelOpen={isChangesPanelOpen}
         isFilesPanelOpen={workbench.isFilesPanelOpen}
         isTerminalOpen={workbench.isTerminalOpen}
