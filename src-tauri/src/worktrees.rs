@@ -117,7 +117,6 @@ pub fn remove(project_root: &Path, worktrees_root: &Path, path: &Path) -> AppRes
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::checkpoints;
     use crate::git::testing::{identified, scratch_repo, write};
 
     fn request(title: &str) -> WorktreeRequest {
@@ -208,12 +207,7 @@ mod tests {
         let worktrees = scratch_worktrees_root();
         let created = create(&root, &worktrees, &request("Add limits")).unwrap();
         let tree = identified(&Git::at(&created.path));
-        let chat_id = "6a1f0a3e-0000-4000-8000-000000000001";
-        assert_eq!(checkpoints::begin_turn(&created.path, chat_id), Some(1));
         write(&created.path, "limits.txt", "60\n");
-        checkpoints::end_turn(&created.path, chat_id, 1);
-        let turn = checkpoints::turn_diff(&tree, chat_id, 1).unwrap();
-        assert_eq!(turn.files.len(), 1);
         assert_eq!(git::status(&tree).unwrap().files.len(), 1);
         git::commit(&tree, "add limits", &[]).unwrap();
         assert!(git::status(&tree).unwrap().files.is_empty());

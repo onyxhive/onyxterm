@@ -13,7 +13,6 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use crate::attachments::{self, Attachment};
 use crate::branches::ProjectBranches;
 use crate::chats::{self, AgentCommand, Chat, ChatOptions, ChatState, PermissionMode, Provider};
-use crate::checkpoints;
 use crate::db::{Db, new_id};
 use crate::error::{AppError, AppResult};
 use crate::process::{self, Launch, SessionFlag};
@@ -200,7 +199,6 @@ struct Activity {
     was_interrupted: bool,
     is_closing: bool,
     has_requested_title: bool,
-    checkpoint_turn: Option<u32>,
     unfinished_subagents: HashSet<String>,
     last_turn_outcome: ChatState,
 }
@@ -213,7 +211,6 @@ impl Activity {
             was_interrupted: false,
             is_closing: false,
             has_requested_title: false,
-            checkpoint_turn: None,
             unfinished_subagents: HashSet::new(),
             last_turn_outcome: ChatState::Review,
         }
@@ -347,18 +344,6 @@ fn forget_branch(app: &AppHandle, chat_id: &str) {
     }
 }
 
-fn finish_checkpoint(app: &AppHandle, chat_id: &str, turn: Option<u32>) {
-    let Some(turn) = turn else { return };
-    if let Ok((_, cwd)) = chat_and_cwd(&app.state::<Db>(), chat_id) {
-        checkpoints::end_turn(Path::new(&cwd), chat_id, turn);
-    }
-}
-
-async fn start_checkpoint(chat_id: &str, cwd: &str) -> Option<u32> {
-    let (chat_id, cwd) = (chat_id.to_string(), cwd.to_string());
-    in_background(move || Ok(checkpoints::begin_turn(Path::new(&cwd), &chat_id))).await.ok().flatten()
-}
-
 fn remember_session(app: &AppHandle, chat_id: &str, session_id: &str) {
     let _ = chats::update_session_id(&app.state::<Db>().connection(), chat_id, session_id);
 }
@@ -416,8 +401,6 @@ fn apply_event(app: &AppHandle, chat_id: &str, process: &AgentProcess, event: &A
             change_state(app, chat_id, ChatState::Running);
         }
         AgentEvent::TurnEnded { .. } => {
-            let turn = locked(&process.activity).checkpoint_turn.take();
-            finish_checkpoint(app, chat_id, turn);
             forget_branch(app, chat_id);
             apply_activity(app, chat_id, process, event);
         }
@@ -679,16 +662,12 @@ pub async fn send_message(
         return Err(AppError::Agent(CODEX_UNSUPPORTED.into()));
     }
     let process = runtime.process_for(&app, &chat, Path::new(&cwd))?;
-    let (is_first_message, is_new_turn) = {
+    let is_first_message = {
         let mut activity = locked(&process.activity);
-        let is_new_turn = !std::mem::replace(&mut activity.is_turn_active, true);
+        activity.is_turn_active = true;
         activity.last_seen = Instant::now();
-        (has_text && !std::mem::replace(&mut activity.has_requested_title, true), is_new_turn)
+        has_text && !std::mem::replace(&mut activity.has_requested_title, true)
     };
-    if is_new_turn {
-        let turn = start_checkpoint(&chat_id, &cwd).await;
-        locked(&process.activity).checkpoint_turn = turn;
-    }
     process.write_line(&protocol::user_message(&text, &attachments))?;
     if is_first_message {
         let description: String = text.chars().take(MAX_TITLE_DESCRIPTION_LENGTH).collect();

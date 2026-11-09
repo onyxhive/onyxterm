@@ -52,6 +52,7 @@ impl Git {
         Git { root: root.into(), environment: Vec::new() }
     }
 
+    #[cfg(test)]
     pub fn with_env(&self, name: &'static str, value: impl Into<String>) -> Self {
         let mut environment = self.environment.clone();
         environment.push((name, value.into()));

@@ -1,7 +1,6 @@
 mod attachments;
 mod branches;
 mod chats;
-mod checkpoints;
 mod db;
 mod desktop;
 mod editors;
@@ -85,8 +84,6 @@ pub fn run() {
             git::git_create_branch,
             git::git_commit,
             git::git_push,
-            checkpoints::git_turn_diff,
-            checkpoints::git_checkpoint_turns,
             prs::pr_list,
             prs::pr_view,
             prs::pr_for_branch,
