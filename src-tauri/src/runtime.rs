@@ -13,7 +13,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use crate::attachments::{self, Attachment};
 use crate::branches::ProjectBranches;
 use crate::chats::{self, AgentCommand, Chat, ChatOptions, ChatState, PermissionMode, Provider};
-use crate::db::{Db, new_id};
+use crate::db::{Db, new_id, now_millis};
 use crate::error::{AppError, AppResult};
 use crate::process::{self, Launch, SessionFlag};
 use crate::project_rules;
@@ -22,15 +22,19 @@ use crate::protocol::{
 };
 use crate::subprocess::in_background;
 use crate::transcripts;
+use crate::usage::{PlanUsage, RateLimitWindows, UsageReport};
 use crate::workspaces::project;
 
 pub const CHAT_EVENT: &str = "chat-event";
 pub const CHAT_UPDATED: &str = "chat-updated";
 pub const CHAT_OPTION_REJECTED: &str = "chat-option-rejected";
+pub const USAGE_UPDATED: &str = "usage-updated";
 const IDLE_LIMIT: Duration = Duration::from_secs(10 * 60);
 const REAP_INTERVAL: Duration = Duration::from_secs(30);
 const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(45);
 const SETTINGS_TIMEOUT: Duration = Duration::from_secs(10);
+const USAGE_TIMEOUT: Duration = Duration::from_secs(15);
+const USAGE_FRESHNESS_MS: i64 = 60_000;
 const EXIT_WAIT: Duration = Duration::from_secs(5);
 const EXIT_POLL_INTERVAL: Duration = Duration::from_millis(100);
 const STDERR_TAIL_LENGTH: usize = 2000;
@@ -286,6 +290,7 @@ impl AgentProcess {
 pub struct AgentRuntime {
     processes: Mutex<HashMap<String, Arc<AgentProcess>>>,
     capabilities: Mutex<HashMap<(AgentCommand, String, String), Capabilities>>,
+    usage: Mutex<HashMap<AgentCommand, UsageReport>>,
 }
 
 fn emit_event(app: &AppHandle, chat_id: &str, event: &AgentEvent) {
@@ -342,7 +347,17 @@ fn apply_notice(app: &AppHandle, chat_id: &str, process: &AgentProcess, notice: 
         ControlNotice::RequestFailed { request_id, message } => {
             undo_refused_switch(app, chat_id, process, &request_id, &message)
         }
-        ControlNotice::UltracodeAvailability(_) => {}
+        ControlNotice::RateLimitsReported(windows) => refresh_rate_limits(app, chat_id, windows),
+        ControlNotice::UltracodeAvailability(_) | ControlNotice::UsageReported(_) => {}
+    }
+}
+
+fn refresh_rate_limits(app: &AppHandle, chat_id: &str, windows: RateLimitWindows) {
+    let Ok(chat) = chats::chat(&app.state::<Db>().connection(), chat_id) else { return };
+    let runtime = app.state::<AgentRuntime>();
+    runtime.merge_rate_limits(chat.command, windows);
+    if let Some(report) = runtime.cached_usage(chat.command) {
+        let _ = app.emit(USAGE_UPDATED, report);
     }
 }
 
@@ -517,8 +532,8 @@ fn close_processes(processes: Vec<Arc<AgentProcess>>) {
     process::terminate_all(&mut handles);
 }
 
-fn discover(command: AgentCommand, cwd: &Path, model: &str) -> AppResult<Capabilities> {
-    let launch = Launch {
+fn probe_launch<'a>(command: AgentCommand, cwd: &'a Path, model: &'a str) -> Launch<'a> {
+    Launch {
         command,
         model,
         effort: "",
@@ -528,8 +543,11 @@ fn discover(command: AgentCommand, cwd: &Path, model: &str) -> AppResult<Capabil
         project_permissions: None,
         session: SessionFlag::Discover,
         cwd,
-    };
-    let (process, stdout) = spawn_process(&launch)?;
+    }
+}
+
+fn discover(command: AgentCommand, cwd: &Path, model: &str) -> AppResult<Capabilities> {
+    let (process, stdout) = spawn_process(&probe_launch(command, cwd, model))?;
     process.write_line(&protocol::get_settings_request(&new_id()))?;
     let (sender, receiver) = mpsc::channel();
     let (ultracode_sender, ultracode_receiver) = mpsc::channel();
@@ -555,6 +573,39 @@ fn discover(command: AgentCommand, cwd: &Path, model: &str) -> AppResult<Capabil
         AppError::Agent(format!("{} did not answer the handshake: {}", command.as_str(), exit_message(&process)))
     })?;
     Ok(Capabilities { is_ultracode_available, ..capabilities })
+}
+
+fn usage_answer(notice: ControlNotice, request_id: &str) -> Option<AppResult<PlanUsage>> {
+    match notice {
+        ControlNotice::UsageReported(usage) => Some(Ok(usage)),
+        ControlNotice::RequestFailed { request_id: failed, message } if failed == request_id => {
+            Some(Err(AppError::Agent(message)))
+        }
+        _ => None,
+    }
+}
+
+fn fetch_usage(command: AgentCommand, cwd: &Path) -> AppResult<PlanUsage> {
+    let (process, stdout) = spawn_process(&probe_launch(command, cwd, ""))?;
+    let request_id = new_id();
+    process.write_line(&protocol::get_usage_request(&request_id))?;
+    let (sender, receiver) = mpsc::channel();
+    thread::spawn(move || {
+        let mut parser = StreamParser::new(Source::Live);
+        read_lines(stdout, |line| {
+            parser.parse_line(line);
+            for answer in
+                parser.take_control_notices().into_iter().filter_map(|notice| usage_answer(notice, &request_id))
+            {
+                let _ = sender.send(answer);
+            }
+        });
+    });
+    let outcome = receiver.recv_timeout(USAGE_TIMEOUT);
+    close_processes(vec![process.clone()]);
+    outcome.map_err(|_| {
+        AppError::Agent(format!("{} did not report usage: {}", command.as_str(), exit_message(&process)))
+    })?
 }
 
 fn worktree_permissions(app: &AppHandle, chat: &Chat, cwd: &Path) -> Option<serde_json::Value> {
@@ -615,6 +666,20 @@ impl AgentRuntime {
         if !idle.is_empty() {
             close_processes(idle);
         }
+    }
+
+    fn cached_usage(&self, command: AgentCommand) -> Option<UsageReport> {
+        locked(&self.usage).get(&command).cloned()
+    }
+
+    fn merge_rate_limits(&self, command: AgentCommand, windows: RateLimitWindows) {
+        if let Some(report) = locked(&self.usage).get_mut(&command) {
+            report.merge_rate_limits(windows, now_millis());
+        }
+    }
+
+    fn remember_usage(&self, report: UsageReport) {
+        locked(&self.usage).insert(report.command, report);
     }
 
     pub fn shutdown(&self) {
@@ -828,6 +893,31 @@ pub async fn discover_capabilities(
         locked(&runtime.capabilities).insert(key, capabilities.clone());
     }
     Ok(capabilities)
+}
+
+async fn refreshed_usage(runtime: &AgentRuntime, command: AgentCommand) -> AppResult<UsageReport> {
+    if command == AgentCommand::Codex {
+        return Err(AppError::Agent(CODEX_UNSUPPORTED.into()));
+    }
+    let home = dirs::home_dir().ok_or(AppError::NotFound("home directory"))?;
+    let usage = in_background(move || fetch_usage(command, &home)).await?;
+    let report = UsageReport { command, updated_at: now_millis(), usage };
+    runtime.remember_usage(report.clone());
+    Ok(report)
+}
+
+#[tauri::command]
+pub async fn plan_usage(runtime: State<'_, AgentRuntime>, command: AgentCommand) -> AppResult<UsageReport> {
+    let cached = runtime.cached_usage(command).filter(|report| report.is_fresh(now_millis(), USAGE_FRESHNESS_MS));
+    match cached {
+        Some(report) => Ok(report),
+        None => refreshed_usage(&runtime, command).await,
+    }
+}
+
+#[tauri::command]
+pub async fn refresh_plan_usage(runtime: State<'_, AgentRuntime>, command: AgentCommand) -> AppResult<UsageReport> {
+    refreshed_usage(&runtime, command).await
 }
 
 #[cfg(test)]
@@ -1162,6 +1252,15 @@ mod live_tests {
             );
             assert!(capabilities.account.subscription_type.is_some());
         }
+    }
+
+    #[test]
+    #[ignore = "spawns real claude processes"]
+    fn live_usage_reports_plan_limits() {
+        let usage = fetch_usage(AgentCommand::Claude, &scratch_dir()).unwrap();
+        eprintln!("usage: {}", serde_json::to_string(&usage).unwrap());
+        assert!(usage.has_plan_limits);
+        assert!(usage.session.is_some() && usage.week.is_some());
     }
 
     #[test]

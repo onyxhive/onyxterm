@@ -20,6 +20,7 @@ mod subagents;
 mod subprocess;
 mod terminals;
 mod transcripts;
+mod usage;
 mod workspaces;
 mod worktrees;
 
@@ -75,6 +76,8 @@ pub fn run() {
             runtime::answer_permission,
             runtime::answer_question,
             runtime::discover_capabilities,
+            runtime::plan_usage,
+            runtime::refresh_plan_usage,
             transcripts::load_chat_history,
             project_files::list_project_files,
             branches::project_branch,

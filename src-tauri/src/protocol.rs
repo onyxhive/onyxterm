@@ -5,6 +5,7 @@ use serde_json::{Value, json};
 
 use crate::attachments::Attachment;
 use crate::chats::PermissionMode;
+use crate::usage::{self, PlanUsage, RateLimitWindows};
 
 const ASK_USER_QUESTION: &str = "AskUserQuestion";
 const DETAIL_LENGTH: usize = 160;
@@ -24,6 +25,7 @@ const AGENT_ID_TRAILER: &str = "\nagentId:";
 const ERROR_SUBTYPE: &str = "error";
 const APPLIED_SETTINGS_FIELD: &str = "applied";
 const ULTRACODE_AVAILABLE_FIELD: &str = "ultracodeAvailable";
+const RATE_LIMITS_AVAILABLE_FIELD: &str = "rate_limits_available";
 const UNKNOWN_CONTROL_ERROR: &str = "the agent refused the request";
 pub const SUMMARY_LENGTH: usize = 400;
 
@@ -242,6 +244,7 @@ enum Incoming {
     ControlRequest(ControlRequestLine),
     ControlResponse(ControlResponseLine),
     ControlCancelRequest(CancelLine),
+    RateLimitEvent(RateLimitLine),
     #[serde(other)]
     Other,
 }
@@ -425,11 +428,19 @@ struct ControlResponseBody {
     response: Option<Value>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ControlNotice {
     PermissionModeReported(PermissionMode),
     RequestFailed { request_id: String, message: String },
     UltracodeAvailability(bool),
+    UsageReported(PlanUsage),
+    RateLimitsReported(RateLimitWindows),
+}
+
+#[derive(Debug, Deserialize)]
+struct RateLimitLine {
+    #[serde(default)]
+    rate_limit_info: Value,
 }
 
 #[derive(Debug, Deserialize)]
@@ -624,6 +635,10 @@ impl StreamParser {
             Incoming::ControlResponse(response) => self.control_response_events(response),
             Incoming::ControlCancelRequest(cancel) => {
                 vec![AgentEvent::PermissionCancelled { request_id: cancel.request_id }]
+            }
+            Incoming::RateLimitEvent(event) => {
+                self.record_rate_limits(&event.rate_limit_info);
+                Vec::new()
             }
             Incoming::Other => Vec::new(),
         }
@@ -889,6 +904,10 @@ impl StreamParser {
             self.notices.push(ControlNotice::UltracodeAvailability(is_available));
             return Vec::new();
         }
+        if payload.get(RATE_LIMITS_AVAILABLE_FIELD).is_some() {
+            self.notices.push(ControlNotice::UsageReported(usage::plan_usage_of(&payload)));
+            return Vec::new();
+        }
         serde_json::from_value::<Capabilities>(payload)
             .map(|capabilities| vec![AgentEvent::Initialized { capabilities }])
             .unwrap_or_default()
@@ -899,10 +918,26 @@ impl StreamParser {
         let message = body.error.unwrap_or_else(|| UNKNOWN_CONTROL_ERROR.into());
         self.notices.push(ControlNotice::RequestFailed { request_id, message });
     }
+
+    fn record_rate_limits(&mut self, info: &Value) {
+        let windows = usage::rate_limit_windows_of(info);
+        if !windows.is_empty() {
+            self.notices.push(ControlNotice::RateLimitsReported(windows));
+        }
+    }
 }
 
 pub fn get_settings_request(request_id: &str) -> String {
     json!({"type": "control_request", "request_id": request_id, "request": {"subtype": "get_settings"}}).to_string()
+}
+
+pub fn get_usage_request(request_id: &str) -> String {
+    json!({
+        "type": "control_request",
+        "request_id": request_id,
+        "request": {"subtype": "get_usage", "skip_behaviors": true},
+    })
+    .to_string()
 }
 
 pub fn initialize_request(request_id: &str) -> String {
@@ -1088,6 +1123,7 @@ mod tests {
     const TITLES: &str = include_str!("fixtures/titles.jsonl");
     const SUBAGENTS: &str = include_str!("fixtures/subagents.jsonl");
     const BACKGROUND_SHELL: &str = include_str!("fixtures/background_shell.jsonl");
+    const GET_USAGE: &str = include_str!("fixtures/get_usage.json");
 
     fn subagent_events(source: Source) -> Vec<AgentEvent> {
         let (events, _) = parse_all(source, SUBAGENTS);
@@ -1403,6 +1439,64 @@ mod tests {
                 message: "Cannot set permission mode to bypassPermissions".into()
             }]
         );
+    }
+
+    fn only_notice(parser: &mut StreamParser, line: &str) -> ControlNotice {
+        assert!(parser.parse_line(line).is_empty());
+        let mut notices = parser.take_control_notices();
+        assert_eq!(notices.len(), 1, "{notices:?}");
+        notices.remove(0)
+    }
+
+    #[test]
+    fn reads_plan_usage_from_the_get_usage_response() {
+        let mut parser = StreamParser::new(Source::Live);
+        let ControlNotice::UsageReported(usage) = only_notice(&mut parser, GET_USAGE.trim()) else {
+            panic!("expected a usage report");
+        };
+        assert_eq!(usage.subscription_type.as_deref(), Some("pro"));
+        assert!(usage.has_plan_limits);
+        assert_eq!(usage.session.map(|window| window.utilization), Some(1.0));
+        assert_eq!(usage.session.and_then(|window| window.resets_at), Some(1_794_275_399_780));
+        assert_eq!(usage.week.map(|window| window.utilization), Some(27.0));
+        let models: Vec<_> =
+            usage.model_weeks.iter().map(|week| (week.model.as_str(), week.window.utilization)).collect();
+        assert_eq!(models, vec![("Fable", 0.0)]);
+        assert_eq!(usage.extra_usage, None);
+        let request: Value = serde_json::from_str(&get_usage_request("u1")).unwrap();
+        assert_eq!(request["request"], json!({"subtype": "get_usage", "skip_behaviors": true}));
+    }
+
+    #[test]
+    fn reports_a_refused_or_empty_usage_request() {
+        let mut parser = StreamParser::new(Source::Live);
+        let refused = r#"{"type":"control_response","response":{"subtype":"error","request_id":"u1","error":"get_usage is not supported in this context"}}"#;
+        assert_eq!(
+            only_notice(&mut parser, refused),
+            ControlNotice::RequestFailed {
+                request_id: "u1".into(),
+                message: "get_usage is not supported in this context".into()
+            }
+        );
+        let api_key = r#"{"type":"control_response","response":{"subtype":"success","request_id":"u2","response":{"subscription_type":null,"rate_limits_available":false}}}"#;
+        let ControlNotice::UsageReported(usage) = only_notice(&mut parser, api_key) else {
+            panic!("expected a usage report");
+        };
+        assert!(!usage.has_plan_limits);
+        assert_eq!((usage.session, usage.week, usage.model_weeks.len()), (None, None, 0));
+    }
+
+    #[test]
+    fn reads_rate_limit_events_from_live_chats() {
+        let mut parser = StreamParser::new(Source::Live);
+        let line = PROBE_ONE.lines().find(|line| line.contains("rate_limit_event")).unwrap();
+        let ControlNotice::RateLimitsReported(windows) = only_notice(&mut parser, line) else {
+            panic!("expected rate limits");
+        };
+        assert_eq!(windows.session.map(|window| window.utilization), Some(3.0));
+        assert_eq!(windows.week.and_then(|window| window.resets_at), Some(1_794_628_800_000));
+        assert!(parser.parse_line(r#"{"type":"rate_limit_event","rate_limit_info":{"status":"allowed"}}"#).is_empty());
+        assert!(parser.take_control_notices().is_empty());
     }
 
     #[test]
