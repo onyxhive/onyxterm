@@ -21,7 +21,7 @@ function PreviousAgentRow({ agent }: { agent: Subagent }) {
         className={cn(DETAILS_ROW, "aria-expanded:bg-black/[0.035] dark:aria-expanded:bg-white/[0.08]")}
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <AgentGlyph status={agent.status} />
+        <AgentGlyph agentId={agent.toolUseId} status={agent.status} />
         <span className="min-w-0 flex-1 truncate text-left text-sm leading-4 text-foreground/85">
           {agent.description}
         </span>

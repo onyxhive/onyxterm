@@ -1,49 +1,10 @@
-import { useState } from "react";
-import { ChevronDown, ChevronRight, SquareTerminal } from "lucide-react";
+import { SquareTerminal } from "lucide-react";
 import type { RunningShell } from "../types";
-import { AgentCardRow, type SubagentEntry } from "./AgentCardRow";
-import { cn, FOCUS_RING } from "./ui";
+import { cn } from "./ui";
 import { useNow } from "./useNow";
 import { formatDuration } from "./WorkingRow";
 
 const MS_PER_SECOND = 1000;
-
-interface ActivityPanelProps {
-  agents: SubagentEntry[];
-  shells: RunningShell[];
-}
-
-function finishedLabel(agents: SubagentEntry[]): string {
-  const failed = agents.filter((agent) => agent.status === "failed").length;
-  const done = `${agents.length} done`;
-  return failed > 0 ? `${done} · ${failed} failed` : done;
-}
-
-function FinishedAgents({ agents }: { agents: SubagentEntry[] }) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const Chevron = isExpanded ? ChevronDown : ChevronRight;
-
-  return (
-    <>
-      <li className="border-b border-border last:border-b-0">
-        <button
-          type="button"
-          aria-expanded={isExpanded}
-          onClick={() => setIsExpanded(!isExpanded)}
-          className={cn(
-            "flex w-full cursor-pointer items-center gap-1.5 px-3.5 py-1.5 text-left text-xs text-muted-foreground",
-            "tabular-nums transition-colors hover:bg-accent/60 hover:text-foreground",
-            FOCUS_RING,
-          )}
-        >
-          <Chevron aria-hidden className="size-3.5" />
-          {finishedLabel(agents)}
-        </button>
-      </li>
-      {isExpanded && agents.map((agent) => <AgentCardRow key={agent.toolUseId} agent={agent} />)}
-    </>
-  );
-}
 
 function ShellRow({ shell }: { shell: RunningShell }) {
   const now = useNow(true);
@@ -72,10 +33,8 @@ function ShellRow({ shell }: { shell: RunningShell }) {
   );
 }
 
-export function ActivityPanel({ agents, shells }: ActivityPanelProps) {
-  if (agents.length === 0 && shells.length === 0) return null;
-  const running = agents.filter((agent) => agent.status === "running");
-  const finished = agents.filter((agent) => agent.status !== "running");
+export function ActivityPanel({ shells }: { shells: RunningShell[] }) {
+  if (shells.length === 0) return null;
 
   return (
     <section aria-label="Working now" className="shrink-0 px-5 pt-3">
@@ -85,13 +44,9 @@ export function ActivityPanel({ agents, shells }: ActivityPanelProps) {
           "border-border bg-card",
         )}
       >
-        {running.map((agent) => (
-          <AgentCardRow key={agent.toolUseId} agent={agent} />
-        ))}
         {shells.map((shell) => (
           <ShellRow key={shell.toolUseId} shell={shell} />
         ))}
-        {finished.length > 0 && <FinishedAgents agents={finished} />}
       </ul>
     </section>
   );

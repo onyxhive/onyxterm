@@ -1,4 +1,5 @@
 import { createContext, useContext } from "react";
+import type { Task } from "../types";
 
 export const ProjectRootsContext = createContext<string[]>([]);
 
@@ -22,4 +23,8 @@ export function shortenPaths(text: string, roots: string[]): string {
 export function useShortPaths(): (text: string) => string {
   const roots = useContext(ProjectRootsContext);
   return (text) => shortenPaths(text, roots);
+}
+
+export function projectRootsOf(task: Task, projectPath: string | null): string[] {
+  return [task.worktreePath, projectPath].filter((root): root is string => root !== null);
 }

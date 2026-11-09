@@ -9,6 +9,7 @@ import type { AgentChoice } from "./components/ComposerControls";
 import { NewChat, type ChatStart } from "./components/NewChat";
 import { prAuthorFilterFrom, PullRequestsPage } from "./components/PullRequestsPage";
 import { SettingsPage } from "./components/SettingsPage";
+import { SubagentsPanel } from "./components/SubagentsPanel";
 import { Sidebar, type SidebarActions } from "./components/Sidebar";
 import { TerminalDrawer } from "./components/TerminalDrawer";
 import { defaultPermissionModeOf, PERMISSION_MODE_SETTING } from "./permissionModes";
@@ -25,7 +26,7 @@ import type { Chat, Provider, TaskStatus, Toast } from "./types";
 import { collapsedSectionsFrom } from "./collapsedSections";
 import { useChats } from "./useChats";
 import { shortcutCommandFor, type ShortcutCommand } from "./keybindings";
-import { applyPreferences, areInAppNotificationsOn } from "./preferences";
+import { applyPreferences, areInAppNotificationsOn, isToggleOn } from "./preferences";
 import { useProjectBranches } from "./useProjectBranches";
 import { useSettings } from "./useSettings";
 import { useWorkbench } from "./useWorkbench";
@@ -42,6 +43,7 @@ const IS_MAC = navigator.platform.startsWith("Mac");
 const MAC_WINDOW_CONTROLS_INSET = { "--workspace-controls-left": "90px" } as CSSProperties;
 
 const CHANGES_PANEL_SETTING = "changesPanelOpen";
+const SUBAGENT_TRAY_COLLAPSED_SETTING = "subagentTrayCollapsed";
 
 const LAST_PROJECT_SETTING_PREFIX = "lastProject:";
 
@@ -73,7 +75,7 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const isFullscreen = useIsFullscreen();
   const workbench = useWorkbench();
-  const { closeFilesPanel, toggleFilesPanel, toggleTerminal } = workbench;
+  const { closeFilesPanel, toggleFilesPanel, toggleTerminal, openSubagentsPanel, closeSubagentsPanel } = workbench;
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   function showError(message: string) {
@@ -89,6 +91,8 @@ export default function App() {
   function setIsChangesPanelOpen(isOpen: boolean) {
     remember(CHANGES_PANEL_SETTING, String(isOpen));
   }
+
+  const isSubagentTrayCollapsed = isToggleOn(settings ?? {}, SUBAGENT_TRAY_COLLAPSED_SETTING, false);
   const workspaceState = useWorkspaces({ settings, remember, onError: showError });
   const { workspaces, workspace, actions: workspaceActions } = workspaceState;
   const projects = workspaces.flatMap((candidate) => candidate.projects);
@@ -135,12 +139,20 @@ export default function App() {
 
   function toggleChangesPanel() {
     closeFilesPanel();
+    closeSubagentsPanel();
     setIsChangesPanelOpen(!isChangesPanelOpenRef.current);
   }
 
   function toggleFiles() {
     setIsChangesPanelOpen(false);
+    closeSubagentsPanel();
     toggleFilesPanel();
+  }
+
+  function openSubagents(agentId: string | null) {
+    setIsChangesPanelOpen(false);
+    closeFilesPanel();
+    openSubagentsPanel(agentId);
   }
 
   useEffect(() => {
@@ -219,6 +231,8 @@ export default function App() {
       withSelectedChat((chatId) => chatState.changeOptions(chatId, { command, model, effort })),
     onChangeFastMode: (fastMode) => withSelectedChat((chatId) => chatState.changeOptions(chatId, { fastMode })),
     onChangeUltracode: (ultracode) => withSelectedChat((chatId) => chatState.changeOptions(chatId, { ultracode })),
+    onOpenSubagents: openSubagents,
+    onToggleSubagentTray: () => remember(SUBAGENT_TRAY_COLLAPSED_SETTING, String(!isSubagentTrayCollapsed)),
     onChangePermissionMode: (permissionMode) => {
       remember(PERMISSION_MODE_SETTING, permissionMode);
       withSelectedChat((chatId) => chatState.changeOptions(chatId, { permissionMode }));
@@ -237,6 +251,7 @@ export default function App() {
   const threadDetailsActions: ThreadDetailsActions = {
     onOpenDiff: () => {
       closeFilesPanel();
+      closeSubagentsPanel();
       setIsChangesPanelOpen(true);
     },
     onBranchChanged: () => selectedTask && refreshBranch(selectedTask.projectId),
@@ -338,7 +353,14 @@ export default function App() {
       );
     }
     const chatProject = projects.find((project) => project.id === selectedTask.projectId);
-    return <ChatView task={selectedTask} projectPath={chatProject?.path ?? null} actions={chatActions} />;
+    return (
+      <ChatView
+        task={selectedTask}
+        projectPath={chatProject?.path ?? null}
+        isSubagentTrayCollapsed={isSubagentTrayCollapsed}
+        actions={chatActions}
+      />
+    );
   }
 
   const isChatOpen = view === "chat" && selectedTask !== null;
@@ -409,6 +431,16 @@ export default function App() {
             key={selectedTask.id}
             task={selectedTask}
             project={projects.find((project) => project.id === selectedTask.projectId)}
+          />
+        )}
+        {isChatOpen && workbench.subagentsPanel && (
+          <SubagentsPanel
+            key={selectedTask.id}
+            task={selectedTask}
+            projectPath={projects.find((project) => project.id === selectedTask.projectId)?.path ?? null}
+            agentId={workbench.subagentsPanel.agentId}
+            onOpenAgent={openSubagentsPanel}
+            onClose={closeSubagentsPanel}
           />
         )}
       </main>

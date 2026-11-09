@@ -9,24 +9,24 @@ import type {
   PermissionDecision,
   RuleScope,
   RunningShell,
-  Subagent,
   Task,
   TaskStatus,
 } from "../types";
 import { suggestionSources, useCapabilities, useUltracodeAvailability } from "../useCapabilities";
-import { useSubagents } from "../useGit";
 import { useProjectFiles } from "../useProjectFiles";
 import { Composer, COMPOSER_PLACEHOLDER, QUESTION_PLACEHOLDER } from "./Composer";
 import { ActivityPanel } from "./ActivityPanel";
 import { AgentPicker } from "./AgentPicker";
-import type { SubagentEntry } from "./AgentCardRow";
 import { ApprovalGroup } from "./ApprovalRow";
 import { ChatWorkspaceControls, type AgentChoice } from "./ComposerControls";
 import { FeedItemView } from "./FeedItemView";
 import { MentionTargetsContext } from "./MentionText";
-import { ProjectRootsContext } from "./projectPaths";
+import { ProjectRootsContext, projectRootsOf } from "./projectPaths";
 import { QuestionDrawer, useQuestionAnswers, type QuestionRequest } from "./QuestionDrawer";
+import { SubagentLaunchLine } from "./SubagentLaunchLine";
+import { SubagentTray } from "./SubagentTray";
 import { useDockHeight } from "./useDockHeight";
+import { pendingToolIds, useSubagentEntries, type SubagentEntry } from "./useSubagentEntries";
 import { WorkingRow } from "./WorkingRow";
 
 export interface ChatActions {
@@ -38,6 +38,8 @@ export interface ChatActions {
   onChangePermissionMode: (mode: PermissionMode) => void;
   onChangeFastMode: (isEnabled: boolean) => void;
   onChangeUltracode: (isEnabled: boolean) => void;
+  onOpenSubagents: (agentId: string | null) => void;
+  onToggleSubagentTray: () => void;
 }
 
 const ACTIVE_TURN_STATUSES: TaskStatus[] = ["running", "permission", "question"];
@@ -46,6 +48,7 @@ const CHOICE_LOCKED = "Wait for this turn to finish or stop it to change the mod
 interface ChatViewProps {
   task: Task;
   projectPath: string | null;
+  isSubagentTrayCollapsed: boolean;
   actions: ChatActions;
 }
 
@@ -53,9 +56,11 @@ type PermissionRequest = Extract<FeedItem, { kind: "permission" }>;
 
 type FeedBlock =
   | { kind: "item"; item: FeedItem; index: number }
-  | { kind: "approvals"; index: number; requests: PermissionRequest[] };
+  | { kind: "approvals"; index: number; requests: PermissionRequest[] }
+  | { kind: "launches"; index: number; agentIds: string[] };
 
 const TURN_ACTIVITY_KINDS = new Set<FeedItem["kind"]>(["steps", "subagent", "permission"]);
+const LAUNCH_PASSTHROUGH_KINDS = new Set<FeedItem["kind"]>(["subagent", "permission"]);
 
 const CODEX_COMING = "Codex support coming next";
 const TIMELINE_END_GAP = 16;
@@ -82,23 +87,6 @@ function turnReplyIndexes(feed: FeedItem[], isRunning: boolean): Set<number> {
   return replies;
 }
 
-function subagentWith(subagents: Subagent[], toolUseId: string): Subagent | undefined {
-  return subagents.find((subagent) => subagent.toolUseId === toolUseId);
-}
-
-function pendingToolIds(feed: FeedItem[]): Set<string> {
-  return new Set(feed.flatMap((item) => (item.kind === "permission" && item.toolUseId ? [item.toolUseId] : [])));
-}
-
-function subagentEntries(feed: FeedItem[], subagents: Subagent[]): SubagentEntry[] {
-  const awaited = pendingToolIds(feed);
-  return feed.flatMap((item) => {
-    if (item.kind !== "subagent") return [];
-    const needsApproval = item.steps.some((step) => awaited.has(step.id));
-    return [{ ...item, ...subagentWith(subagents, item.toolUseId), steps: item.steps, needsApproval }];
-  });
-}
-
 function runningShells(task: Task): RunningShell[] {
   const awaited = pendingToolIds(task.feed);
   return task.work.shells.filter((shell) => !awaited.has(shell.toolUseId));
@@ -107,9 +95,15 @@ function runningShells(task: Task): RunningShell[] {
 function feedBlocks(feed: FeedItem[]): FeedBlock[] {
   const blocks: FeedBlock[] = [];
   let openApprovals: Extract<FeedBlock, { kind: "approvals" }> | null = null;
+  let openLaunches: Extract<FeedBlock, { kind: "launches" }> | null = null;
   feed.forEach((item, index) => {
     if (!TURN_ACTIVITY_KINDS.has(item.kind)) openApprovals = null;
-    if (item.kind === "subagent") return;
+    if (!LAUNCH_PASSTHROUGH_KINDS.has(item.kind)) openLaunches = null;
+    if (item.kind === "subagent") {
+      if (openLaunches) openLaunches.agentIds.push(item.toolUseId);
+      else blocks.push((openLaunches = { kind: "launches", index, agentIds: [item.toolUseId] }));
+      return;
+    }
     if (item.kind === "permission") {
       if (openApprovals) openApprovals.requests.push(item);
       else blocks.push((openApprovals = { kind: "approvals", index, requests: [item] }));
@@ -120,6 +114,21 @@ function feedBlocks(feed: FeedItem[]): FeedBlock[] {
   return blocks;
 }
 
+function currentTurnAgentIds(feed: FeedItem[]): Set<string> {
+  const turnStart = feed.findLastIndex((item) => item.kind === "user");
+  return new Set(feed.slice(turnStart + 1).flatMap((item) => (item.kind === "subagent" ? [item.toolUseId] : [])));
+}
+
+function trayAgentsOf(task: Task, agents: SubagentEntry[]): SubagentEntry[] {
+  const currentTurn = currentTurnAgentIds(task.feed);
+  return agents.filter((agent) => agent.status === "running" || currentTurn.has(agent.toolUseId));
+}
+
+function isTrayVisible(task: Task, trayAgents: SubagentEntry[]): boolean {
+  if (trayAgents.some((agent) => agent.status === "running")) return true;
+  return ACTIVE_TURN_STATUSES.includes(task.status) && trayAgents.length > 0;
+}
+
 function liveStepIdIn(task: Task): string | null {
   if (task.status !== "running" || !task.work.runningNow) return null;
   const lastSteps = task.feed.findLast((item) => item.kind === "steps");
@@ -128,7 +137,7 @@ function liveStepIdIn(task: Task): string | null {
   return live?.id ?? null;
 }
 
-export function ChatView({ task, projectPath, actions }: ChatViewProps) {
+export function ChatView({ task, projectPath, isSubagentTrayCollapsed, actions }: ChatViewProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const isFollowingRef = useRef(true);
   const dockRef = useRef<HTMLDivElement>(null);
@@ -146,7 +155,8 @@ export function ChatView({ task, projectPath, actions }: ChatViewProps) {
   const scrollKey = lastItem?.kind === "agent" ? lastItem.markdown.length : 0;
   const isRunning = task.status === "running";
   const turnReplies = turnReplyIndexes(task.feed, isRunning);
-  const { subagents } = useSubagents(task.id);
+  const agents = useSubagentEntries(task);
+  const trayAgents = trayAgentsOf(task, agents);
   const models = capabilities?.models ?? [];
   const efforts = effortOptionsFor(models.find((model) => model.value === task.model));
   const { provider, command, model, effort } = task;
@@ -196,13 +206,11 @@ export function ChatView({ task, projectPath, actions }: ChatViewProps) {
 
   const controls = <ChatWorkspaceControls worktreePath={task.worktreePath} />;
 
-  const projectRoots = [task.worktreePath, projectPath].filter((root): root is string => root !== null);
-
   return (
-    <ProjectRootsContext value={projectRoots}>
+    <ProjectRootsContext value={projectRootsOf(task, projectPath)}>
       <MentionTargetsContext value={mentionTargets}>
         <div className="relative flex min-h-0 flex-1 flex-col">
-          <ActivityPanel agents={subagentEntries(task.feed, subagents)} shells={runningShells(task)} />
+          <ActivityPanel shells={runningShells(task)} />
           <div
             ref={scrollRef}
             onScroll={(event) => {
@@ -217,23 +225,35 @@ export function ChatView({ task, projectPath, actions }: ChatViewProps) {
               </div>
             )}
             <div className="mx-auto w-full max-w-(--chat-content-max-width) pt-4">
-              {feedBlocks(task.feed).map((block) =>
-                block.kind === "approvals" ? (
-                  <ApprovalGroup
-                    key={block.index}
-                    requests={block.requests}
-                    shortcutRequestId={shortcutRequestId}
-                    onDecide={actions.onDecide}
-                  />
-                ) : (
+              {feedBlocks(task.feed).map((block) => {
+                if (block.kind === "approvals") {
+                  return (
+                    <ApprovalGroup
+                      key={block.index}
+                      requests={block.requests}
+                      shortcutRequestId={shortcutRequestId}
+                      onDecide={actions.onDecide}
+                    />
+                  );
+                }
+                if (block.kind === "launches") {
+                  return (
+                    <SubagentLaunchLine
+                      key={block.index}
+                      agents={agents.filter((agent) => block.agentIds.includes(agent.toolUseId))}
+                      onOpen={() => actions.onOpenSubagents(null)}
+                    />
+                  );
+                }
+                return (
                   <FeedItemView
                     key={block.index}
                     item={block.item}
                     liveStepId={liveStepId}
                     isTurnReply={turnReplies.has(block.index)}
                   />
-                ),
-              )}
+                );
+              })}
               {isRunning && <WorkingRow key={task.id} since={task.workingSince} />}
             </div>
           </div>
@@ -242,6 +262,14 @@ export function ChatView({ task, projectPath, actions }: ChatViewProps) {
             className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-background px-5 pt-2 pb-4"
           >
             <div className="pointer-events-auto">
+              <SubagentTray
+                provider={task.provider}
+                agents={trayAgents}
+                isVisible={isTrayVisible(task, trayAgents)}
+                isCollapsed={isSubagentTrayCollapsed}
+                onToggleCollapsed={actions.onToggleSubagentTray}
+                onOpenAgent={actions.onOpenSubagents}
+              />
               <Composer
                 key={task.id}
                 variant="reply"
