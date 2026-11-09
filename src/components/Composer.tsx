@@ -39,7 +39,7 @@ interface ComposerProps {
 
 const DEFAULT_SUBMIT_LABEL = "Send message";
 const ATTACH_IMAGES_LABEL = "Attach images";
-const COMPOSER_TEXT = "text-sm leading-relaxed whitespace-pre-wrap break-words";
+const COMPOSER_TEXT = "py-[0.0625em] text-sm leading-normal whitespace-pre-wrap break-words";
 
 export const COMPOSER_PLACEHOLDER = "Ask anything. @ files, / commands";
 export const QUESTION_PLACEHOLDER = "Type your own answer, or leave this blank to use the selected option";
