@@ -2,7 +2,6 @@ import { useState, type ReactNode } from "react";
 import {
   Check,
   ChevronDown,
-  ChartNoAxesColumn,
   CircleAlert,
   CircleDashed,
   Eye,
@@ -50,6 +49,7 @@ interface SidebarProps {
   isSettingsActive: boolean;
   header: ReactNode;
   notifications: ReactNode;
+  usage: ReactNode;
   actions: SidebarActions;
 }
 
@@ -257,18 +257,16 @@ interface UtilityItemProps {
   icon: ReactNode;
   label: string;
   isActive?: boolean;
-  disabledReason?: string;
   onClick?: () => void;
 }
 
-function UtilityItem({ icon, label, isActive = false, disabledReason, onClick }: UtilityItemProps) {
+function UtilityItem({ icon, label, isActive = false, onClick }: UtilityItemProps) {
   return (
-    <span title={disabledReason ?? label} className="shrink-0">
+    <span title={label} className="shrink-0">
       <button
         type="button"
         aria-label={label}
         aria-pressed={isActive}
-        disabled={disabledReason !== undefined}
         onClick={onClick}
         className={SIDEBAR_UTILITY_BUTTON}
       >
@@ -443,7 +441,7 @@ export function Sidebar(props: SidebarProps) {
             isActive={props.isPullRequestsActive}
             onClick={actions.onTogglePullRequests}
           />
-          <UtilityItem icon={<ChartNoAxesColumn />} label="Usage" disabledReason="Usage coming later" />
+          {props.usage}
         </div>
       </div>
     </aside>

@@ -8,6 +8,7 @@ import { FilesPanel } from "./components/FilesPanel";
 import type { AgentChoice } from "./components/ComposerControls";
 import { NewChat, type ChatStart } from "./components/NewChat";
 import { NotificationCenter } from "./components/NotificationCenter";
+import { UsageCenter } from "./components/UsageCenter";
 import { prAuthorFilterFrom, PullRequestsPage } from "./components/PullRequestsPage";
 import { SettingsPage } from "./components/SettingsPage";
 import { SidePanel } from "./components/SidePanel";
@@ -26,6 +27,7 @@ import { PR_AUTHOR_FILTER_SETTING, PREFERRED_EDITOR_SETTING, WORK_IN_WORKTREES_S
 import { displayTitle, toTask } from "./tasks";
 import type { Chat, Provider, Task, TaskStatus, Toast } from "./types";
 import { collapsedSectionsFrom } from "./collapsedSections";
+import { commandsByRecentUse } from "./planUsage";
 import { useChats } from "./useChats";
 import { useNotificationHistory } from "./useNotificationHistory";
 import { shortcutCommandFor, type ShortcutCommand } from "./keybindings";
@@ -427,6 +429,7 @@ export default function App() {
             }}
           />
         }
+        usage={<UsageCenter commands={commandsByRecentUse(chats)} />}
         header={
           <WorkspaceSwitcher
             workspaces={workspaces}

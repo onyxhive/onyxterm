@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { AgentEvent, Capabilities } from "./agentEvents";
 import type { GitTarget } from "./gitApi";
 import type { PermissionMode } from "./permissionModes";
+import type { UsageReport } from "./planUsage";
 import type {
   Chat,
   ImageAttachment,
@@ -61,4 +62,6 @@ export const api = {
     invoke<Capabilities>("discover_capabilities", { command, projectId, model }),
   listProjectFiles: (target: GitTarget) => invoke<string[]>("list_project_files", { target }),
   projectBranch: (projectId: string) => invoke<string | null>("project_branch", { projectId }),
+  planUsage: (command: string) => invoke<UsageReport>("plan_usage", { command }),
+  refreshPlanUsage: (command: string) => invoke<UsageReport>("refresh_plan_usage", { command }),
 };
