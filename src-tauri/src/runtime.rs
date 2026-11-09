@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::Path;
 use std::process::{Child, ChildStdin, ChildStdout};
@@ -201,6 +201,35 @@ struct Activity {
     is_closing: bool,
     has_requested_title: bool,
     checkpoint_turn: Option<u32>,
+    unfinished_subagents: HashSet<String>,
+    last_turn_outcome: ChatState,
+}
+
+impl Activity {
+    fn new() -> Self {
+        Activity {
+            last_seen: Instant::now(),
+            is_turn_active: false,
+            was_interrupted: false,
+            is_closing: false,
+            has_requested_title: false,
+            checkpoint_turn: None,
+            unfinished_subagents: HashSet::new(),
+            last_turn_outcome: ChatState::Review,
+        }
+    }
+
+    fn is_busy(&self) -> bool {
+        self.is_turn_active || !self.unfinished_subagents.is_empty()
+    }
+
+    fn is_idle_for(&self, limit: Duration) -> bool {
+        !self.is_busy() && self.last_seen.elapsed() >= limit
+    }
+
+    fn settled_state(&self) -> Option<ChatState> {
+        (!self.is_busy()).then_some(self.last_turn_outcome)
+    }
 }
 
 struct AgentProcess {
@@ -230,8 +259,7 @@ impl AgentProcess {
     }
 
     fn is_idle_for(&self, limit: Duration) -> bool {
-        let activity = locked(&self.activity);
-        !activity.is_turn_active && activity.last_seen.elapsed() >= limit
+        locked(&self.activity).is_idle_for(limit)
     }
 
     fn permission(&self, request_id: &str) -> AppResult<PermissionRequest> {
@@ -335,10 +363,46 @@ fn remember_session(app: &AppHandle, chat_id: &str, session_id: &str) {
     let _ = chats::update_session_id(&app.state::<Db>().connection(), chat_id, session_id);
 }
 
-fn state_after_turn(activity: &mut Activity, is_error: bool) -> ChatState {
+fn state_after_turn(activity: &mut Activity, is_error: bool) -> Option<ChatState> {
     activity.is_turn_active = false;
     let was_interrupted = std::mem::take(&mut activity.was_interrupted);
-    if is_error && !was_interrupted { ChatState::Failed } else { ChatState::Review }
+    activity.last_turn_outcome = if is_error && !was_interrupted { ChatState::Failed } else { ChatState::Review };
+    activity.settled_state()
+}
+
+fn is_main_agent_output(event: &AgentEvent) -> bool {
+    matches!(
+        event,
+        AgentEvent::TextDelta { .. }
+            | AgentEvent::Text { .. }
+            | AgentEvent::ToolStarted { parent_tool_use_id: None, .. }
+    )
+}
+
+fn state_after_event(activity: &mut Activity, event: &AgentEvent) -> Option<ChatState> {
+    match event {
+        AgentEvent::TurnEnded { is_error, .. } => state_after_turn(activity, *is_error),
+        AgentEvent::SubagentStarted { tool_use_id, .. } => {
+            let was_busy = activity.is_busy();
+            activity.unfinished_subagents.insert(tool_use_id.clone());
+            (!was_busy).then_some(ChatState::Running)
+        }
+        AgentEvent::SubagentFinished { tool_use_id, .. } => {
+            activity.unfinished_subagents.remove(tool_use_id).then(|| activity.settled_state()).flatten()
+        }
+        output if is_main_agent_output(output) && !activity.is_turn_active => {
+            activity.is_turn_active = true;
+            Some(ChatState::Running)
+        }
+        _ => None,
+    }
+}
+
+fn apply_activity(app: &AppHandle, chat_id: &str, process: &AgentProcess, event: &AgentEvent) {
+    let state = state_after_event(&mut locked(&process.activity), event);
+    if let Some(state) = state {
+        change_state(app, chat_id, state);
+    }
 }
 
 fn apply_event(app: &AppHandle, chat_id: &str, process: &AgentProcess, event: &AgentEvent) {
@@ -351,17 +415,13 @@ fn apply_event(app: &AppHandle, chat_id: &str, process: &AgentProcess, event: &A
             locked(&process.permissions).remove(request_id);
             change_state(app, chat_id, ChatState::Running);
         }
-        AgentEvent::TurnEnded { is_error, .. } => {
-            let (state, turn) = {
-                let mut activity = locked(&process.activity);
-                let turn = activity.checkpoint_turn.take();
-                (state_after_turn(&mut activity, *is_error), turn)
-            };
+        AgentEvent::TurnEnded { .. } => {
+            let turn = locked(&process.activity).checkpoint_turn.take();
             finish_checkpoint(app, chat_id, turn);
             forget_branch(app, chat_id);
-            change_state(app, chat_id, state);
+            apply_activity(app, chat_id, process, event);
         }
-        _ => {}
+        _ => apply_activity(app, chat_id, process, event),
     }
 }
 
@@ -424,7 +484,7 @@ fn pump_stdout(app: AppHandle, chat_id: String, process: Arc<AgentProcess>, stdo
         wait_for_exit(&process);
         app.state::<AgentRuntime>().forget(&chat_id, &process);
         let activity = locked(&process.activity);
-        if activity.is_turn_active && !activity.is_closing {
+        if activity.is_busy() && !activity.is_closing {
             emit_event(&app, &chat_id, &AgentEvent::ProcessExited { message: exit_message(&process) });
             change_state(&app, &chat_id, ChatState::Failed);
         }
@@ -448,14 +508,7 @@ fn spawn_process(launch: &Launch<'_>) -> AppResult<(Arc<AgentProcess>, ChildStdo
     let process = Arc::new(AgentProcess {
         child: Mutex::new(child),
         stdin: Mutex::new(stdin),
-        activity: Mutex::new(Activity {
-            last_seen: Instant::now(),
-            is_turn_active: false,
-            was_interrupted: false,
-            is_closing: false,
-            has_requested_title: false,
-            checkpoint_turn: None,
-        }),
+        activity: Mutex::new(Activity::new()),
         permissions: Mutex::new(HashMap::new()),
         pending_undos: Mutex::new(HashMap::new()),
         stderr_tail,
@@ -964,6 +1017,48 @@ mod tests {
         assert!(rule_scope(PermissionDecision::Deny, Some(RuleScope::Session)).is_err());
         assert!(serde_json::from_str::<RuleScope>("\"userSettings\"").is_err());
         assert!(serde_json::from_str::<RuleScope>("\"localSettings\"").is_ok());
+    }
+
+    const BACKGROUND_TURN: &str = include_str!("fixtures/background_turn.jsonl");
+
+    fn events_of(capture: &str) -> Vec<AgentEvent> {
+        let mut parser = StreamParser::new(Source::Live);
+        capture.lines().flat_map(|line| parser.parse_line(line)).collect()
+    }
+
+    fn turn_in_progress() -> Activity {
+        Activity { is_turn_active: true, ..Activity::new() }
+    }
+
+    #[test]
+    fn stays_running_while_a_background_subagent_works_after_the_turn_ends() {
+        let mut activity = turn_in_progress();
+        let events = events_of(BACKGROUND_TURN);
+        let first_end = events.iter().position(|event| matches!(event, AgentEvent::TurnEnded { .. })).unwrap();
+        let (first_turn, rest) = events.split_at(first_end + 1);
+        let mut states: Vec<_> =
+            first_turn.iter().filter_map(|event| state_after_event(&mut activity, event)).collect();
+        assert!(states.is_empty() && activity.is_busy() && !activity.is_idle_for(Duration::ZERO));
+        states.extend(rest.iter().filter_map(|event| state_after_event(&mut activity, event)));
+        assert_eq!(states, vec![ChatState::Review, ChatState::Running, ChatState::Review]);
+        assert!(activity.is_idle_for(Duration::ZERO));
+    }
+
+    #[test]
+    fn settles_a_failed_turn_only_once_its_subagents_finish() {
+        let mut activity = turn_in_progress();
+        let started = AgentEvent::SubagentStarted {
+            tool_use_id: "a".into(),
+            agent_type: "coding".into(),
+            description: "".into(),
+        };
+        let failed = AgentEvent::TurnEnded { is_error: true, cost_usd: None, message: Some("boom".into()) };
+        let finished = AgentEvent::SubagentFinished { tool_use_id: "a".into(), is_error: false, summary: "".into() };
+        assert_eq!(state_after_event(&mut activity, &started), None);
+        assert_eq!(state_after_event(&mut activity, &failed), None);
+        assert_eq!(state_after_event(&mut activity, &finished), Some(ChatState::Failed));
+        assert_eq!(state_after_event(&mut activity, &finished), None);
+        assert_eq!(state_after_event(&mut activity, &started), Some(ChatState::Running));
     }
 
     #[test]
