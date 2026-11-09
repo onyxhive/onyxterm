@@ -60,7 +60,7 @@ function UserMessageBody({ text }: { text: string }) {
       <div className={cn("relative", isCollapsed && "max-h-44 overflow-hidden")} style={fade}>
         <Markdown
           source={text}
-          className="chat-markdown-line-breaks text-foreground"
+          className="chat-markdown-line-breaks chat-markdown-flush text-foreground"
           remarkPlugins={plugins}
         />
       </div>
@@ -97,7 +97,7 @@ function UserMessage({ text, time, images }: UserMessageProps) {
         </div>
       )}
       {text && (
-        <div className="relative max-w-[80%] min-w-0 rounded-2xl bg-message p-3 text-message-foreground">
+        <div className="relative max-w-[80%] min-w-0 rounded-2xl bg-message px-3.5 py-2 text-message-foreground">
           <h3 className="sr-only">You</h3>
           <UserMessageBody text={text} />
         </div>

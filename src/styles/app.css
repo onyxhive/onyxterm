@@ -500,6 +500,14 @@
   white-space: pre-wrap;
 }
 
+.chat-markdown-flush > :first-child {
+  margin-top: 0;
+}
+
+.chat-markdown-flush > :last-child {
+  margin-bottom: 0;
+}
+
 .chat-markdown-table {
   max-width: 100%;
   overflow-x: auto;
