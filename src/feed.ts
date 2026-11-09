@@ -1,11 +1,10 @@
-import type { AgentEvent, ToolSummary } from "./agentEvents";
+import type { AgentEvent } from "./agentEvents";
 import { clockTime } from "./tasks";
-import type { ChangedFile, FeedItem, ImageAttachment, PermissionDecision, RunningShell, Step } from "./types";
+import type { FeedItem, ImageAttachment, PermissionDecision, RunningShell, Step } from "./types";
 
 export interface ChatFeed {
   items: FeedItem[];
   runningTools: Record<string, string>;
-  files: Record<string, ChangedFile>;
   shells: Record<string, RunningShell>;
   turnStartedAt: number | null;
   decisions: Record<string, PermissionDecision>;
@@ -14,7 +13,6 @@ export interface ChatFeed {
 export const EMPTY_FEED: ChatFeed = {
   items: [],
   runningTools: {},
-  files: {},
   shells: {},
   turnStartedAt: null,
   decisions: {},
@@ -85,19 +83,6 @@ function finalizeText(feed: ChatFeed, messageId: string, text: string): ChatFeed
 
 function changedFileCount(steps: Step[]): number {
   return new Set(steps.filter((step) => FILE_CHANGE_VERBS.has(step.verb)).map((step) => step.detail)).size;
-}
-
-function withFile(files: Record<string, ChangedFile>, summary: ToolSummary): Record<string, ChangedFile> {
-  if (!summary.filePath || !FILE_CHANGE_VERBS.has(summary.verb)) return files;
-  const existing = files[summary.filePath] ?? { path: summary.filePath, added: 0, removed: 0 };
-  return {
-    ...files,
-    [summary.filePath]: {
-      ...existing,
-      added: existing.added + summary.added,
-      removed: existing.removed + summary.removed,
-    },
-  };
 }
 
 function openGroupIndex(items: FeedItem[]): number {
@@ -185,12 +170,11 @@ function startTool(feed: ChatFeed, event: Extract<AgentEvent, { kind: "toolStart
     isFailed: false,
     decision: feed.decisions[toolUseId],
   };
-  const files = withFile(feed.files, summary);
   const runningTools = { ...feed.runningTools, [toolUseId]: `${summary.verb} ${summary.detail}` };
   const shells = withShell(feed.shells, event);
-  if (isSubagentLaunch(feed.items, toolUseId)) return { ...feed, files, runningTools, shells };
+  if (isSubagentLaunch(feed.items, toolUseId)) return { ...feed, runningTools, shells };
   const nestedItems = parentToolUseId ? withSubagentStep(feed.items, parentToolUseId, step) : null;
-  return { ...feed, files, runningTools, shells, items: nestedItems ?? withGroupedStep(feed.items, step) };
+  return { ...feed, runningTools, shells, items: nestedItems ?? withGroupedStep(feed.items, step) };
 }
 
 function finishTool(feed: ChatFeed, toolUseId: string, isError: boolean): ChatFeed {

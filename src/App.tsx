@@ -224,11 +224,6 @@ export default function App() {
       remember(PERMISSION_MODE_SETTING, permissionMode);
       withSelectedChat((chatId) => chatState.changeOptions(chatId, { permissionMode }));
     },
-    onOpenChanges: () => {
-      setDiffScope(LATEST_TURN_SCOPE);
-      closeFilesPanel();
-      setIsChangesPanelOpen(true);
-    },
   };
 
   const chatHeaderActions: ChatHeaderActions = {

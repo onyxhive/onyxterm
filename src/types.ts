@@ -107,12 +107,6 @@ export type FeedItem =
       steps: Step[];
     };
 
-export interface ChangedFile {
-  path: string;
-  added: number;
-  removed: number;
-}
-
 export interface RunningShell {
   toolUseId: string;
   command: string;
@@ -123,7 +117,6 @@ export interface RunningShell {
 
 export interface Work {
   runningNow: string;
-  files: ChangedFile[];
   shells: RunningShell[];
 }
 

@@ -4,7 +4,7 @@ import { parseUnifiedDiff, type ParsedFileDiff } from "../diffText";
 import { prApi } from "../gitApi";
 import type { PrFile } from "../types";
 import { useLoaded } from "../useLoaded";
-import { DiffStat } from "./ChangesPanel";
+import { DiffStat } from "./DiffStat";
 import { UnifiedDiff } from "./UnifiedDiff";
 import { cn, FOCUS_RING } from "./ui";
 

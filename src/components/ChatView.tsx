@@ -16,7 +16,6 @@ import type {
 import { suggestionSources, useCapabilities, useUltracodeAvailability } from "../useCapabilities";
 import { useSubagents } from "../useGit";
 import { useProjectFiles } from "../useProjectFiles";
-import { ChangedFilesCard } from "./ChangesPanel";
 import { Composer, COMPOSER_PLACEHOLDER, QUESTION_PLACEHOLDER } from "./Composer";
 import { ActivityPanel } from "./ActivityPanel";
 import { AgentPicker } from "./AgentPicker";
@@ -35,7 +34,6 @@ export interface ChatActions {
   onReply: (text: string, images: ImageAttachment[]) => void;
   onAnswer: (requestId: string, answers: Record<string, string>) => void;
   onStop: () => void;
-  onOpenChanges: () => void;
   onChangeChoice: (choice: AgentChoice) => void;
   onChangePermissionMode: (mode: PermissionMode) => void;
   onChangeFastMode: (isEnabled: boolean) => void;
@@ -44,7 +42,6 @@ export interface ChatActions {
 
 const ACTIVE_TURN_STATUSES: TaskStatus[] = ["running", "permission", "question"];
 const CHOICE_LOCKED = "Wait for this turn to finish or stop it to change the model, effort, permissions or command";
-const SETTLED_STATUSES: TaskStatus[] = ["review", "done", "failed"];
 
 interface ChatViewProps {
   task: Task;
@@ -163,8 +160,6 @@ export function ChatView({ task, projectPath, actions }: ChatViewProps) {
     if (completed) actions.onAnswer(question.requestId, completed);
   }
 
-  const isTurnSettled = SETTLED_STATUSES.includes(task.status);
-
   const isUltracodeAvailable = useUltracodeAvailability(task.command, task.projectId, task.model);
   const ultracodeToggle = { isEnabled: task.ultracode, onChange: actions.onChangeUltracode };
   const agentControls = (
@@ -221,9 +216,6 @@ export function ChatView({ task, projectPath, actions }: ChatViewProps) {
                 ),
               )}
               {isRunning && <WorkingRow key={task.id} since={task.workingSince} />}
-              {isTurnSettled && task.work.files.length > 0 && (
-                <ChangedFilesCard files={task.work.files} className="mt-4" onOpenDiff={actions.onOpenChanges} />
-              )}
             </div>
           </div>
           <div

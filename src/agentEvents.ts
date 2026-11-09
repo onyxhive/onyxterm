@@ -5,8 +5,6 @@ export interface ToolSummary {
   detail: string;
   description: string;
   filePath: string | null;
-  added: number;
-  removed: number;
 }
 
 export interface SlashCommand {

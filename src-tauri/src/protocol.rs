@@ -118,8 +118,6 @@ pub struct ToolSummary {
     pub detail: String,
     pub description: String,
     pub file_path: Option<String>,
-    pub added: usize,
-    pub removed: usize,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -518,34 +516,21 @@ fn text_field<'a>(input: &'a Value, key: &str) -> &'a str {
     input.get(key).and_then(Value::as_str).unwrap_or_default()
 }
 
-fn line_count(text: &str) -> usize {
-    if text.is_empty() { 0 } else { text.lines().count() }
-}
-
 fn file_name(path: &str) -> String {
     path.rsplit('/').next().unwrap_or(path).to_string()
 }
 
-fn file_summary(verb: &str, path: &str, added: usize, removed: usize) -> ToolSummary {
+fn file_summary(verb: &str, path: &str) -> ToolSummary {
     ToolSummary {
         verb: verb.into(),
         detail: file_name(path),
         file_path: Some(path.to_string()),
-        added,
-        removed,
         ..ToolSummary::default()
     }
 }
 
 fn plain_summary(verb: &str, detail: &str) -> ToolSummary {
     ToolSummary { verb: verb.into(), detail: truncated(detail), ..ToolSummary::default() }
-}
-
-fn multi_edit_lines(input: &Value) -> (usize, usize) {
-    let edits = input.get("edits").and_then(Value::as_array).cloned().unwrap_or_default();
-    edits.iter().fold((0, 0), |(added, removed), edit| {
-        (added + line_count(text_field(edit, "new_string")), removed + line_count(text_field(edit, "old_string")))
-    })
 }
 
 fn mcp_summary(name: &str) -> ToolSummary {
@@ -561,19 +546,10 @@ pub fn describe_tool(name: &str, input: &Value) -> ToolSummary {
             description: truncated(text_field(input, "description")),
             ..plain_summary("Ran", text_field(input, "command"))
         },
-        "Read" => file_summary("Read", text_field(input, "file_path"), 0, 0),
-        "Edit" => file_summary(
-            "Edited",
-            text_field(input, "file_path"),
-            line_count(text_field(input, "new_string")),
-            line_count(text_field(input, "old_string")),
-        ),
-        "MultiEdit" => {
-            let (added, removed) = multi_edit_lines(input);
-            file_summary("Edited", text_field(input, "file_path"), added, removed)
-        }
-        "Write" => file_summary("Wrote", text_field(input, "file_path"), line_count(text_field(input, "content")), 0),
-        "NotebookEdit" => file_summary("Edited", text_field(input, "notebook_path"), 0, 0),
+        "Read" => file_summary("Read", text_field(input, "file_path")),
+        "Edit" | "MultiEdit" => file_summary("Edited", text_field(input, "file_path")),
+        "Write" => file_summary("Wrote", text_field(input, "file_path")),
+        "NotebookEdit" => file_summary("Edited", text_field(input, "notebook_path")),
         "Grep" => plain_summary("Searched", text_field(input, "pattern")),
         "Glob" => plain_summary("Listed", text_field(input, "pattern")),
         "BashOutput" => plain_summary("Read output of", "a background shell"),
@@ -1505,11 +1481,11 @@ mod tests {
     }
 
     #[test]
-    fn summarises_file_edits_with_line_counts() {
+    fn summarises_file_edits_by_file_name() {
         let input = json!({"file_path": "/repo/src/nearby.rs", "old_string": "a\nb", "new_string": "a\nb\nc"});
         let summary = describe_tool("Edit", &input);
         assert_eq!((summary.verb.as_str(), summary.detail.as_str()), ("Edited", "nearby.rs"));
-        assert_eq!((summary.added, summary.removed), (3, 2));
+        assert_eq!(summary.file_path.as_deref(), Some("/repo/src/nearby.rs"));
         assert_eq!(describe_tool("mcp__github__create_pr", &json!({})).detail, "github create_pr");
     }
 

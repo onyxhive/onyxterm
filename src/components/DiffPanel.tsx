@@ -4,7 +4,7 @@ import { parseUnifiedDiff, type ParsedFileDiff } from "../diffText";
 import { gitApi } from "../gitApi";
 import type { DiffFile, Project, Task } from "../types";
 import { useLoaded } from "../useLoaded";
-import { DiffStat } from "./ChangesPanel";
+import { DiffStat } from "./DiffStat";
 import { Segmented } from "./Segmented";
 import { UnifiedDiff } from "./UnifiedDiff";
 import { cn, FOCUS_RING, ICON_BUTTON, MENU_ITEM, MENU_POPUP } from "./ui";
