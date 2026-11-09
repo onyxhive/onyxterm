@@ -418,31 +418,31 @@ export default function App() {
         isPullRequestsActive={view === "prs"}
         isSettingsActive={view === "settings"}
         actions={sidebarActions}
-        notifications={
-          <NotificationCenter
-            entries={notificationHistory.entries}
-            unreadCount={notificationHistory.unreadCount}
-            actions={{
-              onOpen: openNotification,
-              onMarkAllRead: notificationHistory.markAllRead,
-              onClear: notificationHistory.clear,
-            }}
-          />
-        }
         usage={<UsageCenter commands={commandsByRecentUse(chats)} />}
         header={
-          <WorkspaceSwitcher
-            workspaces={workspaces}
-            current={workspace}
-            tasks={tasks}
-            actions={{
-              ...workspaceActions,
-              onSelect: (workspaceId) => {
-                workspaceActions.onSelect(workspaceId);
-                setSelectedTaskId(null);
-              },
-            }}
-          />
+          <>
+            <WorkspaceSwitcher
+              workspaces={workspaces}
+              current={workspace}
+              tasks={tasks}
+              actions={{
+                ...workspaceActions,
+                onSelect: (workspaceId) => {
+                  workspaceActions.onSelect(workspaceId);
+                  setSelectedTaskId(null);
+                },
+              }}
+            />
+            <NotificationCenter
+              entries={notificationHistory.entries}
+              unreadCount={notificationHistory.unreadCount}
+              actions={{
+                onOpen: openNotification,
+                onMarkAllRead: notificationHistory.markAllRead,
+                onClear: notificationHistory.clear,
+              }}
+            />
+          </>
         }
       />
       <main data-tauri-drag-region className="flex min-w-0 flex-1">

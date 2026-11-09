@@ -48,7 +48,6 @@ interface SidebarProps {
   isPullRequestsActive: boolean;
   isSettingsActive: boolean;
   header: ReactNode;
-  notifications: ReactNode;
   usage: ReactNode;
   actions: SidebarActions;
 }
@@ -71,7 +70,7 @@ const ROW_STATUS: Partial<Record<TaskStatus, RowStatus>> = {
   review: { label: "Review", icon: Eye, className: "text-primary" },
 };
 
-const SIDEBAR_HEADER_ICON_BUTTON = cn(
+export const SIDEBAR_HEADER_ICON_BUTTON = cn(
   "relative flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-(--control-radius)",
   "font-medium text-sidebar-muted-foreground/80 hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
   "[&>svg]:size-4 [&>svg]:shrink-0",
@@ -373,7 +372,7 @@ export function Sidebar(props: SidebarProps) {
         <div
           data-tauri-drag-region
           className={cn(
-            "flex h-(--topbar-height) shrink-0 items-center gap-2 pr-3",
+            "flex h-(--topbar-height) shrink-0 items-center justify-between gap-2 pr-2",
             "pl-(--workspace-titlebar-content-left)",
             "transition-[padding-left] duration-200 ease-out motion-reduce:transition-none",
           )}
@@ -422,7 +421,6 @@ export function Sidebar(props: SidebarProps) {
           </ul>
         </nav>
         <div className="flex shrink-0 flex-row items-center gap-1 px-2 pt-1 pb-2">
-          {props.notifications}
           <UtilityItem
             icon={<Settings />}
             label="Settings"

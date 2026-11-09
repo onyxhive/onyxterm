@@ -1,7 +1,7 @@
 import { Bell } from "lucide-react";
 import { elapsedSince } from "../tasks";
 import type { NotificationEntry } from "../types";
-import { SIDEBAR_UTILITY_BUTTON } from "./Sidebar";
+import { SIDEBAR_HEADER_ICON_BUTTON } from "./Sidebar";
 import { NotificationIcon } from "./Toasts";
 import { cn, FOCUS_RING, GHOST_BUTTON, MENU_POPUP, MenuLabel, MenuSeparator } from "./ui";
 import { usePopup } from "./usePopup";
@@ -107,8 +107,8 @@ export function NotificationCenter({ entries, unreadCount, actions }: Notificati
         aria-expanded={popup.isOpen}
         onClick={popup.toggle}
         className={cn(
-          SIDEBAR_UTILITY_BUTTON,
-          "relative aria-expanded:bg-sidebar-row-active aria-expanded:text-sidebar-foreground",
+          SIDEBAR_HEADER_ICON_BUTTON,
+          "aria-expanded:bg-sidebar-row-active aria-expanded:text-sidebar-foreground",
         )}
       >
         <Bell />
@@ -130,7 +130,8 @@ export function NotificationCenter({ entries, unreadCount, actions }: Notificati
           aria-label="Notifications"
           className={cn(
             MENU_POPUP,
-            "fixed bottom-12 left-2 flex max-h-[min(28rem,calc(100vh-6rem))] w-80 flex-col",
+            "fixed top-[calc(var(--topbar-height)-0.5rem)] left-2 flex w-[22rem] max-w-[calc(100vw-1rem)] flex-col",
+            "max-h-[min(32rem,calc(100vh-var(--topbar-height)))]",
           )}
         >
           <div className="flex h-8 shrink-0 items-center gap-1 ps-2">

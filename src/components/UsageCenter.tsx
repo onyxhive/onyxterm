@@ -205,7 +205,7 @@ export function UsageCenter({ commands }: { commands: string[] }) {
           aria-label="Usage"
           className={cn(
             MENU_POPUP,
-            "fixed bottom-12 left-2 flex max-h-[min(32rem,calc(100vh-6rem))] w-80 flex-col",
+            "fixed bottom-12 flex max-h-[min(32rem,calc(100vh-6rem))] w-80 flex-col",
           )}
         >
           <div className="flex h-8 shrink-0 items-center gap-2 ps-2">
