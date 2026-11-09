@@ -41,9 +41,9 @@ export function TopBar({ isSidebarOpen, children }: TopBarProps) {
     <header
       data-tauri-drag-region
       className={cn(
-        "relative flex h-(--island-header-height) shrink-0 items-center gap-3 bg-background pr-2",
+        "relative flex h-(--topbar-height) shrink-0 items-center gap-3 bg-background pr-2",
         "transition-[padding-left,padding-right] duration-200 ease-out motion-reduce:transition-none",
-        isSidebarOpen ? "pl-4" : "pl-[calc(var(--workspace-titlebar-content-left)-var(--island-gap))]",
+        isSidebarOpen ? "pl-4" : "pl-(--workspace-titlebar-content-left)",
       )}
     >
       {children}

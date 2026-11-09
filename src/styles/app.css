@@ -7,9 +7,6 @@
   --mention: oklch(0.55 0.17 255);
   --control-radius: 0.5rem;
   --topbar-height: 52px;
-  --island-gap: 0.25rem;
-  --island-radius: 0.625rem;
-  --island-header-height: calc(var(--topbar-height) - 2 * var(--island-gap));
   --workspace-controls-left: calc(env(safe-area-inset-left) + 0.75rem);
   --workspace-titlebar-control-size: 1.75rem;
   --workspace-titlebar-control-gap: 0.75rem;
@@ -82,8 +79,6 @@
   --composer-shadow: 0 1px 2px rgb(0 0 0 / 5%);
   --popover-shadow: 0 16px 40px -18px rgb(0 0 0 / 55%);
   --popover-outline: color-mix(in srgb, var(--foreground) 10%, transparent);
-  --island-border: rgb(0 0 0 / 7%);
-  --island-shadow: 0 1px 2px rgb(0 0 0 / 4%), 0 2px 8px -4px rgb(0 0 0 / 6%);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -141,8 +136,6 @@
     --composer-shadow: none;
     --popover-shadow: 0 18px 44px -18px rgb(0 0 0 / 80%);
     --popover-outline: color-mix(in srgb, var(--color-white) 10%, transparent);
-    --island-border: rgb(255 255 255 / 7%);
-    --island-shadow: 0 1px 2px rgb(0 0 0 / 40%);
   }
 }
 
@@ -284,13 +277,6 @@
   color: var(--mention);
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
-}
-
-@utility island {
-  overflow: hidden;
-  border: 1px solid var(--island-border);
-  border-radius: var(--island-radius);
-  box-shadow: var(--island-shadow);
 }
 
 @utility composer-outline {

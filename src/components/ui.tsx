@@ -8,6 +8,11 @@ export function cn(...parts: ClassPart[]): string {
 
 export const FOCUS_RING = "outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring";
 
+export const SIDE_PANEL = cn(
+  "flex h-full w-(--diff-panel-width) shrink-0 flex-col overflow-hidden border-l border-border",
+  "bg-background",
+);
+
 export const ICON_BUTTON = cn(
   "inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-(--control-radius)",
   "text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",

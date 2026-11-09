@@ -373,7 +373,7 @@ export default function App() {
       style={isFullscreen || !IS_MAC ? undefined : MAC_WINDOW_CONTROLS_INSET}
       data-workspace-root
       data-tauri-drag-region
-      className="flex h-full overflow-hidden bg-window p-(--island-gap) text-foreground"
+      className="flex h-full overflow-hidden bg-window text-foreground"
     >
       <SidebarToggle isSidebarOpen={isSidebarOpen} onToggleSidebar={() => setIsSidebarOpen(!isSidebarOpen)} />
       <Sidebar
@@ -402,9 +402,9 @@ export default function App() {
           />
         }
       />
-      <main data-tauri-drag-region className="flex min-w-0 flex-1 gap-(--island-gap)">
-        <div data-tauri-drag-region className="flex min-w-0 flex-1 flex-col gap-(--island-gap)">
-          <div className="island flex min-h-0 flex-1 flex-col bg-background">
+      <main data-tauri-drag-region className="flex min-w-0 flex-1">
+        <div data-tauri-drag-region className="flex min-w-0 flex-1 flex-col">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
             <TopBar isSidebarOpen={isSidebarOpen}>{renderHeading()}</TopBar>
             {renderMain()}
           </div>

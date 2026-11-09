@@ -3,7 +3,7 @@ import type { Task } from "../types";
 import { Markdown } from "./Markdown";
 import { ProjectRootsContext, projectRootsOf } from "./projectPaths";
 import { AgentElapsed, AgentGlyph, elapsedSeconds, SUBAGENT_STATUS_LABEL } from "./SubagentRow";
-import { cn, FOCUS_RING, ICON_BUTTON } from "./ui";
+import { cn, FOCUS_RING, ICON_BUTTON, SIDE_PANEL } from "./ui";
 import { useNow } from "./useNow";
 import { subagentTitle, useSubagentEntries, type SubagentEntry } from "./useSubagentEntries";
 import { formatDuration } from "./WorkingRow";
@@ -144,10 +144,10 @@ export function SubagentsPanel({ task, projectPath, agentId, onOpenAgent, onClos
   const opened = agents.find((agent) => agent.toolUseId === agentId) ?? null;
 
   return (
-    <aside aria-label="Subagents" className="island flex h-full w-(--diff-panel-width) shrink-0 flex-col bg-background">
+    <aside aria-label="Subagents" className={SIDE_PANEL}>
       <header
         data-tauri-drag-region
-        className="flex h-(--island-header-height) shrink-0 items-center gap-2 border-b border-border px-3 text-sm"
+        className="flex h-(--topbar-height) shrink-0 items-center gap-2 border-b border-border px-3 text-sm"
       >
         {opened ? (
           <>

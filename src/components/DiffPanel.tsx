@@ -6,7 +6,7 @@ import type { DiffFile, Project, SessionWorktree, Task } from "../types";
 import { useLoaded } from "../useLoaded";
 import { DiffStat } from "./DiffStat";
 import { UnifiedDiff } from "./UnifiedDiff";
-import { cn, FOCUS_RING, ICON_BUTTON } from "./ui";
+import { cn, FOCUS_RING, ICON_BUTTON, SIDE_PANEL } from "./ui";
 
 interface DiffPanelProps {
   task: Task;
@@ -188,11 +188,11 @@ export function DiffPanel({ task, project }: DiffPanelProps) {
   return (
     <aside
       aria-label="Diff"
-      className="island flex h-full w-(--diff-panel-width) shrink-0 flex-col bg-background"
+      className={SIDE_PANEL}
     >
       <header
         data-tauri-drag-region
-        className="flex h-(--island-header-height) shrink-0 items-center gap-2 border-b border-border px-3 text-sm"
+        className="flex h-(--topbar-height) shrink-0 items-center gap-2 border-b border-border px-3 text-sm"
       >
         {opened ? (
           <>

@@ -360,20 +360,20 @@ export function Sidebar(props: SidebarProps) {
       className={cn(
         "relative h-full shrink-0 overflow-hidden transition-[width] duration-200 ease-out",
         "motion-reduce:transition-none",
-        isOpen ? "w-[calc(var(--sidebar-width)+var(--island-gap))]" : "w-0",
+        isOpen ? "w-(--sidebar-width)" : "w-0",
       )}
     >
       <div
         className={cn(
-          "island flex h-full w-(--sidebar-width) flex-col bg-sidebar",
+          "flex h-full w-(--sidebar-width) flex-col overflow-hidden border-r border-border bg-sidebar",
           "text-sidebar-foreground",
         )}
       >
         <div
           data-tauri-drag-region
           className={cn(
-            "flex h-(--island-header-height) shrink-0 items-center gap-2 pr-3",
-            "pl-[calc(var(--workspace-titlebar-content-left)-var(--island-gap))]",
+            "flex h-(--topbar-height) shrink-0 items-center gap-2 pr-3",
+            "pl-(--workspace-titlebar-content-left)",
             "transition-[padding-left] duration-200 ease-out motion-reduce:transition-none",
           )}
         >
