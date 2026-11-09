@@ -59,6 +59,11 @@ const TURN_ACTIVITY_KINDS = new Set<FeedItem["kind"]>(["steps", "subagent", "per
 
 const CODEX_COMING = "Codex support coming next";
 const TIMELINE_END_GAP = 16;
+const FOLLOW_DISTANCE = 64;
+
+function isNearBottom(element: HTMLElement): boolean {
+  return element.scrollHeight - element.scrollTop - element.clientHeight <= FOLLOW_DISTANCE;
+}
 
 function pendingQuestionIn(feed: FeedItem[]): QuestionRequest | null {
   return feed.find((item): item is QuestionRequest => item.kind === "question") ?? null;
@@ -125,6 +130,7 @@ function liveStepIdIn(task: Task): string | null {
 
 export function ChatView({ task, projectPath, actions }: ChatViewProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const isFollowingRef = useRef(true);
   const dockRef = useRef<HTMLDivElement>(null);
   const dockHeight = useDockHeight(dockRef);
   const { capabilities } = useCapabilities(task.command, task.projectId);
@@ -147,11 +153,21 @@ export function ChatView({ task, projectPath, actions }: ChatViewProps) {
   const choice: AgentChoice = { provider, command, model, effort };
   const choiceLockReason = ACTIVE_TURN_STATUSES.includes(task.status) ? CHOICE_LOCKED : undefined;
 
-  useEffect(() => {
+  function scrollToBottom() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
-  }, [task.id, task.feed.length, scrollKey, isRunning, dockHeight]);
+  }
+
+  useEffect(() => {
+    isFollowingRef.current = true;
+    scrollToBottom();
+  }, [task.id]);
+
+  useEffect(() => {
+    if (isFollowingRef.current) scrollToBottom();
+  }, [task.feed.length, scrollKey, isRunning, dockHeight]);
 
   function submit(text: string, images: ImageAttachment[]) {
+    isFollowingRef.current = true;
     if (!question) {
       actions.onReply(text, images);
       return;
@@ -189,6 +205,9 @@ export function ChatView({ task, projectPath, actions }: ChatViewProps) {
           <ActivityPanel agents={subagentEntries(task.feed, subagents)} shells={runningShells(task)} />
           <div
             ref={scrollRef}
+            onScroll={(event) => {
+              isFollowingRef.current = isNearBottom(event.currentTarget);
+            }}
             style={{ paddingBottom: dockHeight + TIMELINE_END_GAP }}
             className="scroll-fade-top min-h-0 flex-1 overflow-y-auto px-5 [overflow-anchor:none]"
           >
