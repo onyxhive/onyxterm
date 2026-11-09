@@ -41,7 +41,8 @@ const INVALID_MODEL: &str = "model may only hold letters, digits and -_.[]";
 const NO_PROJECT_RULES: &str = "Claude offered no rule that can be saved for this project";
 const RULE_NEEDS_ALWAYS: &str = "a rule scope only applies to an always-allow answer";
 const CODEX_UNSUPPORTED: &str = "Codex support coming next";
-const TURN_IS_RUNNING: &str = "the agent is working; wait for this turn to finish or stop it before changing settings";
+const TURN_IS_RUNNING: &str =
+    "the agent is working; wait for this turn to finish or stop it before a change that restarts it";
 
 const LIVE_EFFORT_LEVELS: [&str; 4] = ["low", "medium", "high", "xhigh"];
 
@@ -147,6 +148,13 @@ fn needs_respawn(chat: &Chat, options: &ChatOptions) -> bool {
         chat.permission_mode != options.permission_mode && options.permission_mode.needs_launch_flag();
     let needs_effort_flag = chat.effort != options.effort && !LIVE_EFFORT_LEVELS.contains(&options.effort.as_str());
     chat.command != options.command || needs_effort_flag || enters_launch_only_mode
+}
+
+fn ensure_switchable_mid_turn(chat: &Chat, options: &ChatOptions) -> AppResult<()> {
+    if needs_respawn(chat, options) {
+        return Err(AppError::Invalid(TURN_IS_RUNNING.into()));
+    }
+    Ok(())
 }
 
 fn live_change(chat: &Chat, options: &ChatOptions) -> LiveChange {
@@ -712,7 +720,7 @@ pub async fn update_chat_options(
     crate::git::validated_id(&chat_id, "chat")?;
     let before = chats::chat(&db.connection(), &chat_id)?;
     if is_turn_running(&runtime, &before) {
-        return Err(AppError::Invalid(TURN_IS_RUNNING.into()));
+        ensure_switchable_mid_turn(&before, &options)?;
     }
     chats::update_options(&db.connection(), &chat_id, &options)?;
     let updated = chats::chat(&db.connection(), &chat_id)?;
@@ -883,6 +891,18 @@ mod tests {
         assert_eq!(live_change(&chat, &options(AgentCommand::Claude, "opus", "max")), LiveChange::Respawn);
         assert_eq!(live_change(&chat, &options(AgentCommand::ClaudeLyxa, "sonnet", "high")), LiveChange::Respawn);
         assert_eq!(live_change(&chat, &options(AgentCommand::Claude, "sonnet", "")), LiveChange::Respawn);
+    }
+
+    #[test]
+    fn allows_live_switches_mid_turn_but_refuses_changes_that_respawn() {
+        let chat = chat_with(AgentCommand::Claude, "sonnet", "high");
+        assert!(ensure_switchable_mid_turn(&chat, &options(AgentCommand::Claude, "opus", "xhigh")).is_ok());
+        let planning = with_mode(options(AgentCommand::Claude, "opus", "high"), PermissionMode::Plan);
+        assert!(ensure_switchable_mid_turn(&chat, &planning).is_ok());
+        assert!(ensure_switchable_mid_turn(&chat, &options(AgentCommand::Claude, "sonnet", "max")).is_err());
+        assert!(ensure_switchable_mid_turn(&chat, &options(AgentCommand::ClaudeLyxa, "sonnet", "high")).is_err());
+        let bypassing = with_mode(options(AgentCommand::Claude, "sonnet", "high"), PermissionMode::BypassPermissions);
+        assert!(ensure_switchable_mid_turn(&chat, &bypassing).is_err());
     }
 
     #[test]

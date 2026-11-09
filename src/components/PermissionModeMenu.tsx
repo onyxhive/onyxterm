@@ -1,4 +1,5 @@
 import { ChevronLeft, ListChecks, Lock, Pencil, ShieldOff, Sparkles, type LucideIcon } from "lucide-react";
+import type { OptionLock } from "../liveOptions";
 import { isFullAccess, PERMISSION_MODE_INFO, PERMISSION_MODES, type PermissionMode } from "../permissionModes";
 import { cn, MENU_POPUP } from "./ui";
 import { usePopup } from "./usePopup";
@@ -14,13 +15,15 @@ const MODE_ICONS: Record<PermissionMode, LucideIcon> = {
 interface PermissionModeMenuProps {
   mode: PermissionMode;
   onPick: (mode: PermissionMode) => void;
+  lockReasonFor?: OptionLock;
 }
 
-function ModeSegments({ mode, onPick }: PermissionModeMenuProps) {
+function ModeSegments({ mode, onPick, lockReasonFor }: PermissionModeMenuProps) {
   return (
     <div role="radiogroup" aria-label="Permissions" className="flex gap-0.5 rounded-lg bg-muted p-0.5">
       {PERMISSION_MODES.map((candidate) => {
         const Icon = MODE_ICONS[candidate];
+        const lockReason = lockReasonFor?.({ permissionMode: candidate });
         return (
           <button
             key={candidate}
@@ -28,11 +31,13 @@ function ModeSegments({ mode, onPick }: PermissionModeMenuProps) {
             role="radio"
             aria-checked={candidate === mode}
             aria-label={PERMISSION_MODE_INFO[candidate].shortLabel}
-            title={PERMISSION_MODE_INFO[candidate].shortLabel}
+            title={lockReason ?? PERMISSION_MODE_INFO[candidate].shortLabel}
+            disabled={lockReason !== undefined}
             className={cn(
               "flex h-7 flex-1 cursor-pointer items-center justify-center rounded-md text-muted-foreground",
               "transition-colors hover:text-foreground aria-checked:bg-card aria-checked:text-foreground",
               "aria-checked:shadow-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+              "disabled:cursor-not-allowed disabled:opacity-50",
               isFullAccess(candidate) && "text-warning-foreground",
             )}
             onClick={() => onPick(candidate)}
@@ -45,7 +50,7 @@ function ModeSegments({ mode, onPick }: PermissionModeMenuProps) {
   );
 }
 
-export function PermissionModeMenu({ mode, onPick }: PermissionModeMenuProps) {
+export function PermissionModeMenu({ mode, onPick, lockReasonFor }: PermissionModeMenuProps) {
   const popup = usePopup();
   const info = PERMISSION_MODE_INFO[mode];
   const Icon = MODE_ICONS[mode];
@@ -75,7 +80,7 @@ export function PermissionModeMenu({ mode, onPick }: PermissionModeMenuProps) {
           aria-label="Permissions"
           className={cn(MENU_POPUP, "absolute right-full bottom-0 me-2 w-64 p-2")}
         >
-          <ModeSegments mode={mode} onPick={onPick} />
+          <ModeSegments mode={mode} onPick={onPick} lockReasonFor={lockReasonFor} />
           <p className={cn("px-0.5 pt-2 text-sm font-medium", isFullAccess(mode) && "text-warning-foreground")}>
             {info.label}
           </p>

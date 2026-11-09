@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { effortOptionsFor, modelChoices } from "../agentChoices";
 import { CODEX_COMMAND } from "../agentOptions";
+import { needsRespawn, RESPAWN_LOCKED, type OptionLock } from "../liveOptions";
 import { mentionTargetsOf } from "../mentions";
 import type { PermissionMode } from "../permissionModes";
 import type {
@@ -43,7 +44,6 @@ export interface ChatActions {
 }
 
 const ACTIVE_TURN_STATUSES: TaskStatus[] = ["running", "permission", "question"];
-const CHOICE_LOCKED = "Wait for this turn to finish or stop it to change the model, effort, permissions or command";
 
 interface ChatViewProps {
   task: Task;
@@ -161,7 +161,9 @@ export function ChatView({ task, projectPath, isSubagentTrayCollapsed, actions }
   const efforts = effortOptionsFor(models.find((model) => model.value === task.model));
   const { provider, command, model, effort } = task;
   const choice: AgentChoice = { provider, command, model, effort };
-  const choiceLockReason = ACTIVE_TURN_STATUSES.includes(task.status) ? CHOICE_LOCKED : undefined;
+  const isTurnActive = ACTIVE_TURN_STATUSES.includes(task.status);
+  const lockReasonFor: OptionLock = (change) =>
+    isTurnActive && needsRespawn(task, change) ? RESPAWN_LOCKED : undefined;
 
   function scrollToBottom() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
@@ -196,7 +198,7 @@ export function ChatView({ task, projectPath, isSubagentTrayCollapsed, actions }
       permissionMode={task.permissionMode}
       side="top"
       align="end"
-      disabledReason={choiceLockReason}
+      lockReasonFor={lockReasonFor}
       onChange={(update) => actions.onChangeChoice({ ...choice, ...update })}
       onPermissionModeChange={actions.onChangePermissionMode}
       fastMode={{ isEnabled: task.fastMode, onChange: actions.onChangeFastMode }}

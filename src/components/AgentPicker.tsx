@@ -1,6 +1,7 @@
 import { useState, type KeyboardEvent } from "react";
 import { Check, ChevronDown, Search, Star, Zap } from "lucide-react";
 import { CLAUDE_COMMANDS, DEFAULT_MODEL } from "../agentOptions";
+import type { OptionLock } from "../liveOptions";
 import { isFullAccess, PERMISSION_MODE_INFO, type PermissionMode } from "../permissionModes";
 import {
   CONTROL_CLASS,
@@ -34,7 +35,7 @@ interface AgentPickerProps {
   ultracode?: Toggle;
   side?: PopupSide;
   align?: PopupAlign;
-  disabledReason?: string;
+  lockReasonFor?: OptionLock;
 }
 
 const FAVORITES_TAB = "favorites";
@@ -56,7 +57,8 @@ const RAIL_BUTTON = cn(
 );
 const PICKER_ROW = cn(
   "group flex h-7 w-full cursor-pointer items-center gap-2 rounded-md px-2 text-left text-[13px] outline-none",
-  "data-[active=true]:bg-accent",
+  "data-[active=true]:bg-accent disabled:cursor-not-allowed disabled:opacity-50 aria-disabled:cursor-not-allowed",
+  "aria-disabled:opacity-50",
 );
 
 function commandNameOf(command: string): string {
@@ -80,9 +82,10 @@ function RailIndicator() {
 interface ProviderRailProps {
   tab: string;
   onTab: (tab: string) => void;
+  lockReasonFor?: OptionLock;
 }
 
-function ProviderRail({ tab, onTab }: ProviderRailProps) {
+function ProviderRail({ tab, onTab, lockReasonFor }: ProviderRailProps) {
   return (
     <div role="tablist" aria-orientation="vertical" className="flex flex-col items-center gap-1 border-r border-border/70 p-1">
       <button
@@ -98,22 +101,26 @@ function ProviderRail({ tab, onTab }: ProviderRailProps) {
         <Star className="size-4 fill-current" />
       </button>
       <span aria-hidden="true" className="h-px w-6 bg-border" />
-      {CLAUDE_COMMANDS.map((command) => (
-        <button
-          key={command}
-          type="button"
-          role="tab"
-          aria-selected={tab === command}
-          aria-label={command}
-          title={command}
-          className={cn(RAIL_BUTTON, "flex-col gap-0.5 size-auto h-10 w-8")}
-          onClick={() => onTab(command)}
-        >
-          {tab === command && <RailIndicator />}
-          <ProviderLogo provider={CLAUDE_PROVIDER} size={16} />
-          <span className="max-w-8 truncate text-[9px] leading-none">{commandNameOf(command)}</span>
-        </button>
-      ))}
+      {CLAUDE_COMMANDS.map((command) => {
+        const lockReason = lockReasonFor?.({ command });
+        return (
+          <button
+            key={command}
+            type="button"
+            role="tab"
+            aria-selected={tab === command}
+            aria-label={command}
+            title={lockReason ?? command}
+            disabled={lockReason !== undefined}
+            className={cn(RAIL_BUTTON, "flex-col gap-0.5 size-auto h-10 w-8")}
+            onClick={() => onTab(command)}
+          >
+            {tab === command && <RailIndicator />}
+            <ProviderLogo provider={CLAUDE_PROVIDER} size={16} />
+            <span className="max-w-8 truncate text-[9px] leading-none">{commandNameOf(command)}</span>
+          </button>
+        );
+      })}
       <button
         type="button"
         role="tab"
@@ -135,19 +142,21 @@ interface ModelRowProps {
   isActive: boolean;
   isSelected: boolean;
   isFavorite: boolean;
+  lockReason?: string;
   onPick: () => void;
   onHighlight: () => void;
   onToggleFavorite: () => void;
 }
 
 function ModelRow(props: ModelRowProps) {
-  const { row, index, isActive, isSelected, isFavorite, onPick, onHighlight, onToggleFavorite } = props;
+  const { row, index, isActive, isSelected, isFavorite, lockReason, onPick, onHighlight, onToggleFavorite } = props;
   return (
     <li
       role="option"
       aria-selected={isSelected}
+      aria-disabled={lockReason !== undefined}
       data-active={isActive}
-      title={row.command}
+      title={lockReason ?? row.command}
       className={PICKER_ROW}
       onMouseMove={() => !isActive && onHighlight()}
       onClick={onPick}
@@ -182,16 +191,26 @@ interface ReasoningColumnProps {
   efforts: string[];
   effort: string;
   ultracode?: Toggle;
+  lockReasonFor?: OptionLock;
   onPick: (effort: string) => void;
 }
 
-function ReasoningRow({ label, isSelected, onPick }: { label: string; isSelected: boolean; onPick: () => void }) {
+interface ReasoningRowProps {
+  label: string;
+  isSelected: boolean;
+  lockReason?: string;
+  onPick: () => void;
+}
+
+function ReasoningRow({ label, isSelected, lockReason, onPick }: ReasoningRowProps) {
   return (
     <button
       type="button"
       role="radio"
       aria-checked={isSelected}
-      className={cn(PICKER_ROW, "hover:bg-accent")}
+      title={lockReason}
+      disabled={lockReason !== undefined}
+      className={cn(PICKER_ROW, "enabled:hover:bg-accent")}
       onClick={onPick}
     >
       <span className="min-w-0 flex-1 truncate">{label}</span>
@@ -200,7 +219,7 @@ function ReasoningRow({ label, isSelected, onPick }: { label: string; isSelected
   );
 }
 
-function ReasoningColumn({ modelLabel, efforts, effort, ultracode, onPick }: ReasoningColumnProps) {
+function ReasoningColumn({ modelLabel, efforts, effort, ultracode, lockReasonFor, onPick }: ReasoningColumnProps) {
   const isUltracode = ultracode?.isEnabled ?? false;
   return (
     <div className="flex w-44 shrink-0 flex-col border-l border-border/70 p-1">
@@ -215,6 +234,7 @@ function ReasoningColumn({ modelLabel, efforts, effort, ultracode, onPick }: Rea
             key={level}
             label={effortLabelOf(level)}
             isSelected={!isUltracode && level === effort}
+            lockReason={lockReasonFor?.({ effort: level })}
             onPick={() => onPick(level)}
           />
         ))}
@@ -260,6 +280,7 @@ interface PickerPanelProps extends AgentPickerProps {
 
 function PickerPanel(props: PickerPanelProps) {
   const { choice, models, efforts, permissionMode, onChange, onPermissionModeChange, fastMode, ultracode } = props;
+  const { lockReasonFor } = props;
   const [tab, setTab] = useState(choice.command);
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
@@ -273,8 +294,12 @@ function PickerPanel(props: PickerPanelProps) {
   const active = Math.min(activeIndex, rows.length - 1);
   const resolvedModelName = resolvedNameOf(models.find((model) => model.value === choice.model), choice.model);
 
+  function rowLockReason(row: FavoriteModel): string | undefined {
+    return lockReasonFor?.({ command: row.command });
+  }
+
   function pick(row: FavoriteModel | undefined) {
-    if (!row) return;
+    if (!row || rowLockReason(row)) return;
     onChange({ provider: CLAUDE_PROVIDER, command: row.command, model: row.model });
     props.onClose();
   }
@@ -306,7 +331,7 @@ function PickerPanel(props: PickerPanelProps) {
   return (
     <div className="flex min-h-0 flex-col" onKeyDown={navigate}>
       <div className="flex min-h-0">
-        <ProviderRail tab={tab} onTab={switchTab} />
+        <ProviderRail tab={tab} onTab={switchTab} lockReasonFor={lockReasonFor} />
         <div className="flex min-w-0 flex-1 flex-col">
           <label className="flex h-9 items-center gap-2 border-b border-border/70 px-3 text-muted-foreground">
             <Search className="size-3.5 shrink-0" />
@@ -343,6 +368,7 @@ function PickerPanel(props: PickerPanelProps) {
                 isActive={index === active}
                 isSelected={row.command === choice.command && row.model === choice.model}
                 isFavorite={favorites.isFavorite(row)}
+                lockReason={rowLockReason(row)}
                 onPick={() => pick(row)}
                 onHighlight={() => setActiveIndex(index)}
                 onToggleFavorite={() => favorites.toggle(row)}
@@ -355,13 +381,14 @@ function PickerPanel(props: PickerPanelProps) {
           efforts={efforts}
           effort={choice.effort}
           ultracode={ultracode}
+          lockReasonFor={lockReasonFor}
           onPick={pickEffort}
         />
       </div>
       <div className="flex items-center gap-2 border-t border-border/70 px-2 py-1.5">
         {fastMode && <SpeedToggle {...fastMode} />}
         <span className="ms-auto">
-          <PermissionModeMenu mode={permissionMode} onPick={onPermissionModeChange} />
+          <PermissionModeMenu mode={permissionMode} onPick={onPermissionModeChange} lockReasonFor={lockReasonFor} />
         </span>
       </div>
     </div>
@@ -370,21 +397,20 @@ function PickerPanel(props: PickerPanelProps) {
 
 export function AgentPicker(props: AgentPickerProps) {
   const { choice, models, efforts, permissionMode } = props;
-  const { side = "bottom", align = "start", disabledReason } = props;
+  const { side = "bottom", align = "start" } = props;
   const popup = usePopup();
   const modelLabel = models.find((model) => model.value === choice.model)?.label ?? choice.model;
   const hasFullAccess = isFullAccess(permissionMode);
   const permissionLabel = PERMISSION_MODE_INFO[permissionMode].shortLabel;
 
   return (
-    <div className="relative" ref={popup.rootRef} title={disabledReason}>
+    <div className="relative" ref={popup.rootRef}>
       <button
         type="button"
         aria-haspopup="dialog"
         aria-expanded={popup.isOpen}
         aria-label={`Agent: ${choice.command}, ${modelLabel}, ${choice.effort} effort, ${permissionLabel}`}
         className={CONTROL_CLASS}
-        disabled={disabledReason !== undefined}
         onClick={popup.toggle}
       >
         <ProviderLogo provider={choice.provider} size={14} />
