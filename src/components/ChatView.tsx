@@ -16,7 +16,7 @@ import type {
 import { suggestionSources, useCapabilities, useUltracodeAvailability } from "../useCapabilities";
 import { useProjectFiles } from "../useProjectFiles";
 import { Composer, COMPOSER_PLACEHOLDER, QUESTION_PLACEHOLDER } from "./Composer";
-import { ActivityPanel } from "./ActivityPanel";
+import { ActivityTray } from "./ActivityTray";
 import { AgentPicker } from "./AgentPicker";
 import { ApprovalGroup } from "./ApprovalRow";
 import { ChatWorkspaceControls, type AgentChoice } from "./ComposerControls";
@@ -25,9 +25,8 @@ import { MentionTargetsContext } from "./MentionText";
 import { ProjectRootsContext, projectRootsOf } from "./projectPaths";
 import { QuestionDrawer, useQuestionAnswers, type QuestionRequest } from "./QuestionDrawer";
 import { SubagentLaunchLine } from "./SubagentLaunchLine";
-import { SubagentTray } from "./SubagentTray";
 import { useDockHeight } from "./useDockHeight";
-import { pendingToolIds, useSubagentEntries, type SubagentEntry } from "./useSubagentEntries";
+import { pendingToolIds, useSubagentEntries } from "./useSubagentEntries";
 import { WorkingRow } from "./WorkingRow";
 
 export interface ChatActions {
@@ -40,7 +39,7 @@ export interface ChatActions {
   onChangeFastMode: (isEnabled: boolean) => void;
   onChangeUltracode: (isEnabled: boolean) => void;
   onOpenSubagents: (agentId: string | null) => void;
-  onToggleSubagentTray: () => void;
+  onToggleActivityTray: () => void;
 }
 
 const ACTIVE_TURN_STATUSES: TaskStatus[] = ["running", "permission", "question"];
@@ -48,7 +47,7 @@ const ACTIVE_TURN_STATUSES: TaskStatus[] = ["running", "permission", "question"]
 interface ChatViewProps {
   task: Task;
   projectPath: string | null;
-  isSubagentTrayCollapsed: boolean;
+  isActivityTrayExpanded: boolean;
   actions: ChatActions;
 }
 
@@ -114,21 +113,6 @@ function feedBlocks(feed: FeedItem[]): FeedBlock[] {
   return blocks;
 }
 
-function currentTurnAgentIds(feed: FeedItem[]): Set<string> {
-  const turnStart = feed.findLastIndex((item) => item.kind === "user");
-  return new Set(feed.slice(turnStart + 1).flatMap((item) => (item.kind === "subagent" ? [item.toolUseId] : [])));
-}
-
-function trayAgentsOf(task: Task, agents: SubagentEntry[]): SubagentEntry[] {
-  const currentTurn = currentTurnAgentIds(task.feed);
-  return agents.filter((agent) => agent.status === "running" || currentTurn.has(agent.toolUseId));
-}
-
-function isTrayVisible(task: Task, trayAgents: SubagentEntry[]): boolean {
-  if (trayAgents.some((agent) => agent.status === "running")) return true;
-  return ACTIVE_TURN_STATUSES.includes(task.status) && trayAgents.length > 0;
-}
-
 function liveStepIdIn(task: Task): string | null {
   if (task.status !== "running" || !task.work.runningNow) return null;
   const lastSteps = task.feed.findLast((item) => item.kind === "steps");
@@ -137,7 +121,7 @@ function liveStepIdIn(task: Task): string | null {
   return live?.id ?? null;
 }
 
-export function ChatView({ task, projectPath, isSubagentTrayCollapsed, actions }: ChatViewProps) {
+export function ChatView({ task, projectPath, isActivityTrayExpanded, actions }: ChatViewProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const isFollowingRef = useRef(true);
   const dockRef = useRef<HTMLDivElement>(null);
@@ -156,7 +140,6 @@ export function ChatView({ task, projectPath, isSubagentTrayCollapsed, actions }
   const isRunning = task.status === "running";
   const turnReplies = turnReplyIndexes(task.feed, isRunning);
   const agents = useSubagentEntries(task);
-  const trayAgents = trayAgentsOf(task, agents);
   const models = capabilities?.models ?? [];
   const efforts = effortOptionsFor(models.find((model) => model.value === task.model));
   const { provider, command, model, effort } = task;
@@ -212,7 +195,6 @@ export function ChatView({ task, projectPath, isSubagentTrayCollapsed, actions }
     <ProjectRootsContext value={projectRootsOf(task, projectPath)}>
       <MentionTargetsContext value={mentionTargets}>
         <div className="relative flex min-h-0 flex-1 flex-col">
-          <ActivityPanel shells={runningShells(task)} />
           <div
             ref={scrollRef}
             onScroll={(event) => {
@@ -264,12 +246,11 @@ export function ChatView({ task, projectPath, isSubagentTrayCollapsed, actions }
             className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-background px-5 pt-2 pb-4"
           >
             <div className="pointer-events-auto">
-              <SubagentTray
-                provider={task.provider}
-                agents={trayAgents}
-                isVisible={isTrayVisible(task, trayAgents)}
-                isCollapsed={isSubagentTrayCollapsed}
-                onToggleCollapsed={actions.onToggleSubagentTray}
+              <ActivityTray
+                agents={agents.filter((agent) => agent.status === "running")}
+                shells={runningShells(task)}
+                isExpanded={isActivityTrayExpanded}
+                onToggleExpanded={actions.onToggleActivityTray}
                 onOpenAgent={actions.onOpenSubagents}
               />
               <Composer

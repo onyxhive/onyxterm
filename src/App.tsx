@@ -43,7 +43,7 @@ const IS_MAC = navigator.platform.startsWith("Mac");
 const MAC_WINDOW_CONTROLS_INSET = { "--workspace-controls-left": "90px" } as CSSProperties;
 
 const CHANGES_PANEL_SETTING = "changesPanelOpen";
-const SUBAGENT_TRAY_COLLAPSED_SETTING = "subagentTrayCollapsed";
+const ACTIVITY_TRAY_EXPANDED_SETTING = "activityTrayExpanded";
 
 const LAST_PROJECT_SETTING_PREFIX = "lastProject:";
 
@@ -92,7 +92,7 @@ export default function App() {
     remember(CHANGES_PANEL_SETTING, String(isOpen));
   }
 
-  const isSubagentTrayCollapsed = isToggleOn(settings ?? {}, SUBAGENT_TRAY_COLLAPSED_SETTING, false);
+  const isActivityTrayExpanded = isToggleOn(settings ?? {}, ACTIVITY_TRAY_EXPANDED_SETTING, false);
   const workspaceState = useWorkspaces({ settings, remember, onError: showError });
   const { workspaces, workspace, actions: workspaceActions } = workspaceState;
   const projects = workspaces.flatMap((candidate) => candidate.projects);
@@ -232,7 +232,7 @@ export default function App() {
     onChangeFastMode: (fastMode) => withSelectedChat((chatId) => chatState.changeOptions(chatId, { fastMode })),
     onChangeUltracode: (ultracode) => withSelectedChat((chatId) => chatState.changeOptions(chatId, { ultracode })),
     onOpenSubagents: openSubagents,
-    onToggleSubagentTray: () => remember(SUBAGENT_TRAY_COLLAPSED_SETTING, String(!isSubagentTrayCollapsed)),
+    onToggleActivityTray: () => remember(ACTIVITY_TRAY_EXPANDED_SETTING, String(!isActivityTrayExpanded)),
     onChangePermissionMode: (permissionMode) => {
       remember(PERMISSION_MODE_SETTING, permissionMode);
       withSelectedChat((chatId) => chatState.changeOptions(chatId, { permissionMode }));
@@ -357,7 +357,7 @@ export default function App() {
       <ChatView
         task={selectedTask}
         projectPath={chatProject?.path ?? null}
-        isSubagentTrayCollapsed={isSubagentTrayCollapsed}
+        isActivityTrayExpanded={isActivityTrayExpanded}
         actions={chatActions}
       />
     );
