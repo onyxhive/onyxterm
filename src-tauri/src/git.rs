@@ -486,10 +486,13 @@ pub fn diff_text(git: &Git, arguments: &[&str]) -> AppResult<Diff> {
     Ok(Diff { text: output.stdout, is_truncated: output.is_truncated })
 }
 
-pub fn diff_against_head(git: &Git, file: Option<&str>) -> AppResult<Diff> {
-    let base = if has_head(git)? { "HEAD".to_string() } else { empty_tree(git)? };
+pub fn head_base(git: &Git) -> AppResult<String> {
+    if has_head(git)? { Ok("HEAD".to_string()) } else { empty_tree(git) }
+}
+
+pub fn diff_against(git: &Git, base: &str, file: Option<&str>) -> AppResult<Diff> {
     let pathspec = file.map(literal_pathspec);
-    let mut arguments = vec![base.as_str()];
+    let mut arguments = vec![base];
     if let Some(pathspec) = &pathspec {
         arguments.extend(["--", pathspec.as_str()]);
     }
@@ -698,13 +701,6 @@ pub async fn git_create_branch(
 }
 
 #[tauri::command]
-pub async fn git_diff(db: State<'_, Db>, target: GitTarget, file: Option<String>) -> AppResult<Diff> {
-    let git = workdir(&db, &target)?.git();
-    let file = file.map(|file| validated_path(&file)).transpose()?;
-    in_background(move || diff_against_head(&git, file.as_deref())).await
-}
-
-#[tauri::command]
 pub async fn git_commit(
     db: State<'_, Db>,
     target: GitTarget,
@@ -885,7 +881,7 @@ mod tests {
         assert_eq!(first.summary, "start");
         write(&root, "a.txt", "two\n");
         write(&root, "b.txt", "two\n");
-        let diff = diff_against_head(&git, Some("a.txt")).unwrap();
+        let diff = diff_against(&git, &head_base(&git).unwrap(), Some("a.txt")).unwrap();
         assert!(diff.text.contains("+two") && !diff.text.contains("b.txt"));
         commit(&git, "only a", &["a.txt".to_string()]).unwrap();
         let remaining = status(&git).unwrap();

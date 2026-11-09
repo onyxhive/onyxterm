@@ -218,10 +218,11 @@ export interface DiffFile {
   removed: number;
 }
 
-export interface TurnDiff {
-  turn: number;
-  text: string;
-  isTruncated: boolean;
+export interface SessionWorktree {
+  path: string;
+  name: string;
+  branch: string | null;
+  isChatRoot: boolean;
   files: DiffFile[];
 }
 

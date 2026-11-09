@@ -15,6 +15,7 @@ mod protocol;
 mod prs;
 mod runtime;
 mod scripts;
+mod session_worktrees;
 mod settings;
 mod subagents;
 mod subprocess;
@@ -82,7 +83,6 @@ pub fn run() {
             git::git_branches,
             git::git_checkout,
             git::git_create_branch,
-            git::git_diff,
             git::git_commit,
             git::git_push,
             checkpoints::git_turn_diff,
@@ -95,6 +95,8 @@ pub fn run() {
             prs::pr_create,
             prs::pr_merge,
             subagents::list_subagents,
+            session_worktrees::list_session_worktrees,
+            session_worktrees::session_worktree_diff,
             desktop::machine_name,
             desktop::reveal_project,
             editors::list_editors,

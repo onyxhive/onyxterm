@@ -3,7 +3,7 @@ import { CHAT_CHOICE_SETTING as CHOICE_SETTING, DEFAULT_EFFORT, DEFAULT_MODEL } 
 import { Board } from "./components/Board";
 import { ChatHeader, type ChatHeaderActions } from "./components/ChatHeader";
 import { ChatView, type ChatActions } from "./components/ChatView";
-import { DiffPanel, LATEST_TURN_SCOPE, type DiffScope } from "./components/DiffPanel";
+import { DiffPanel } from "./components/DiffPanel";
 import { FilesPanel } from "./components/FilesPanel";
 import type { AgentChoice } from "./components/ComposerControls";
 import { NewChat, type ChatStart } from "./components/NewChat";
@@ -72,7 +72,6 @@ export default function App() {
   const [view, setView] = useState<View>("chat");
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const isFullscreen = useIsFullscreen();
-  const [diffScope, setDiffScope] = useState<DiffScope>(LATEST_TURN_SCOPE);
   const workbench = useWorkbench();
   const { closeFilesPanel, toggleFilesPanel, toggleTerminal } = workbench;
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -237,7 +236,6 @@ export default function App() {
 
   const threadDetailsActions: ThreadDetailsActions = {
     onOpenDiff: () => {
-      setDiffScope({ kind: "workingTree" });
       closeFilesPanel();
       setIsChangesPanelOpen(true);
     },
@@ -411,8 +409,6 @@ export default function App() {
             key={selectedTask.id}
             task={selectedTask}
             project={projects.find((project) => project.id === selectedTask.projectId)}
-            scope={diffScope}
-            onScopeChange={setDiffScope}
           />
         )}
       </main>

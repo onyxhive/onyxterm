@@ -15,8 +15,8 @@ import type {
   PullRequest,
   PullRequestDetail,
   PullRequestDraft,
+  SessionWorktree,
   Subagent,
-  TurnDiff,
 } from "./types";
 
 export const PRS_UPDATED = "prs-updated";
@@ -50,13 +50,13 @@ export const gitApi = {
     invoke<GitStatus>("git_checkout", { target, branch, force }),
   createBranch: (target: GitTarget, name: string, from: string | null = null, force = false) =>
     invoke<GitStatus>("git_create_branch", { target, name, from, force }),
-  diff: (target: GitTarget, file: string | null = null) => invoke<GitDiff>("git_diff", { target, file }),
   commit: (target: GitTarget, message: string, files: string[] | null = null) =>
     invoke<CommitResult>("git_commit", { target, message, files }),
   push: (target: GitTarget) => invoke<GitStatus>("git_push", { target }),
   removeChatWorktree: (chatId: string) => invoke<Chat>("remove_chat_worktree", { chatId }),
-  turnDiff: (chatId: string, turn: number) => invoke<TurnDiff>("git_turn_diff", { chatId, turn }),
-  checkpointTurns: (chatId: string) => invoke<number[]>("git_checkpoint_turns", { chatId }),
+  sessionWorktrees: (chatId: string) => invoke<SessionWorktree[]>("list_session_worktrees", { chatId }),
+  sessionWorktreeDiff: (chatId: string, worktreePath: string, file: string | null) =>
+    invoke<GitDiff>("session_worktree_diff", { chatId, worktreePath, file }),
 };
 
 export const prApi = {

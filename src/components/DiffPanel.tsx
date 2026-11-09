@@ -1,43 +1,22 @@
 import { useState } from "react";
-import { Check, ChevronDown, FileText, RotateCw } from "lucide-react";
+import { ChevronLeft, ChevronRight, FileText, FolderGit2, RotateCw } from "lucide-react";
 import { parseUnifiedDiff, type ParsedFileDiff } from "../diffText";
 import { gitApi } from "../gitApi";
-import type { DiffFile, Project, Task } from "../types";
+import type { DiffFile, Project, SessionWorktree, Task } from "../types";
 import { useLoaded } from "../useLoaded";
 import { DiffStat } from "./DiffStat";
-import { Segmented } from "./Segmented";
 import { UnifiedDiff } from "./UnifiedDiff";
-import { cn, FOCUS_RING, ICON_BUTTON, MENU_ITEM, MENU_POPUP } from "./ui";
-import { usePopup } from "./usePopup";
-
-export type DiffScope = { kind: "turn"; turn: number | null } | { kind: "workingTree" };
-
-export const LATEST_TURN_SCOPE: DiffScope = { kind: "turn", turn: null };
-
-type ScopeKind = DiffScope["kind"];
-
-const SCOPE_OPTIONS = [
-  { value: "turn" as const, label: "This turn" },
-  { value: "workingTree" as const, label: "Working tree" },
-];
+import { cn, FOCUS_RING, ICON_BUTTON } from "./ui";
 
 interface DiffPanelProps {
   task: Task;
   project: Project | undefined;
-  scope: DiffScope;
-  onScopeChange: (scope: DiffScope) => void;
 }
 
-interface DiffFiles {
-  files: DiffFile[];
-  error: string | null;
-  isLoading: boolean;
-}
-
-interface TurnDiffState extends DiffFiles {
-  turns: number[];
-  diffs: ParsedFileDiff[];
-  isTruncated: boolean;
+interface OpenWorktree {
+  chatId: string;
+  worktree: SessionWorktree;
+  revision: string;
 }
 
 function totalOf(files: DiffFile[], key: "added" | "removed"): number {
@@ -52,83 +31,58 @@ function folderOf(path: string): string {
   return path.split("/").slice(0, -1).join("/");
 }
 
-function useTurnDiff(chatId: string, turn: number | null, revision: string): TurnDiffState {
-  const turns = useLoaded(`${chatId}:${revision}`, () => gitApi.checkpointTurns(chatId));
-  const finished = turns.data ?? [];
-  const selected = turn ?? finished.at(-1) ?? null;
-  const diff = useLoaded(selected === null ? null : `${chatId}:${selected}:${revision}`, () =>
-    gitApi.turnDiff(chatId, selected ?? 0),
-  );
-  return {
-    turns: finished,
-    files: diff.data?.files ?? [],
-    diffs: parseUnifiedDiff(diff.data?.text ?? ""),
-    isTruncated: diff.data?.isTruncated ?? false,
-    error: turns.error ?? diff.error,
-    isLoading: turns.isLoading || diff.isLoading,
-  };
+function fileCountLabel(files: DiffFile[]): string {
+  if (files.length === 0) return "No changes";
+  return `${files.length} file${files.length === 1 ? "" : "s"}`;
 }
 
-function useWorkingTreeFiles(chatId: string, isActive: boolean, revision: string): DiffFiles {
-  const status = useLoaded(isActive ? `${chatId}:${revision}` : null, () => gitApi.status({ chat: chatId }));
-  const files = (status.data?.files ?? []).map(({ path, added, removed }) => ({ path, added, removed }));
-  return { files, error: status.error, isLoading: status.isLoading };
-}
-
-function useWorkingFileDiff(chatId: string, path: string | null, revision: string) {
-  const diff = useLoaded(path ? `${chatId}:${path}:${revision}` : null, () => gitApi.diff({ chat: chatId }, path));
+function useWorktreeFileDiff({ chatId, worktree, revision }: OpenWorktree, path: string | null) {
+  const key = path ? `${chatId}:${worktree.path}:${path}:${revision}` : null;
+  const diff = useLoaded(key, () => gitApi.sessionWorktreeDiff(chatId, worktree.path, path));
   return {
     diffs: parseUnifiedDiff(diff.data?.text ?? ""),
     isTruncated: diff.data?.isTruncated ?? false,
     isLoading: diff.isLoading,
+    error: diff.error,
   };
 }
 
-function emptyMessageFor(scope: DiffScope, turns: number[]): string {
-  if (scope.kind === "workingTree") return "The working tree is clean";
-  return turns.length === 0 ? "No finished turns with changes yet" : "This turn changed no files";
-}
-
-function TurnPicker({ turns, current, onPick }: { turns: number[]; current: number; onPick: (turn: number) => void }) {
-  const popup = usePopup();
+function WorktreeList({ worktrees, onOpen }: { worktrees: SessionWorktree[]; onOpen: (path: string) => void }) {
   return (
-    <div className="relative" ref={popup.rootRef}>
-      <button
-        type="button"
-        aria-haspopup="menu"
-        aria-expanded={popup.isOpen}
-        onClick={popup.toggle}
-        className={cn(
-          "inline-flex h-6 cursor-pointer items-center gap-1 rounded-md px-1.5 text-xs font-medium",
-          "text-muted-foreground hover:bg-accent hover:text-foreground aria-expanded:bg-accent",
-          FOCUS_RING,
-        )}
-      >
-        Turn {current}
-        <ChevronDown className="size-3.5 opacity-70" />
-      </button>
-      {popup.isOpen && (
-        <div role="menu" aria-label="Turns" className={cn(MENU_POPUP, "absolute top-full right-0 mt-1 w-36")}>
-          {[...turns].reverse().map((turn) => (
-            <button
-              key={turn}
-              type="button"
-              role="menuitemradio"
-              aria-checked={turn === current}
-              className={MENU_ITEM}
-              onClick={() => {
-                onPick(turn);
-                popup.close();
-              }}
-            >
-              Turn {turn}
-              {turn === turns.at(-1) && <span className="text-xs text-muted-foreground">latest</span>}
-              <Check className={cn("ms-auto size-3.5", turn !== current && "invisible")} />
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+    <ul className="flex flex-col p-2">
+      {worktrees.map((worktree) => (
+        <li key={worktree.path}>
+          <button
+            type="button"
+            title={worktree.path}
+            onClick={() => onOpen(worktree.path)}
+            className={cn(
+              "group flex w-full min-w-0 cursor-pointer items-center gap-2.5 rounded-md px-2 py-2 text-left",
+              "transition-colors hover:bg-accent/60",
+              FOCUS_RING,
+            )}
+          >
+            <FolderGit2 className="size-4 shrink-0 text-muted-foreground" />
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span className="flex min-w-0 items-center gap-1.5 text-sm text-foreground">
+                <span className="truncate">{worktree.name}</span>
+                {worktree.isChatRoot && <span className="shrink-0 text-2xs text-muted-foreground">this chat</span>}
+              </span>
+              <span className="truncate font-mono text-2xs text-muted-foreground">
+                {worktree.branch ?? "detached"}
+              </span>
+            </span>
+            <span className="flex shrink-0 flex-col items-end gap-0.5 text-2xs text-muted-foreground tabular-nums">
+              {fileCountLabel(worktree.files)}
+              {worktree.files.length > 0 && (
+                <DiffStat added={totalOf(worktree.files, "added")} removed={totalOf(worktree.files, "removed")} />
+              )}
+            </span>
+            <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/70 group-hover:text-foreground" />
+          </button>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -199,26 +153,37 @@ function SelectedFileDiff({ path, diff, isLoading }: SelectedFileDiffProps) {
   );
 }
 
-export function DiffPanel({ task, project, scope, onScopeChange }: DiffPanelProps) {
+function WorktreeChanges(open: OpenWorktree) {
   const [chosenPath, setChosenPath] = useState<string | null>(null);
+  const { files } = open.worktree;
+  const selectedPath = files.some((file) => file.path === chosenPath) ? chosenPath : (files[0]?.path ?? null);
+  const shown = useWorktreeFileDiff(open, selectedPath);
+  const selectedDiff = shown.diffs.find((diff) => diff.path === selectedPath) ?? null;
+
+  if (files.length === 0) {
+    return <p className="px-4 py-10 text-center text-xs text-muted-foreground">This worktree has no changes</p>;
+  }
+  return (
+    <>
+      {shown.isTruncated && (
+        <p className="px-4 pt-2 text-2xs text-muted-foreground">The diff is too large and was cut short</p>
+      )}
+      {shown.error && <p className="px-4 pt-2 text-2xs text-error-foreground">{shown.error}</p>}
+      <div className="max-h-[38%] shrink-0 overflow-y-auto">
+        <FileList files={files} selectedPath={selectedPath} onSelect={setChosenPath} />
+      </div>
+      {selectedPath && <SelectedFileDiff path={selectedPath} diff={selectedDiff} isLoading={shown.isLoading} />}
+    </>
+  );
+}
+
+export function DiffPanel({ task, project }: DiffPanelProps) {
+  const [openPath, setOpenPath] = useState<string | null>(null);
   const [refreshCount, setRefreshCount] = useState(0);
   const revision = `${task.status}:${refreshCount}`;
-  const isWorkingTree = scope.kind === "workingTree";
-  const turnDiff = useTurnDiff(task.id, scope.kind === "turn" ? scope.turn : null, revision);
-  const workingTree = useWorkingTreeFiles(task.id, isWorkingTree, revision);
-  const listed = isWorkingTree ? workingTree : turnDiff;
-  const selectedPath = listed.files.some((file) => file.path === chosenPath)
-    ? chosenPath
-    : (listed.files[0]?.path ?? null);
-  const workingFileDiff = useWorkingFileDiff(task.id, isWorkingTree ? selectedPath : null, revision);
-  const shown = isWorkingTree ? workingFileDiff : turnDiff;
-  const selectedDiff = shown.diffs.find((diff) => diff.path === selectedPath) ?? null;
-  const currentTurn = scope.kind === "turn" ? (scope.turn ?? turnDiff.turns.at(-1) ?? null) : null;
-
-  function changeScope(kind: ScopeKind) {
-    setChosenPath(null);
-    onScopeChange(kind === "turn" ? LATEST_TURN_SCOPE : { kind: "workingTree" });
-  }
+  const loaded = useLoaded(`${task.id}:${revision}`, () => gitApi.sessionWorktrees(task.id));
+  const worktrees = loaded.data ?? [];
+  const opened = worktrees.find((worktree) => worktree.path === openPath) ?? null;
 
   return (
     <aside
@@ -229,20 +194,33 @@ export function DiffPanel({ task, project, scope, onScopeChange }: DiffPanelProp
         data-tauri-drag-region
         className="flex h-(--island-header-height) shrink-0 items-center gap-2 border-b border-border px-3 text-sm"
       >
-        <Segmented label="Diff scope" options={SCOPE_OPTIONS} value={scope.kind} onChange={changeScope} />
-        {currentTurn !== null && turnDiff.turns.length > 1 && (
-          <TurnPicker
-            turns={turnDiff.turns}
-            current={currentTurn}
-            onPick={(turn) => onScopeChange({ kind: "turn", turn })}
-          />
+        {opened ? (
+          <>
+            <button
+              type="button"
+              className={ICON_BUTTON}
+              aria-label="Back to worktrees"
+              title="Back to worktrees"
+              onClick={() => setOpenPath(null)}
+            >
+              <ChevronLeft />
+            </button>
+            <span className="min-w-0 truncate font-medium text-foreground" title={opened.path}>
+              {opened.name}
+            </span>
+            <span data-tauri-drag-region className="min-w-0 flex-1" />
+            <DiffStat
+              added={totalOf(opened.files, "added")}
+              removed={totalOf(opened.files, "removed")}
+              className="text-xs"
+            />
+          </>
+        ) : (
+          <>
+            <span className="px-1 font-medium text-foreground">Worktrees</span>
+            <span data-tauri-drag-region className="min-w-0 flex-1" />
+          </>
         )}
-        <span data-tauri-drag-region className="min-w-0 flex-1" />
-        <DiffStat
-          added={totalOf(listed.files, "added")}
-          removed={totalOf(listed.files, "removed")}
-          className="text-xs"
-        />
         <button
           type="button"
           className={ICON_BUTTON}
@@ -256,23 +234,16 @@ export function DiffPanel({ task, project, scope, onScopeChange }: DiffPanelProp
       {project && (
         <p className="truncate px-4 pt-2 text-2xs text-muted-foreground" title={project.path}>
           {project.name}
-          {shown.isTruncated && " · the diff is too large and was cut short"}
         </p>
       )}
-      {listed.error && <p className="px-4 py-6 text-center text-xs text-error-foreground">{listed.error}</p>}
-      {!listed.error && listed.files.length === 0 && (
+      {loaded.error && <p className="px-4 py-6 text-center text-xs text-error-foreground">{loaded.error}</p>}
+      {!loaded.error && worktrees.length === 0 && (
         <p className="px-4 py-10 text-center text-xs text-muted-foreground">
-          {listed.isLoading ? "Loading…" : emptyMessageFor(scope, turnDiff.turns)}
+          {loaded.isLoading ? "Loading…" : "No worktrees for this chat"}
         </p>
       )}
-      {listed.files.length > 0 && (
-        <>
-          <div className="max-h-[38%] shrink-0 overflow-y-auto">
-            <FileList files={listed.files} selectedPath={selectedPath} onSelect={setChosenPath} />
-          </div>
-          {selectedPath && <SelectedFileDiff path={selectedPath} diff={selectedDiff} isLoading={shown.isLoading} />}
-        </>
-      )}
+      {opened && <WorktreeChanges key={opened.path} chatId={task.id} worktree={opened} revision={revision} />}
+      {!opened && worktrees.length > 0 && <WorktreeList worktrees={worktrees} onOpen={setOpenPath} />}
     </aside>
   );
 }
