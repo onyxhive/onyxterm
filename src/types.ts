@@ -151,11 +151,19 @@ export interface Suggestion {
   description: string;
 }
 
+export type NotificationTone = TaskStatus | "error";
+
 export interface Toast {
   id: string;
   taskId: string;
   headline: string;
   detail: string;
+  tone: NotificationTone;
+}
+
+export interface NotificationEntry extends Toast {
+  createdAt: number;
+  isRead: boolean;
 }
 
 export type FileChange =

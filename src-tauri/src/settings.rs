@@ -9,6 +9,8 @@ use crate::worktrees::WORK_IN_WORKTREES_SETTING;
 
 const MAX_KEY_LENGTH: usize = 64;
 const MAX_VALUE_LENGTH: usize = 4096;
+const MAX_NOTIFICATION_HISTORY_LENGTH: usize = 262_144;
+const NOTIFICATION_HISTORY_SETTING: &str = "notificationHistory";
 const MAX_BRANCH_PREFIX_LENGTH: usize = 32;
 const BRANCH_PREFIX_SYMBOLS: [char; 4] = ['-', '_', '.', '/'];
 pub const COLOR_SCHEME_SETTING: &str = "colorScheme";
@@ -64,8 +66,12 @@ fn validated_value(key: &str, value: &str) -> AppResult<()> {
     Err(AppError::Invalid(format!("{value:?} is not a valid {key} setting")))
 }
 
+fn max_value_length(key: &str) -> usize {
+    if key == NOTIFICATION_HISTORY_SETTING { MAX_NOTIFICATION_HISTORY_LENGTH } else { MAX_VALUE_LENGTH }
+}
+
 pub fn store_setting(connection: &Connection, key: &str, value: &str) -> AppResult<()> {
-    if key.is_empty() || key.len() > MAX_KEY_LENGTH || value.len() > MAX_VALUE_LENGTH {
+    if key.is_empty() || key.len() > MAX_KEY_LENGTH || value.len() > max_value_length(key) {
         return Err(AppError::Invalid("setting key or value is too long".into()));
     }
     validated_value(key, value)?;
@@ -116,6 +122,17 @@ mod tests {
         store_setting(&connection, "preferredEditor", "zed").unwrap();
         assert_eq!(stored_setting(&connection, COLOR_SCHEME_SETTING).unwrap().as_deref(), Some("dark"));
         assert_eq!(stored_setting(&connection, "missing").unwrap(), None);
+    }
+
+    #[test]
+    fn allows_a_longer_value_only_for_the_notification_history() {
+        let db = Db::open_in_memory().unwrap();
+        let connection = db.connection();
+        let long_value = "x".repeat(MAX_VALUE_LENGTH + 1);
+        assert!(store_setting(&connection, "preferredEditor", &long_value).is_err());
+        store_setting(&connection, NOTIFICATION_HISTORY_SETTING, &long_value).unwrap();
+        let too_long = "x".repeat(MAX_NOTIFICATION_HISTORY_LENGTH + 1);
+        assert!(store_setting(&connection, NOTIFICATION_HISTORY_SETTING, &too_long).is_err());
     }
 
     #[test]

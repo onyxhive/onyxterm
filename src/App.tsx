@@ -7,6 +7,7 @@ import { DiffPanel } from "./components/DiffPanel";
 import { FilesPanel } from "./components/FilesPanel";
 import type { AgentChoice } from "./components/ComposerControls";
 import { NewChat, type ChatStart } from "./components/NewChat";
+import { NotificationCenter } from "./components/NotificationCenter";
 import { prAuthorFilterFrom, PullRequestsPage } from "./components/PullRequestsPage";
 import { SettingsPage } from "./components/SettingsPage";
 import { SidePanel } from "./components/SidePanel";
@@ -26,6 +27,7 @@ import { displayTitle, toTask } from "./tasks";
 import type { Chat, Provider, Task, TaskStatus, Toast } from "./types";
 import { collapsedSectionsFrom } from "./collapsedSections";
 import { useChats } from "./useChats";
+import { useNotificationHistory } from "./useNotificationHistory";
 import { shortcutCommandFor, type ShortcutCommand } from "./keybindings";
 import { applyPreferences, areInAppNotificationsOn, isToggleOn } from "./preferences";
 import { useProjectBranches } from "./useProjectBranches";
@@ -80,10 +82,18 @@ export default function App() {
   const sidePanelTabRef = useRef(workbench.sidePanelTab);
   sidePanelTabRef.current = workbench.sidePanelTab;
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const notificationHistory = useNotificationHistory();
 
   function showError(message: string) {
-    const toast: Toast = { id: `error-${Date.now()}`, taskId: "", headline: "Something failed", detail: message };
+    const toast: Toast = {
+      id: `error-${Date.now()}`,
+      taskId: "",
+      headline: "Something failed",
+      detail: message,
+      tone: "error",
+    };
     setToasts((current) => [...current, toast]);
+    notificationHistory.record(toast);
   }
 
   const { settings, remember } = useSettings();
@@ -114,12 +124,14 @@ export default function App() {
     const headline = ATTENTION_HEADLINES[chat.state];
     if (!headline || chat.id === selectedTaskIdRef.current || !areInAppNotificationsOn()) return;
     const toast: Toast = {
-      id: `${chat.id}-${chat.state}`,
+      id: `${chat.id}-${chat.state}-${Date.now()}`,
       taskId: chat.id,
       headline: `${displayTitle(chat.title)} ${headline}`,
       detail: projectName(chat.projectId),
+      tone: chat.state,
     };
     setToasts((current) => [...current.filter((candidate) => candidate.taskId !== chat.id), toast]);
+    notificationHistory.record(toast);
   }
 
   function onStateChange(chat: Chat) {
@@ -183,6 +195,7 @@ export default function App() {
   }
 
   function openTask(taskId: string) {
+    notificationHistory.markChatRead(taskId);
     setSelectedTaskId(taskId);
     setView("chat");
   }
@@ -209,7 +222,8 @@ export default function App() {
     if (chat) setSelectedTaskId(chat.id);
   }
 
-  function openToast(toast: Toast) {
+  function openNotification(toast: Toast) {
+    notificationHistory.markRead(toast.id);
     const chat = chats.find((candidate) => candidate.id === toast.taskId);
     if (chat) {
       workspaceActions.onSelect(chat.workspaceId);
@@ -402,6 +416,17 @@ export default function App() {
         isPullRequestsActive={view === "prs"}
         isSettingsActive={view === "settings"}
         actions={sidebarActions}
+        notifications={
+          <NotificationCenter
+            entries={notificationHistory.entries}
+            unreadCount={notificationHistory.unreadCount}
+            actions={{
+              onOpen: openNotification,
+              onMarkAllRead: notificationHistory.markAllRead,
+              onClear: notificationHistory.clear,
+            }}
+          />
+        }
         header={
           <WorkspaceSwitcher
             workspaces={workspaces}
@@ -439,7 +464,7 @@ export default function App() {
           </SidePanel>
         )}
       </main>
-      <Toasts toasts={toasts} tasks={tasks} onOpen={openToast} onDismiss={dismissToast} />
+      <Toasts toasts={toasts} onOpen={openNotification} onDismiss={dismissToast} />
     </div>
   );
 }

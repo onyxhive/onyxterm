@@ -49,6 +49,7 @@ interface SidebarProps {
   isPullRequestsActive: boolean;
   isSettingsActive: boolean;
   header: ReactNode;
+  notifications: ReactNode;
   actions: SidebarActions;
 }
 
@@ -81,6 +82,14 @@ const ROW_ACTION_CLASS = cn(
   "pointer-events-none absolute inset-y-0 right-0 inline-flex cursor-pointer items-center rounded-md px-1.5",
   "text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:pointer-events-auto",
   "focus-visible:opacity-100 group-hover/row:pointer-events-auto group-hover/row:opacity-100",
+);
+
+export const SIDEBAR_UTILITY_BUTTON = cn(
+  "flex size-8 cursor-pointer items-center justify-center rounded-(--control-radius) font-medium",
+  "text-sidebar-muted-foreground/80 hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
+  "disabled:pointer-events-none disabled:opacity-64 [&>svg]:size-4 [&>svg]:shrink-0",
+  "aria-pressed:bg-sidebar-row-active aria-pressed:text-sidebar-foreground",
+  FOCUS_RING,
 );
 
 function RowStatusSlot({ task }: { task: Task }) {
@@ -261,13 +270,7 @@ function UtilityItem({ icon, label, isActive = false, disabledReason, onClick }:
         aria-pressed={isActive}
         disabled={disabledReason !== undefined}
         onClick={onClick}
-        className={cn(
-          "flex size-8 cursor-pointer items-center justify-center rounded-(--control-radius) font-medium",
-          "text-sidebar-muted-foreground/80 hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
-          "disabled:pointer-events-none disabled:opacity-64 [&>svg]:size-4 [&>svg]:shrink-0",
-          "aria-pressed:bg-sidebar-row-active aria-pressed:text-sidebar-foreground",
-          FOCUS_RING,
-        )}
+        className={SIDEBAR_UTILITY_BUTTON}
       >
         {icon}
       </button>
@@ -421,6 +424,7 @@ export function Sidebar(props: SidebarProps) {
           </ul>
         </nav>
         <div className="flex shrink-0 flex-row items-center gap-1 px-2 pt-1 pb-2">
+          {props.notifications}
           <UtilityItem
             icon={<Settings />}
             label="Settings"

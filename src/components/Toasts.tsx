@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { CircleAlert, X } from "lucide-react";
-import type { Task, Toast } from "../types";
+import type { NotificationTone, Toast } from "../types";
 import { StatusDot } from "./StatusBadge";
 import { cn, FOCUS_RING, ICON_BUTTON } from "./ui";
 
@@ -8,19 +8,22 @@ const TOAST_LIFETIME_MS = 3000;
 
 interface ToastsProps {
   toasts: Toast[];
-  tasks: Task[];
   onOpen: (toast: Toast) => void;
   onDismiss: (toastId: string) => void;
 }
 
 interface ToastCardProps {
   toast: Toast;
-  task: Task | undefined;
   onOpen: (toast: Toast) => void;
   onDismiss: (toastId: string) => void;
 }
 
-function ToastCard({ toast, task, onOpen, onDismiss }: ToastCardProps) {
+export function NotificationIcon({ tone }: { tone: NotificationTone }) {
+  if (tone === "error") return <CircleAlert className="size-4 text-error" />;
+  return <StatusDot status={tone} className="size-2" />;
+}
+
+function ToastCard({ toast, onOpen, onDismiss }: ToastCardProps) {
   const [isHovered, setIsHovered] = useState(false);
 
   useEffect(() => {
@@ -44,11 +47,7 @@ function ToastCard({ toast, task, onOpen, onDismiss }: ToastCardProps) {
         )}
       >
         <span className="flex h-5 w-4 shrink-0 items-center justify-center">
-          {task ? (
-            <StatusDot status={task.status} className="size-2" />
-          ) : (
-            <CircleAlert className="size-4 text-error" />
-          )}
+          <NotificationIcon tone={toast.tone} />
         </span>
         <span className="flex min-w-0 flex-col gap-0.5">
           <span className="font-medium [overflow-wrap:anywhere]">{toast.headline}</span>
@@ -67,7 +66,7 @@ function ToastCard({ toast, task, onOpen, onDismiss }: ToastCardProps) {
   );
 }
 
-export function Toasts({ toasts, tasks, onOpen, onDismiss }: ToastsProps) {
+export function Toasts({ toasts, onOpen, onDismiss }: ToastsProps) {
   return (
     <div
       role="region"
@@ -76,13 +75,7 @@ export function Toasts({ toasts, tasks, onOpen, onDismiss }: ToastsProps) {
       className="pointer-events-none fixed right-4 bottom-4 z-50 flex w-[22rem] max-w-[calc(100vw-2rem)] flex-col gap-2"
     >
       {toasts.map((toast) => (
-        <ToastCard
-          key={toast.id}
-          toast={toast}
-          task={tasks.find((candidate) => candidate.id === toast.taskId)}
-          onOpen={onOpen}
-          onDismiss={onDismiss}
-        />
+        <ToastCard key={toast.id} toast={toast} onOpen={onOpen} onDismiss={onDismiss} />
       ))}
     </div>
   );
