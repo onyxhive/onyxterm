@@ -1,17 +1,12 @@
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, FileText, FolderGit2, RotateCw } from "lucide-react";
+import { ChevronLeft, ChevronRight, FileText, RotateCw } from "lucide-react";
 import { parseUnifiedDiff, type ParsedFileDiff } from "../diffText";
 import { gitApi } from "../gitApi";
-import type { DiffFile, Project, SessionWorktree, Task } from "../types";
+import type { DiffFile, SessionWorktree, Task } from "../types";
 import { useLoaded } from "../useLoaded";
 import { DiffStat, totalOf } from "./DiffStat";
 import { UnifiedDiff } from "./UnifiedDiff";
 import { cn, FOCUS_RING, ICON_BUTTON, SIDE_PANEL_TOOLBAR } from "./ui";
-
-interface DiffPanelProps {
-  task: Task;
-  project: Project | undefined;
-}
 
 interface OpenWorktree {
   chatId: string;
@@ -27,9 +22,28 @@ function folderOf(path: string): string {
   return path.split("/").slice(0, -1).join("/");
 }
 
-function fileCountLabel(files: DiffFile[]): string {
-  if (files.length === 0) return "No changes";
-  return `${files.length} file${files.length === 1 ? "" : "s"}`;
+function countLabel(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
+function ChangeSummary({ files }: { files: DiffFile[] }) {
+  if (files.length === 0) return <span className="shrink-0 text-xs text-muted-foreground">Clean</span>;
+  return (
+    <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground tabular-nums">
+      {countLabel(files.length, "file")}
+      <span aria-hidden="true">·</span>
+      <DiffStat added={totalOf(files, "added")} removed={totalOf(files, "removed")} />
+    </span>
+  );
+}
+
+function WorktreeName({ worktree }: { worktree: SessionWorktree }) {
+  return (
+    <span title={worktree.path} className="flex min-w-0 flex-1 items-baseline gap-2">
+      <span className="max-w-full shrink-0 truncate font-medium text-foreground">{worktree.name}</span>
+      <span className="min-w-0 truncate text-xs text-muted-foreground">{worktree.branch ?? "detached"}</span>
+    </span>
+  );
 }
 
 function useWorktreeFileDiff({ chatId, worktree, revision }: OpenWorktree, path: string | null) {
@@ -45,35 +59,21 @@ function useWorktreeFileDiff({ chatId, worktree, revision }: OpenWorktree, path:
 
 function WorktreeList({ worktrees, onOpen }: { worktrees: SessionWorktree[]; onOpen: (path: string) => void }) {
   return (
-    <ul className="flex flex-col p-2">
+    <ul className="flex flex-col p-1.5">
       {worktrees.map((worktree) => (
         <li key={worktree.path}>
           <button
             type="button"
-            title={worktree.path}
             onClick={() => onOpen(worktree.path)}
             className={cn(
-              "group flex w-full min-w-0 cursor-pointer items-center gap-2.5 rounded-md px-2 py-2 text-left",
+              "group flex h-8 w-full min-w-0 cursor-pointer items-center gap-2 rounded-md px-2 text-left text-sm",
               "transition-colors hover:bg-accent/60",
               FOCUS_RING,
             )}
           >
-            <FolderGit2 className="size-4 shrink-0 text-muted-foreground" />
-            <span className="flex min-w-0 flex-1 flex-col">
-              <span className="flex min-w-0 items-center gap-1.5 text-sm text-foreground">
-                <span className="truncate">{worktree.name}</span>
-                {worktree.isChatRoot && <span className="shrink-0 text-2xs text-muted-foreground">this chat</span>}
-              </span>
-              <span className="truncate font-mono text-2xs text-muted-foreground">
-                {worktree.branch ?? "detached"}
-              </span>
-            </span>
-            <span className="flex shrink-0 flex-col items-end gap-0.5 text-2xs text-muted-foreground tabular-nums">
-              {fileCountLabel(worktree.files)}
-              {worktree.files.length > 0 && (
-                <DiffStat added={totalOf(worktree.files, "added")} removed={totalOf(worktree.files, "removed")} />
-              )}
-            </span>
+            <WorktreeName worktree={worktree} />
+            {worktree.isChatRoot && <span className="shrink-0 text-xs text-muted-foreground/70">current</span>}
+            <ChangeSummary files={worktree.files} />
             <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/70 group-hover:text-foreground" />
           </button>
         </li>
@@ -157,7 +157,7 @@ function WorktreeChanges(open: OpenWorktree) {
   const selectedDiff = shown.diffs.find((diff) => diff.path === selectedPath) ?? null;
 
   if (files.length === 0) {
-    return <p className="px-4 py-10 text-center text-xs text-muted-foreground">This worktree has no changes</p>;
+    return <p className="px-4 py-10 text-center text-xs text-muted-foreground">No changes in this worktree</p>;
   }
   return (
     <>
@@ -173,40 +173,40 @@ function WorktreeChanges(open: OpenWorktree) {
   );
 }
 
-export function DiffPanel({ task, project }: DiffPanelProps) {
+function openedWorktree(worktrees: SessionWorktree[], openPath: string | null): SessionWorktree | null {
+  if (worktrees.length === 1) return worktrees[0];
+  return worktrees.find((worktree) => worktree.path === openPath) ?? null;
+}
+
+export function DiffPanel({ task }: { task: Task }) {
   const [openPath, setOpenPath] = useState<string | null>(null);
   const [refreshCount, setRefreshCount] = useState(0);
   const revision = `${task.status}:${refreshCount}`;
   const loaded = useLoaded(`${task.id}:${revision}`, () => gitApi.sessionWorktrees(task.id));
   const worktrees = loaded.data ?? [];
-  const opened = worktrees.find((worktree) => worktree.path === openPath) ?? null;
+  const hasChoice = worktrees.length > 1;
+  const opened = openedWorktree(worktrees, openPath);
 
   return (
     <>
       <header className={SIDE_PANEL_TOOLBAR}>
-        {opened ? (
-          <>
-            <button
-              type="button"
-              className={ICON_BUTTON}
-              aria-label="Back to worktrees"
-              title="Back to worktrees"
-              onClick={() => setOpenPath(null)}
-            >
-              <ChevronLeft />
-            </button>
-            <span className="min-w-0 truncate font-medium text-foreground" title={opened.path}>
-              {opened.name}
-            </span>
-            <span className="min-w-0 flex-1" />
-            <DiffStat
-              added={totalOf(opened.files, "added")}
-              removed={totalOf(opened.files, "removed")}
-              className="text-xs"
-            />
-          </>
-        ) : (
-          <span className="min-w-0 flex-1" />
+        {opened && hasChoice && (
+          <button
+            type="button"
+            className={ICON_BUTTON}
+            aria-label="Back to worktrees"
+            title="Back to worktrees"
+            onClick={() => setOpenPath(null)}
+          >
+            <ChevronLeft />
+          </button>
+        )}
+        {opened && <WorktreeName worktree={opened} />}
+        {opened && <ChangeSummary files={opened.files} />}
+        {!opened && (
+          <span className="min-w-0 flex-1 text-xs text-muted-foreground">
+            {hasChoice && countLabel(worktrees.length, "worktree")}
+          </span>
         )}
         <button
           type="button"
@@ -218,11 +218,6 @@ export function DiffPanel({ task, project }: DiffPanelProps) {
           <RotateCw />
         </button>
       </header>
-      {project && (
-        <p className="truncate px-4 pt-2 text-2xs text-muted-foreground" title={project.path}>
-          {project.name}
-        </p>
-      )}
       {loaded.error && <p className="px-4 py-6 text-center text-xs text-error-foreground">{loaded.error}</p>}
       {!loaded.error && worktrees.length === 0 && (
         <p className="px-4 py-10 text-center text-xs text-muted-foreground">

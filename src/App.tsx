@@ -294,7 +294,6 @@ export default function App() {
   }
 
   function renderSidePanelTab(task: Task) {
-    const project = projects.find((candidate) => candidate.id === task.projectId);
     if (workbench.sidePanelTab === "files") {
       return (
         <FilesPanel
@@ -310,13 +309,13 @@ export default function App() {
         <SubagentsPanel
           key={task.id}
           task={task}
-          projectPath={project?.path ?? null}
+          projectPath={projects.find((project) => project.id === task.projectId)?.path ?? null}
           agentId={workbench.openedAgentId}
           onOpenAgent={openAgent}
         />
       );
     }
-    return <DiffPanel key={task.id} task={task} project={project} />;
+    return <DiffPanel key={task.id} task={task} />;
   }
 
   function renderMain() {
