@@ -17,14 +17,15 @@ import { useSubagents } from "../useGit";
 import { useProjectFiles } from "../useProjectFiles";
 import { ChangedFilesCard } from "./ChangesPanel";
 import { Composer, COMPOSER_PLACEHOLDER, QUESTION_PLACEHOLDER } from "./Composer";
+import { ActivityPanel } from "./ActivityPanel";
 import { AgentPicker } from "./AgentPicker";
+import type { SubagentEntry } from "./AgentCardRow";
 import { ApprovalGroup } from "./ApprovalRow";
 import { ChatWorkspaceControls, type AgentChoice } from "./ComposerControls";
 import { FeedItemView } from "./FeedItemView";
 import { MentionTargetsContext } from "./MentionText";
 import { ProjectRootsContext } from "./projectPaths";
 import { QuestionDrawer, useQuestionAnswers, type QuestionRequest } from "./QuestionDrawer";
-import { SubagentGroup, type SubagentEntry } from "./SubagentGroup";
 import { useDockHeight } from "./useDockHeight";
 import { WorkingRow } from "./WorkingRow";
 
@@ -54,7 +55,6 @@ type PermissionRequest = Extract<FeedItem, { kind: "permission" }>;
 
 type FeedBlock =
   | { kind: "item"; item: FeedItem; index: number }
-  | { kind: "subagents"; index: number; agents: SubagentEntry[] }
   | { kind: "approvals"; index: number; requests: PermissionRequest[] };
 
 const TURN_ACTIVITY_KINDS = new Set<FeedItem["kind"]>(["steps", "subagent", "permission"]);
@@ -87,24 +87,21 @@ function pendingToolIds(feed: FeedItem[]): Set<string> {
   return new Set(feed.flatMap((item) => (item.kind === "permission" && item.toolUseId ? [item.toolUseId] : [])));
 }
 
-function feedBlocks(feed: FeedItem[], subagents: Subagent[]): FeedBlock[] {
-  const blocks: FeedBlock[] = [];
+function subagentEntries(feed: FeedItem[], subagents: Subagent[]): SubagentEntry[] {
   const awaited = pendingToolIds(feed);
-  let openSubagents: Extract<FeedBlock, { kind: "subagents" }> | null = null;
+  return feed.flatMap((item) => {
+    if (item.kind !== "subagent") return [];
+    const needsApproval = item.steps.some((step) => awaited.has(step.id));
+    return [{ ...item, ...subagentWith(subagents, item.toolUseId), steps: item.steps, needsApproval }];
+  });
+}
+
+function feedBlocks(feed: FeedItem[]): FeedBlock[] {
+  const blocks: FeedBlock[] = [];
   let openApprovals: Extract<FeedBlock, { kind: "approvals" }> | null = null;
   feed.forEach((item, index) => {
-    if (!TURN_ACTIVITY_KINDS.has(item.kind)) {
-      openSubagents = null;
-      openApprovals = null;
-    }
-    if (item.kind === "subagent") {
-      const needsApproval = item.steps.some((step) => awaited.has(step.id));
-      const live = subagentWith(subagents, item.toolUseId);
-      const agent: SubagentEntry = { ...item, ...live, steps: item.steps, needsApproval };
-      if (openSubagents) openSubagents.agents.push(agent);
-      else blocks.push((openSubagents = { kind: "subagents", index, agents: [agent] }));
-      return;
-    }
+    if (!TURN_ACTIVITY_KINDS.has(item.kind)) openApprovals = null;
+    if (item.kind === "subagent") return;
     if (item.kind === "permission") {
       if (openApprovals) openApprovals.requests.push(item);
       else blocks.push((openApprovals = { kind: "approvals", index, requests: [item] }));
@@ -192,6 +189,7 @@ export function ChatView({ task, projectPath, actions }: ChatViewProps) {
     <ProjectRootsContext value={projectRoots}>
       <MentionTargetsContext value={mentionTargets}>
         <div className="relative flex min-h-0 flex-1 flex-col">
+          <ActivityPanel agents={subagentEntries(task.feed, subagents)} />
           <div
             ref={scrollRef}
             style={{ paddingBottom: dockHeight + TIMELINE_END_GAP }}
@@ -203,10 +201,8 @@ export function ChatView({ task, projectPath, actions }: ChatViewProps) {
               </div>
             )}
             <div className="mx-auto w-full max-w-(--chat-content-max-width) pt-4">
-              {feedBlocks(task.feed, subagents).map((block) =>
-                block.kind === "subagents" ? (
-                  <SubagentGroup key={block.index} agents={block.agents} />
-                ) : block.kind === "approvals" ? (
+              {feedBlocks(task.feed).map((block) =>
+                block.kind === "approvals" ? (
                   <ApprovalGroup
                     key={block.index}
                     requests={block.requests}
