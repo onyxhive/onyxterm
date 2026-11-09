@@ -1,17 +1,10 @@
 import { Compass, Feather, Flame, Leaf, Orbit, Rocket, Sparkles, Telescope, type LucideIcon } from "lucide-react";
 import type { Subagent, SubagentStatus } from "../types";
-import { Markdown } from "./Markdown";
 import { cn } from "./ui";
 import { useNow } from "./useNow";
 import { formatDuration } from "./WorkingRow";
 
 const MS_PER_SECOND = 1000;
-
-const STATUS_DOT: Record<SubagentStatus, string> = {
-  running: "bg-info",
-  completed: "bg-success",
-  failed: "bg-error",
-};
 
 export const SUBAGENT_STATUS_LABEL: Record<SubagentStatus, string> = {
   running: "Working",
@@ -53,27 +46,16 @@ function identityOf(agentId: string): { tone: string; Icon: LucideIcon } {
 
 interface AgentGlyphProps {
   agentId: string;
-  status?: SubagentStatus;
   className?: string;
 }
 
-export function AgentGlyph({ agentId, status, className }: AgentGlyphProps) {
+export function AgentGlyph({ agentId, className }: AgentGlyphProps) {
   const { tone, Icon } = identityOf(agentId);
   return (
     <span className={cn("relative inline-flex size-4 shrink-0 rounded-full bg-background", className)}>
       <span className={cn("inline-flex size-full items-center justify-center rounded-full", tone)}>
         <Icon aria-hidden className="size-[62%]" />
       </span>
-      {status && (
-        <span
-          aria-hidden="true"
-          className={cn(
-            "absolute -right-1 -bottom-1 size-2 rounded-full border-2 border-background",
-            STATUS_DOT[status],
-            status === "running" && "animate-status-pulse",
-          )}
-        />
-      )}
     </span>
   );
 }
@@ -104,23 +86,4 @@ export function AgentElapsed({ agent }: { agent: SubagentView }) {
   const seconds = elapsedSeconds(agent, now);
   if (seconds === null) return null;
   return <span className="tabular-nums">{formatDuration(seconds)}</span>;
-}
-
-export function SubagentDetails({ agent, className }: { agent: SubagentView; className?: string }) {
-  if (!agent.lastTool && !agent.summary) {
-    return <p className={cn("text-xs text-muted-foreground", className)}>No activity yet</p>;
-  }
-  return (
-    <div className={cn("flex min-w-0 flex-col gap-1.5", className)}>
-      {agent.lastTool && (
-        <p className="flex min-w-0 items-baseline gap-1.5 text-xs text-muted-foreground">
-          <span className="shrink-0">Last tool</span>
-          <code className="min-w-0 truncate font-mono text-2xs text-foreground/80" title={agent.lastTool}>
-            {agent.lastTool}
-          </code>
-        </p>
-      )}
-      {agent.summary && <Markdown source={agent.summary} className="text-xs text-foreground/80" />}
-    </div>
-  );
 }

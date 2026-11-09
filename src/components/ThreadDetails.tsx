@@ -8,7 +8,6 @@ import { BranchRow } from "./BranchRow";
 import { CommitRows, PullRequestRow } from "./CommitRows";
 import { CreatePrDialog } from "./CreatePrDialog";
 import { DETAILS_SECTION } from "./detailsStyles";
-import { PreviousAgents } from "./PreviousAgents";
 import { cn, ICON_BUTTON } from "./ui";
 import { usePopup } from "./usePopup";
 import { MachineRow, ScriptRows, type ScriptRunner } from "./WorkspaceRows";
@@ -121,20 +120,11 @@ export function ThreadDetails({ task, project, actions }: ThreadDetailsProps) {
               onOpenDiff={openDiff}
             />
           </section>
-          <PreviousAgentsSection chatId={task.id} />
         </div>
       )}
       {isCreatingPr && (
         <CreatePrDialog target={target} initialTitle={task.title} onClose={() => setIsCreatingPr(false)} />
       )}
     </div>
-  );
-}
-
-function PreviousAgentsSection({ chatId }: { chatId: string }) {
-  return (
-    <section aria-label="Previous agents" className={cn(DETAILS_SECTION, "empty:hidden")}>
-      <PreviousAgents chatId={chatId} />
-    </section>
   );
 }
