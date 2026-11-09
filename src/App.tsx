@@ -9,27 +9,28 @@ import type { AgentChoice } from "./components/ComposerControls";
 import { NewChat, type ChatStart } from "./components/NewChat";
 import { prAuthorFilterFrom, PullRequestsPage } from "./components/PullRequestsPage";
 import { SettingsPage } from "./components/SettingsPage";
+import { SidePanel } from "./components/SidePanel";
 import { SubagentsPanel } from "./components/SubagentsPanel";
 import { Sidebar, type SidebarActions } from "./components/Sidebar";
 import { TerminalDrawer } from "./components/TerminalDrawer";
 import { defaultPermissionModeOf, PERMISSION_MODE_SETTING } from "./permissionModes";
 import { openTerminal } from "./terminalSessions";
 import { SidebarToggle, TopBar, TopBarHeading, type View } from "./components/TitleBar";
-import { ThreadDetails, type ThreadDetailsActions } from "./components/ThreadDetails";
+import type { ThreadDetailsActions } from "./components/ThreadDetails";
 import { Toasts } from "./components/Toasts";
 import { useIsFullscreen } from "./components/useIsFullscreen";
 import { WorkspaceSwitcher } from "./components/WorkspaceSwitcher";
 import { EMPTY_FEED } from "./feed";
 import { PR_AUTHOR_FILTER_SETTING, PREFERRED_EDITOR_SETTING, WORK_IN_WORKTREES_SETTING } from "./gitApi";
 import { displayTitle, toTask } from "./tasks";
-import type { Chat, Provider, TaskStatus, Toast } from "./types";
+import type { Chat, Provider, Task, TaskStatus, Toast } from "./types";
 import { collapsedSectionsFrom } from "./collapsedSections";
 import { useChats } from "./useChats";
 import { shortcutCommandFor, type ShortcutCommand } from "./keybindings";
 import { applyPreferences, areInAppNotificationsOn, isToggleOn } from "./preferences";
 import { useProjectBranches } from "./useProjectBranches";
 import { useSettings } from "./useSettings";
-import { useWorkbench } from "./useWorkbench";
+import { useWorkbench, type SidePanelTab } from "./useWorkbench";
 import { useWorkspaces } from "./useWorkspaces";
 
 const DEFAULT_CHOICE: AgentChoice = {
@@ -42,7 +43,7 @@ const DEFAULT_CHOICE: AgentChoice = {
 const IS_MAC = navigator.platform.startsWith("Mac");
 const MAC_WINDOW_CONTROLS_INSET = { "--workspace-controls-left": "90px" } as CSSProperties;
 
-const CHANGES_PANEL_SETTING = "changesPanelOpen";
+const SIDE_PANEL_SETTING = "sidePanelOpen";
 const SUBAGENT_TRAY_COLLAPSED_SETTING = "subagentTrayCollapsed";
 
 const LAST_PROJECT_SETTING_PREFIX = "lastProject:";
@@ -75,7 +76,9 @@ export default function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const isFullscreen = useIsFullscreen();
   const workbench = useWorkbench();
-  const { closeFilesPanel, toggleFilesPanel, toggleTerminal, openSubagentsPanel, closeSubagentsPanel } = workbench;
+  const { toggleTerminal, selectSidePanelTab, openAgent } = workbench;
+  const sidePanelTabRef = useRef(workbench.sidePanelTab);
+  sidePanelTabRef.current = workbench.sidePanelTab;
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   function showError(message: string) {
@@ -84,12 +87,12 @@ export default function App() {
   }
 
   const { settings, remember } = useSettings();
-  const isChangesPanelOpen = settings?.[CHANGES_PANEL_SETTING] === "true";
-  const isChangesPanelOpenRef = useRef(isChangesPanelOpen);
-  isChangesPanelOpenRef.current = isChangesPanelOpen;
+  const isSidePanelOpen = settings?.[SIDE_PANEL_SETTING] === "true";
+  const isSidePanelOpenRef = useRef(isSidePanelOpen);
+  isSidePanelOpenRef.current = isSidePanelOpen;
 
-  function setIsChangesPanelOpen(isOpen: boolean) {
-    remember(CHANGES_PANEL_SETTING, String(isOpen));
+  function setIsSidePanelOpen(isOpen: boolean) {
+    remember(SIDE_PANEL_SETTING, String(isOpen));
   }
 
   const isSubagentTrayCollapsed = isToggleOn(settings ?? {}, SUBAGENT_TRAY_COLLAPSED_SETTING, false);
@@ -137,31 +140,33 @@ export default function App() {
     if (selectedTaskId) void chatState.loadHistory(selectedTaskId);
   }, [selectedTaskId]);
 
-  function toggleChangesPanel() {
-    closeFilesPanel();
-    closeSubagentsPanel();
-    setIsChangesPanelOpen(!isChangesPanelOpenRef.current);
+  function toggleSidePanel() {
+    setIsSidePanelOpen(!isSidePanelOpenRef.current);
   }
 
-  function toggleFiles() {
-    setIsChangesPanelOpen(false);
-    closeSubagentsPanel();
-    toggleFilesPanel();
+  function openSidePanelTab(tab: SidePanelTab) {
+    selectSidePanelTab(tab);
+    setIsSidePanelOpen(true);
+  }
+
+  function toggleSidePanelTab(tab: SidePanelTab) {
+    const isShowingTab = isSidePanelOpenRef.current && sidePanelTabRef.current === tab;
+    selectSidePanelTab(tab);
+    setIsSidePanelOpen(!isShowingTab);
   }
 
   function openSubagents(agentId: string | null) {
-    setIsChangesPanelOpen(false);
-    closeFilesPanel();
-    openSubagentsPanel(agentId);
+    openAgent(agentId);
+    setIsSidePanelOpen(true);
   }
 
   useEffect(() => {
     const commands: Record<ShortcutCommand, () => void> = {
       newChat: () => openNewChat(),
       toggleSidebar: () => setIsSidebarOpen((isOpen) => !isOpen),
-      toggleChangesPanel,
+      toggleChangesPanel: () => toggleSidePanelTab("changes"),
       toggleTerminal,
-      toggleFilesPanel: toggleFiles,
+      toggleFilesPanel: () => toggleSidePanelTab("files"),
     };
     function runShortcut(event: KeyboardEvent) {
       const command = shortcutCommandFor(event);
@@ -240,20 +245,15 @@ export default function App() {
   };
 
   const chatHeaderActions: ChatHeaderActions = {
-    onMarkDone: () => withSelectedChat((chatId) => chatState.setState(chatId, "done")),
-    onReopen: () => withSelectedChat((chatId) => chatState.setState(chatId, "review")),
-    onToggleChangesPanel: toggleChangesPanel,
-    onToggleFilesPanel: toggleFiles,
+    onToggleSidePanel: toggleSidePanel,
     onToggleTerminal: toggleTerminal,
     onNewChatInProject: () => openNewChat(selectedTask?.projectId),
   };
 
   const threadDetailsActions: ThreadDetailsActions = {
-    onOpenDiff: () => {
-      closeFilesPanel();
-      closeSubagentsPanel();
-      setIsChangesPanelOpen(true);
-    },
+    onMarkDone: () => withSelectedChat((chatId) => chatState.setState(chatId, "done")),
+    onReopen: () => withSelectedChat((chatId) => chatState.setState(chatId, "review")),
+    onOpenDiff: () => openSidePanelTab("changes"),
     onBranchChanged: () => selectedTask && refreshBranch(selectedTask.projectId),
     onWorktreeRemoved: chatState.upsertChat,
     onRunInTerminal: (command) =>
@@ -285,22 +285,38 @@ export default function App() {
       <ChatHeader
         task={selectedTask}
         project={project}
-        details={
-          project && (
-            <ThreadDetails
-              key={selectedTask.id}
-              task={selectedTask}
-              project={project}
-              actions={threadDetailsActions}
-            />
-          )
-        }
-        isChangesPanelOpen={isChangesPanelOpen}
-        isFilesPanelOpen={workbench.isFilesPanelOpen}
+        isSidePanelOpen={isSidePanelOpen}
         isTerminalOpen={workbench.isTerminalOpen}
         actions={chatHeaderActions}
+        detailsActions={threadDetailsActions}
       />
     );
+  }
+
+  function renderSidePanelTab(task: Task) {
+    const project = projects.find((candidate) => candidate.id === task.projectId);
+    if (workbench.sidePanelTab === "files") {
+      return (
+        <FilesPanel
+          key={task.id}
+          task={task}
+          preferredEditor={settings?.[PREFERRED_EDITOR_SETTING]}
+          onError={showError}
+        />
+      );
+    }
+    if (workbench.sidePanelTab === "agents") {
+      return (
+        <SubagentsPanel
+          key={task.id}
+          task={task}
+          projectPath={project?.path ?? null}
+          agentId={workbench.openedAgentId}
+          onOpenAgent={openAgent}
+        />
+      );
+    }
+    return <DiffPanel key={task.id} task={task} project={project} />;
   }
 
   function renderMain() {
@@ -364,7 +380,7 @@ export default function App() {
   }
 
   const isChatOpen = view === "chat" && selectedTask !== null;
-  const isChangesPanelVisible = isChatOpen && isChangesPanelOpen;
+  const isSidePanelVisible = isChatOpen && isSidePanelOpen;
 
   if (!workspace) return <div className="h-full bg-window" />;
 
@@ -418,30 +434,10 @@ export default function App() {
             />
           )}
         </div>
-        {isChatOpen && workbench.isFilesPanelOpen && (
-          <FilesPanel
-            key={selectedTask.id}
-            task={selectedTask}
-            preferredEditor={settings?.[PREFERRED_EDITOR_SETTING]}
-            onError={showError}
-          />
-        )}
-        {isChangesPanelVisible && (
-          <DiffPanel
-            key={selectedTask.id}
-            task={selectedTask}
-            project={projects.find((project) => project.id === selectedTask.projectId)}
-          />
-        )}
-        {isChatOpen && workbench.subagentsPanel && (
-          <SubagentsPanel
-            key={selectedTask.id}
-            task={selectedTask}
-            projectPath={projects.find((project) => project.id === selectedTask.projectId)?.path ?? null}
-            agentId={workbench.subagentsPanel.agentId}
-            onOpenAgent={openSubagentsPanel}
-            onClose={closeSubagentsPanel}
-          />
+        {isSidePanelVisible && (
+          <SidePanel tab={workbench.sidePanelTab} onSelectTab={selectSidePanelTab}>
+            {renderSidePanelTab(selectedTask)}
+          </SidePanel>
         )}
       </main>
       <Toasts toasts={toasts} tasks={tasks} onOpen={openToast} onDismiss={dismissToast} />

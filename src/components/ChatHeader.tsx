@@ -1,17 +1,17 @@
-import { CheckCheck, Folder, FolderTree, PanelRight, RotateCcw, SquareTerminal } from "lucide-react";
-import type { ReactNode } from "react";
-import type { Project, Task } from "../types";
+import { Folder, PanelRight, SquareTerminal } from "lucide-react";
+import { gitApi } from "../gitApi";
+import type { GitChangedFile, Project, Task } from "../types";
+import { useLoaded } from "../useLoaded";
+import { DiffStat, totalOf } from "./DiffStat";
 import { PrBadge } from "./PrBadge";
 import { StatusLabel } from "./StatusBadge";
-import { cn, ICON_BUTTON } from "./ui";
+import { ThreadDetails, type ThreadDetailsActions } from "./ThreadDetails";
+import { cn, FOCUS_RING, ICON_BUTTON } from "./ui";
 
 const HIDDEN_HEADER_STATUSES = new Set(["done"]);
 
 export interface ChatHeaderActions {
-  onMarkDone: () => void;
-  onReopen: () => void;
-  onToggleChangesPanel: () => void;
-  onToggleFilesPanel: () => void;
+  onToggleSidePanel: () => void;
   onToggleTerminal: () => void;
   onNewChatInProject: () => void;
 }
@@ -19,36 +19,40 @@ export interface ChatHeaderActions {
 interface ChatHeaderProps {
   task: Task;
   project: Project | undefined;
-  details: ReactNode;
-  isChangesPanelOpen: boolean;
-  isFilesPanelOpen: boolean;
+  isSidePanelOpen: boolean;
   isTerminalOpen: boolean;
   actions: ChatHeaderActions;
+  detailsActions: ThreadDetailsActions;
 }
 
-function DoneToggle({ task, actions }: Pick<ChatHeaderProps, "task" | "actions">) {
-  if (task.status === "done") {
-    return (
-      <button type="button" className={ICON_BUTTON} aria-label="Reopen" title="Reopen" onClick={actions.onReopen}>
-        <RotateCcw />
-      </button>
-    );
-  }
+function useChatStatus(task: Task) {
+  return useLoaded(`${task.id}:${task.status}`, () => gitApi.status({ chat: task.id }));
+}
+
+function ChangesSummary({ files, onOpen }: { files: GitChangedFile[]; onOpen: () => void }) {
+  if (files.length === 0) return null;
+  const added = totalOf(files, "added");
+  const removed = totalOf(files, "removed");
   return (
     <button
       type="button"
-      className={ICON_BUTTON}
-      aria-label="Mark done"
-      title="Mark done"
-      onClick={actions.onMarkDone}
+      aria-label={`Open changes, ${added} additions, ${removed} deletions`}
+      title="Open changes (⌘D)"
+      onClick={onOpen}
+      className={cn(
+        "inline-flex h-7 shrink-0 cursor-pointer items-center rounded-(--control-radius) px-1.5 text-xs opacity-80",
+        "transition-[background-color,opacity] hover:bg-accent hover:opacity-100",
+        FOCUS_RING,
+      )}
     >
-      <CheckCheck />
+      <DiffStat added={added} removed={removed} />
     </button>
   );
 }
 
 export function ChatHeader(props: ChatHeaderProps) {
-  const { task, project, details, isChangesPanelOpen, isFilesPanelOpen, isTerminalOpen, actions } = props;
+  const { task, project, isSidePanelOpen, isTerminalOpen, actions, detailsActions } = props;
+  const status = useChatStatus(task);
   return (
     <>
       <nav aria-label="Chat breadcrumb" data-tauri-drag-region className="min-w-0 flex-1">
@@ -84,8 +88,6 @@ export function ChatHeader(props: ChatHeaderProps) {
         </ol>
       </nav>
       <div className="flex shrink-0 items-center gap-0.5">
-        {details}
-        <DoneToggle task={task} actions={actions} />
         <button
           type="button"
           className={ICON_BUTTON}
@@ -96,26 +98,18 @@ export function ChatHeader(props: ChatHeaderProps) {
         >
           <SquareTerminal />
         </button>
+        <ChangesSummary files={status.data?.files ?? []} onOpen={detailsActions.onOpenDiff} />
         <button
           type="button"
           className={ICON_BUTTON}
-          aria-label="Toggle files"
-          title="Files (⌘⇧E)"
-          aria-pressed={isFilesPanelOpen}
-          onClick={actions.onToggleFilesPanel}
-        >
-          <FolderTree />
-        </button>
-        <button
-          type="button"
-          className={ICON_BUTTON}
-          aria-label="Toggle changed files"
-          title="Diff (⌘D)"
-          aria-pressed={isChangesPanelOpen}
-          onClick={actions.onToggleChangesPanel}
+          aria-label="Toggle side panel"
+          title="Side panel (Changes ⌘D, Files ⌘⇧E)"
+          aria-pressed={isSidePanelOpen}
+          onClick={actions.onToggleSidePanel}
         >
           <PanelRight />
         </button>
+        <ThreadDetails key={task.id} task={task} project={project} status={status} actions={detailsActions} />
       </div>
     </>
   );

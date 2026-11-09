@@ -1,4 +1,11 @@
+import type { DiffFile } from "../types";
 import { cn } from "./ui";
+
+type LineCounts = Pick<DiffFile, "added" | "removed">;
+
+export function totalOf(files: LineCounts[], key: keyof LineCounts): number {
+  return files.reduce((sum, file) => sum + file[key], 0);
+}
 
 export function DiffStat({ added, removed, className }: { added: number; removed: number; className?: string }) {
   return (

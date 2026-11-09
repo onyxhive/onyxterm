@@ -13,6 +13,8 @@ export const SIDE_PANEL = cn(
   "bg-background",
 );
 
+export const SIDE_PANEL_TOOLBAR = "flex h-10 shrink-0 items-center gap-2 border-b border-border px-3 text-sm";
+
 export const ICON_BUTTON = cn(
   "inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-(--control-radius)",
   "text-muted-foreground transition-colors hover:bg-accent hover:text-foreground",

@@ -1,9 +1,9 @@
-import { ChevronLeft, X } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 import type { Task } from "../types";
 import { Markdown } from "./Markdown";
 import { ProjectRootsContext, projectRootsOf } from "./projectPaths";
 import { AgentElapsed, AgentGlyph, elapsedSeconds, SUBAGENT_STATUS_LABEL } from "./SubagentRow";
-import { cn, FOCUS_RING, ICON_BUTTON, SIDE_PANEL } from "./ui";
+import { cn, FOCUS_RING, ICON_BUTTON, SIDE_PANEL_TOOLBAR } from "./ui";
 import { useNow } from "./useNow";
 import { subagentTitle, useSubagentEntries, type SubagentEntry } from "./useSubagentEntries";
 import { formatDuration } from "./WorkingRow";
@@ -14,18 +14,9 @@ interface SubagentsPanelProps {
   projectPath: string | null;
   agentId: string | null;
   onOpenAgent: (agentId: string | null) => void;
-  onClose: () => void;
 }
 
 export const NEEDS_APPROVAL_LABEL = "Needs approval";
-
-function CloseButton({ onClose }: { onClose: () => void }) {
-  return (
-    <button type="button" className={ICON_BUTTON} aria-label="Close subagents" title="Close" onClick={onClose}>
-      <X />
-    </button>
-  );
-}
 
 function rowStatus(agent: SubagentEntry): string {
   if (agent.needsApproval) return NEEDS_APPROVAL_LABEL;
@@ -139,45 +130,33 @@ function AgentDetail({ agent }: { agent: SubagentEntry }) {
   );
 }
 
-export function SubagentsPanel({ task, projectPath, agentId, onOpenAgent, onClose }: SubagentsPanelProps) {
+export function SubagentsPanel({ task, projectPath, agentId, onOpenAgent }: SubagentsPanelProps) {
   const agents = useSubagentEntries(task);
   const opened = agents.find((agent) => agent.toolUseId === agentId) ?? null;
 
   return (
-    <aside aria-label="Subagents" className={SIDE_PANEL}>
-      <header
-        data-tauri-drag-region
-        className="flex h-(--topbar-height) shrink-0 items-center gap-2 border-b border-border px-3 text-sm"
-      >
-        {opened ? (
-          <>
-            <button
-              type="button"
-              className={ICON_BUTTON}
-              aria-label="Back to subagents"
-              title="Back to subagents"
-              onClick={() => onOpenAgent(null)}
-            >
-              <ChevronLeft />
-            </button>
-            <AgentGlyph agentId={opened.toolUseId} className="size-5" />
-            <span className="min-w-0 truncate font-medium text-foreground" title={subagentTitle(opened)}>
-              {subagentTitle(opened)}
-            </span>
-            <span data-tauri-drag-region className="min-w-0 flex-1" />
-            <span className="shrink-0 truncate text-xs text-muted-foreground">{opened.agentType}</span>
-          </>
-        ) : (
-          <>
-            <span className="px-1 font-medium text-foreground">Subagents</span>
-            <span data-tauri-drag-region className="min-w-0 flex-1" />
-          </>
-        )}
-        <CloseButton onClose={onClose} />
-      </header>
+    <>
+      {opened && (
+        <header className={SIDE_PANEL_TOOLBAR}>
+          <button
+            type="button"
+            className={ICON_BUTTON}
+            aria-label="Back to subagents"
+            title="Back to subagents"
+            onClick={() => onOpenAgent(null)}
+          >
+            <ChevronLeft />
+          </button>
+          <AgentGlyph agentId={opened.toolUseId} className="size-5" />
+          <span className="min-w-0 flex-1 truncate font-medium text-foreground" title={subagentTitle(opened)}>
+            {subagentTitle(opened)}
+          </span>
+          <span className="shrink-0 truncate text-xs text-muted-foreground">{opened.agentType}</span>
+        </header>
+      )}
       <ProjectRootsContext value={projectRootsOf(task, projectPath)}>
         {opened ? <AgentDetail agent={opened} /> : <AgentList agents={agents} onOpenAgent={onOpenAgent} />}
       </ProjectRootsContext>
-    </aside>
+    </>
   );
 }

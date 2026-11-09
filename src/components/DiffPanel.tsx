@@ -4,9 +4,9 @@ import { parseUnifiedDiff, type ParsedFileDiff } from "../diffText";
 import { gitApi } from "../gitApi";
 import type { DiffFile, Project, SessionWorktree, Task } from "../types";
 import { useLoaded } from "../useLoaded";
-import { DiffStat } from "./DiffStat";
+import { DiffStat, totalOf } from "./DiffStat";
 import { UnifiedDiff } from "./UnifiedDiff";
-import { cn, FOCUS_RING, ICON_BUTTON, SIDE_PANEL } from "./ui";
+import { cn, FOCUS_RING, ICON_BUTTON, SIDE_PANEL_TOOLBAR } from "./ui";
 
 interface DiffPanelProps {
   task: Task;
@@ -17,10 +17,6 @@ interface OpenWorktree {
   chatId: string;
   worktree: SessionWorktree;
   revision: string;
-}
-
-function totalOf(files: DiffFile[], key: "added" | "removed"): number {
-  return files.reduce((sum, file) => sum + file[key], 0);
 }
 
 function fileName(path: string): string {
@@ -186,14 +182,8 @@ export function DiffPanel({ task, project }: DiffPanelProps) {
   const opened = worktrees.find((worktree) => worktree.path === openPath) ?? null;
 
   return (
-    <aside
-      aria-label="Diff"
-      className={SIDE_PANEL}
-    >
-      <header
-        data-tauri-drag-region
-        className="flex h-(--topbar-height) shrink-0 items-center gap-2 border-b border-border px-3 text-sm"
-      >
+    <>
+      <header className={SIDE_PANEL_TOOLBAR}>
         {opened ? (
           <>
             <button
@@ -208,7 +198,7 @@ export function DiffPanel({ task, project }: DiffPanelProps) {
             <span className="min-w-0 truncate font-medium text-foreground" title={opened.path}>
               {opened.name}
             </span>
-            <span data-tauri-drag-region className="min-w-0 flex-1" />
+            <span className="min-w-0 flex-1" />
             <DiffStat
               added={totalOf(opened.files, "added")}
               removed={totalOf(opened.files, "removed")}
@@ -216,10 +206,7 @@ export function DiffPanel({ task, project }: DiffPanelProps) {
             />
           </>
         ) : (
-          <>
-            <span className="px-1 font-medium text-foreground">Worktrees</span>
-            <span data-tauri-drag-region className="min-w-0 flex-1" />
-          </>
+          <span className="min-w-0 flex-1" />
         )}
         <button
           type="button"
@@ -244,6 +231,6 @@ export function DiffPanel({ task, project }: DiffPanelProps) {
       )}
       {opened && <WorktreeChanges key={opened.path} chatId={task.id} worktree={opened} revision={revision} />}
       {!opened && worktrees.length > 0 && <WorktreeList worktrees={worktrees} onOpen={setOpenPath} />}
-    </aside>
+    </>
   );
 }

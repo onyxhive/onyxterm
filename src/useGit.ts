@@ -9,10 +9,6 @@ export function targetKey(target: GitTarget): string {
   return "chat" in target ? `chat:${target.chat}` : `project:${target.project}`;
 }
 
-export function useGitStatus(target: GitTarget) {
-  return useLoaded(targetKey(target), () => gitApi.status(target));
-}
-
 export function useBranches(target: GitTarget) {
   return useLoaded(targetKey(target), () => gitApi.branches(target));
 }

@@ -10,7 +10,7 @@ import { useEditors } from "../useProjectTools";
 import { explorerApi, type DirEntry } from "../workbenchApi";
 import { FileIcon, FolderIcon } from "./FileIcon";
 import { FileViewer } from "./FileViewer";
-import { cn, FOCUS_RING, ICON_BUTTON, SIDE_PANEL } from "./ui";
+import { cn, FOCUS_RING, ICON_BUTTON, SIDE_PANEL_TOOLBAR } from "./ui";
 import { preferredOf } from "./WorkspaceRows";
 
 const ROOT_PATH = "";
@@ -236,14 +236,8 @@ export function FilesPanel({ task, preferredEditor, onError }: FilesPanelProps) 
   }
 
   return (
-    <aside
-      aria-label="Files"
-      className={SIDE_PANEL}
-    >
-      <header
-        data-tauri-drag-region
-        className="flex h-(--topbar-height) shrink-0 items-center gap-2 border-b border-border px-3"
-      >
+    <>
+      <header className={SIDE_PANEL_TOOLBAR}>
         <label className="relative flex min-w-0 flex-1 items-center">
           <Search aria-hidden className="pointer-events-none absolute left-2 size-3.5 text-muted-foreground" />
           <input
@@ -296,6 +290,6 @@ export function FilesPanel({ task, preferredEditor, onError }: FilesPanelProps) 
           }}
         />
       )}
-    </aside>
+    </>
   );
 }
