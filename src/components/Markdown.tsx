@@ -1,10 +1,19 @@
+import type { ComponentProps } from "react";
 import ReactMarkdown, { type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { MarkdownCodeBlock } from "./MarkdownCodeBlock";
 import { cn } from "./ui";
 
 const REMARK_PLUGINS = [remarkGfm];
-const COMPONENTS: Components = { pre: MarkdownCodeBlock };
+function MarkdownTable({ children }: ComponentProps<"table">) {
+  return (
+    <div className="chat-markdown-table">
+      <table>{children}</table>
+    </div>
+  );
+}
+
+const COMPONENTS: Components = { pre: MarkdownCodeBlock, table: MarkdownTable };
 
 interface MarkdownProps {
   source: string;
