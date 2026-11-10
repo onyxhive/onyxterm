@@ -26,11 +26,11 @@ npm run tauri dev
 Bump the version in `package.json`, `src-tauri/tauri.conf.json` and `src-tauri/Cargo.toml`, then push a matching tag:
 
 ```sh
-git tag v0.8.3
-git push origin v0.8.3
+git tag v0.9.0
+git push origin v0.9.0
 ```
 
-The `Release` workflow builds the universal `.dmg` and `.app.tar.gz` and publishes them on the GitHub release `Onyx Hive v0.8.3`.
+The `Release` workflow builds the universal `.dmg` and `.app.tar.gz` and publishes them on the GitHub release `Onyx Hive v0.9.0`.
 
 ## License notices
 
