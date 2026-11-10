@@ -482,6 +482,18 @@
   background: transparent;
 }
 
+.chat-markdown .chat-markdown-diagram {
+  display: flex;
+  justify-content: center;
+  overflow-x: auto;
+  padding: 0.8rem 0.9rem;
+}
+
+.chat-markdown .chat-markdown-diagram svg {
+  height: auto;
+  max-width: 100%;
+}
+
 .chat-markdown-line-breaks p {
   white-space: pre-wrap;
 }

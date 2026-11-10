@@ -1,8 +1,28 @@
-import { Children, isValidElement, type ComponentProps, type ReactElement } from "react";
+import {
+  Children,
+  createContext,
+  isValidElement,
+  useContext,
+  useState,
+  type ComponentProps,
+  type ReactElement,
+} from "react";
+import { Code, Workflow } from "lucide-react";
 import { CopyButton } from "./CopyButton";
+import { cn, FOCUS_RING } from "./ui";
+import { useMermaidSvg } from "./useMermaidSvg";
 
 const LANGUAGE_CLASS_PREFIX = "language-";
 const PLAIN_LANGUAGE = "text";
+const MERMAID_LANGUAGE = "mermaid";
+
+const VIEW_TOGGLE_BUTTON = cn(
+  "inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-(--control-radius)",
+  "text-muted-foreground transition-colors hover:bg-accent hover:text-foreground [&_svg]:size-3",
+  FOCUS_RING,
+);
+
+export const MarkdownStreamingContext = createContext(false);
 
 interface CodeElementProps {
   className?: string;
@@ -26,9 +46,29 @@ function textOf(children: unknown): string {
     .replace(/\n$/, "");
 }
 
+interface ViewToggleProps {
+  isShowingSource: boolean;
+  onToggle: () => void;
+}
+
+function ViewToggle({ isShowingSource, onToggle }: ViewToggleProps) {
+  const label = isShowingSource ? "Show diagram" : "Show source";
+  const Icon = isShowingSource ? Workflow : Code;
+  return (
+    <button type="button" aria-label={label} title={label} onClick={onToggle} className={VIEW_TOGGLE_BUTTON}>
+      <Icon />
+    </button>
+  );
+}
+
 export function MarkdownCodeBlock({ children }: ComponentProps<"pre">) {
   const code = codeElementOf(children);
   const language = languageOf(code?.props.className);
+  const text = textOf(code?.props.children);
+  const isStreaming = useContext(MarkdownStreamingContext);
+  const diagramSvg = useMermaidSvg(language === MERMAID_LANGUAGE && !isStreaming ? text : null);
+  const [isShowingSource, setIsShowingSource] = useState(false);
+  const isShowingDiagram = diagramSvg !== null && !isShowingSource;
   return (
     <div
       dir="ltr"
@@ -48,10 +88,17 @@ export function MarkdownCodeBlock({ children }: ComponentProps<"pre">) {
           <span className="truncate">{language}</span>
         </span>
         <span role="toolbar" aria-label="Code block actions" className="flex items-center gap-0.5">
-          <CopyButton text={textOf(code?.props.children)} label="Copy code" variant="code" />
+          {diagramSvg !== null && (
+            <ViewToggle isShowingSource={isShowingSource} onToggle={() => setIsShowingSource(!isShowingSource)} />
+          )}
+          <CopyButton text={text} label="Copy code" variant="code" />
         </span>
       </div>
-      <pre>{children}</pre>
+      {isShowingDiagram ? (
+        <div className="chat-markdown-diagram" dangerouslySetInnerHTML={{ __html: diagramSvg }} />
+      ) : (
+        <pre>{children}</pre>
+      )}
     </div>
   );
 }
