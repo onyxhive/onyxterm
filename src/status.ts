@@ -32,6 +32,12 @@ export function tasksInGroup(tasks: Task[], group: StatusGroup): Task[] {
   return tasks.filter((task) => group.statuses.includes(task.status));
 }
 
+export function statusSectionsOf(tasks: Task[]): { group: StatusGroup; tasks: Task[] }[] {
+  return STATUS_GROUPS.map((group) => ({ group, tasks: tasksInGroup(tasks, group) })).filter(
+    (section) => section.tasks.length > 0,
+  );
+}
+
 export function taskLabel(task: Task): string {
   const commandName = task.command.replace(/^claude-/, "");
   return [commandName, task.model.toLowerCase(), task.effort].join(" · ");

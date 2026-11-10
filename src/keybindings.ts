@@ -3,7 +3,9 @@ export type ShortcutCommand =
   | "toggleSidebar"
   | "toggleChangesPanel"
   | "toggleTerminal"
-  | "toggleFilesPanel";
+  | "toggleFilesPanel"
+  | "nextChat"
+  | "previousChat";
 
 export interface Keybinding {
   combo: string;
@@ -18,6 +20,8 @@ export const KEYBINDINGS: Keybinding[] = [
   { combo: "alt+b", command: "toggleChangesPanel" },
   { combo: "j", command: "toggleTerminal" },
   { combo: "shift+e", command: "toggleFilesPanel" },
+  { combo: "ctrl+tab", command: "nextChat" },
+  { combo: "ctrl+shift+tab", command: "previousChat" },
 ];
 
 export const SHORTCUT_COMMAND_TITLES: Record<ShortcutCommand, string> = {
@@ -26,19 +30,26 @@ export const SHORTCUT_COMMAND_TITLES: Record<ShortcutCommand, string> = {
   toggleChangesPanel: "Toggle changes panel",
   toggleTerminal: "Toggle terminal",
   toggleFilesPanel: "Toggle files panel",
+  nextChat: "Next chat",
+  previousChat: "Previous chat",
 };
 
-const MODIFIER_GLYPHS: Record<string, string> = { shift: "⇧", alt: "⌥" };
+const CONTROL_MODIFIER = "ctrl";
+const COMMAND_GLYPH = "⌘";
+const MODIFIER_GLYPHS: Record<string, string> = { [CONTROL_MODIFIER]: "⌃", shift: "⇧", alt: "⌥" };
+const KEY_GLYPHS: Record<string, string> = { tab: "⇥" };
 
 export function shortcutCommandFor(event: KeyboardEvent): ShortcutCommand | null {
-  if (!event.metaKey || event.ctrlKey) return null;
-  const modifiers = [event.shiftKey && "shift", event.altKey && "alt"].filter(Boolean);
-  const combo = [...modifiers, event.code.replace(/^Key/, "").toLowerCase()].join("+");
+  if (event.metaKey === event.ctrlKey) return null;
+  const modifiers = [event.ctrlKey && CONTROL_MODIFIER, event.shiftKey && "shift", event.altKey && "alt"];
+  const combo = [...modifiers.filter(Boolean), event.code.replace(/^Key/, "").toLowerCase()].join("+");
   return KEYBINDINGS.find((binding) => binding.combo === combo)?.command ?? null;
 }
 
 export function comboKeys(combo: string): string[] {
   const parts = combo.split("+");
   const key = parts.pop() ?? "";
-  return ["⌘", ...parts.map((modifier) => MODIFIER_GLYPHS[modifier] ?? modifier), key.toUpperCase()];
+  const command = parts.includes(CONTROL_MODIFIER) ? [] : [COMMAND_GLYPH];
+  const modifiers = parts.map((modifier) => MODIFIER_GLYPHS[modifier] ?? modifier);
+  return [...command, ...modifiers, KEY_GLYPHS[key] ?? key.toUpperCase()];
 }

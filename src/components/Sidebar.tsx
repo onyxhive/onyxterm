@@ -20,7 +20,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { CollapsedSections } from "../collapsedSections";
-import { STATUS_GROUPS, tasksInGroup, type StatusGroup } from "../status";
+import { statusSectionsOf, type StatusGroup } from "../status";
 import type { ChatPullRequest, Task, TaskStatus, Workspace } from "../types";
 import type { ProjectBranches } from "../useProjectBranches";
 import { PrBadge } from "./PrBadge";
@@ -340,9 +340,7 @@ export function Sidebar(props: SidebarProps) {
   const [query, setQuery] = useState("");
   const isSearching = query.trim().length > 0;
   const visibleTasks = isSearching ? tasks.filter((task) => matchesQuery(task, query)) : tasks;
-  const sectionTasks = STATUS_GROUPS.map((group) => ({ group, tasks: tasksInGroup(visibleTasks, group) })).filter(
-    (section) => section.tasks.length > 0,
-  );
+  const sectionTasks = statusSectionsOf(visibleTasks);
 
   function row(task: Task) {
     return (

@@ -31,6 +31,7 @@ import { commandsByRecentUse } from "./planUsage";
 import { useChats } from "./useChats";
 import { useNotificationHistory } from "./useNotificationHistory";
 import { shortcutCommandFor, type ShortcutCommand } from "./keybindings";
+import { statusSectionsOf } from "./status";
 import { setPullRequestOpener } from "./links";
 import { applyPreferences, areInAppNotificationsOn, isToggleOn } from "./preferences";
 import { useProjectBranches } from "./useProjectBranches";
@@ -52,6 +53,8 @@ const SIDE_PANEL_SETTING = "sidePanelOpen";
 const SUBAGENT_TRAY_COLLAPSED_SETTING = "subagentTrayCollapsed";
 
 const LAST_PROJECT_SETTING_PREFIX = "lastProject:";
+
+const CHAT_SWITCH_COMMANDS = new Set<ShortcutCommand>(["nextChat", "previousChat"]);
 
 const TURN_END_STATES = new Set<TaskStatus>(["review", "failed"]);
 
@@ -155,6 +158,10 @@ export default function App() {
   const workspaceChatIds = new Set(chats.filter((chat) => chat.workspaceId === workspace?.id).map((chat) => chat.id));
   const workspaceTasks = tasks.filter((task) => workspaceChatIds.has(task.id));
   const selectedTask = workspaceTasks.find((task) => task.id === selectedTaskId) ?? null;
+  const sidebarChatIdsRef = useRef<string[]>([]);
+  sidebarChatIdsRef.current = statusSectionsOf(workspaceTasks).flatMap((section) =>
+    section.tasks.map((task) => task.id),
+  );
 
   useEffect(() => {
     if (selectedTaskId) void chatState.loadHistory(selectedTaskId);
@@ -180,6 +187,14 @@ export default function App() {
     setIsSidePanelOpen(true);
   }
 
+  function openChatAtOffset(offset: number) {
+    const chatIds = sidebarChatIdsRef.current;
+    if (chatIds.length === 0) return;
+    const currentIndex = chatIds.indexOf(selectedTaskIdRef.current ?? "");
+    const nextIndex = currentIndex === -1 ? 0 : (currentIndex + offset + chatIds.length) % chatIds.length;
+    openTask(chatIds[nextIndex]);
+  }
+
   useEffect(() => {
     const commands: Record<ShortcutCommand, () => void> = {
       newChat: () => openNewChat(),
@@ -187,6 +202,8 @@ export default function App() {
       toggleChangesPanel: () => toggleSidePanelTab("changes"),
       toggleTerminal,
       toggleFilesPanel: () => toggleSidePanelTab("files"),
+      nextChat: () => openChatAtOffset(1),
+      previousChat: () => openChatAtOffset(-1),
     };
     function runShortcut(event: KeyboardEvent) {
       const command = shortcutCommandFor(event);
@@ -194,8 +211,18 @@ export default function App() {
       event.preventDefault();
       commands[command]();
     }
+    function runChatSwitch(event: KeyboardEvent) {
+      const command = shortcutCommandFor(event);
+      if (!command || !CHAT_SWITCH_COMMANDS.has(command)) return;
+      event.stopPropagation();
+      runShortcut(event);
+    }
+    window.addEventListener("keydown", runChatSwitch, { capture: true });
     window.addEventListener("keydown", runShortcut);
-    return () => window.removeEventListener("keydown", runShortcut);
+    return () => {
+      window.removeEventListener("keydown", runChatSwitch, { capture: true });
+      window.removeEventListener("keydown", runShortcut);
+    };
   }, []);
 
   function projectName(projectId: string): string {
