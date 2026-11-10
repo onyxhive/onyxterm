@@ -66,11 +66,22 @@ export function CreatePrDialog({ target, initialTitle, onClose }: CreatePrDialog
         <form onSubmit={submit} className="flex flex-col gap-3 px-5 pb-5">
           <label className={FIELD_LABEL}>
             Title
-            <input autoFocus className={TEXT_INPUT} value={title} onChange={(event) => setTitle(event.target.value)} />
+            <input
+              autoFocus
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              className={TEXT_INPUT}
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+            />
           </label>
           <label className={FIELD_LABEL}>
             Description
             <textarea
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               rows={6}
               placeholder="What changed and how to test it. Markdown works."
               className={cn(TEXT_INPUT, "h-auto resize-y py-2 leading-5")}
@@ -82,6 +93,9 @@ export function CreatePrDialog({ target, initialTitle, onClose }: CreatePrDialog
             <label className={cn(FIELD_LABEL, "flex-1")}>
               Base branch
               <input
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 className={cn(TEXT_INPUT, "font-mono text-xs")}
                 placeholder="Repository default"
                 value={base}

@@ -336,6 +336,9 @@ function PickerPanel(props: PickerPanelProps) {
           <label className="flex h-9 items-center gap-2 border-b border-border/70 px-3 text-muted-foreground">
             <Search className="size-3.5 shrink-0" />
             <input
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               autoFocus
               value={query}
               placeholder="Search models…"

@@ -27,6 +27,9 @@ export function NameField({ initialValue, label, onCommit, onCancel }: NameField
 
   return (
     <input
+      autoCapitalize="none"
+      autoCorrect="off"
+      spellCheck={false}
       className={cn(
         "min-w-0 flex-1 rounded-sm bg-transparent text-sm font-medium text-foreground outline-none",
         "ring-1 ring-ring/50 ring-inset focus:ring-ring",

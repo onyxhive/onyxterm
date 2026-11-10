@@ -106,6 +106,9 @@ function CommitForm({ canPushAfterCommit, isBusy, onSubmit }: CommitFormProps) {
   return (
     <form onSubmit={submit} aria-label="Commit changes" className="flex flex-col gap-1.5 px-1 pt-1 pb-1">
       <textarea
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
         autoFocus
         rows={3}
         placeholder="Commit message"

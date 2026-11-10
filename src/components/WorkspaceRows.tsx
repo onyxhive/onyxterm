@@ -160,6 +160,9 @@ function AddScriptForm({ onAdd, onCancel }: AddScriptFormProps) {
   return (
     <form onSubmit={submit} className="flex flex-col gap-1.5 px-1 pt-1 pb-0.5" aria-label="Add project script">
       <input
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
         autoFocus
         className={cn(TEXT_INPUT, "h-7 text-[13px]")}
         placeholder="Name"
@@ -167,6 +170,9 @@ function AddScriptForm({ onAdd, onCancel }: AddScriptFormProps) {
         onChange={(event) => setName(event.target.value)}
       />
       <input
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
         className={cn(TEXT_INPUT, "h-7 font-mono text-xs")}
         placeholder="Command, like npm test"
         value={command}

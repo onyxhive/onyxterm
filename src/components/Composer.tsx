@@ -274,6 +274,9 @@ export function Composer(props: ComposerProps) {
               <MentionText text={text} targets={mentionTargets} />
             </div>
             <textarea
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               ref={inputRef}
               rows={variant === "hero" ? 2 : 1}
               value={text}

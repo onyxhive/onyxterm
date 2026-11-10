@@ -241,6 +241,9 @@ export function FilesPanel({ task, preferredEditor, onError }: FilesPanelProps) 
         <label className="relative flex min-w-0 flex-1 items-center">
           <Search aria-hidden className="pointer-events-none absolute left-2 size-3.5 text-muted-foreground" />
           <input
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
             type="search"
             value={query}
             onChange={(event) => setQuery(event.target.value)}

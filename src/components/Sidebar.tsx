@@ -287,6 +287,9 @@ function SearchField({ query, onChange }: { query: string; onChange: (query: str
     >
       <Search className="size-4 shrink-0" />
       <input
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
         type="search"
         value={query}
         placeholder="Search"

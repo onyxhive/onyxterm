@@ -70,6 +70,9 @@ function CreateBranchForm({ initialName, isBusy, onCreate }: CreateBranchFormPro
   return (
     <form onSubmit={submit} className="flex items-center gap-1.5 p-1.5" aria-label="Create branch">
       <input
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
         autoFocus
         className={cn(TEXT_INPUT, "h-7 font-mono text-xs")}
         placeholder="New branch name"
@@ -119,6 +122,9 @@ function BranchPicker({ target, onChanged, close }: Omit<BranchRowProps, "branch
         <div className="relative border-b border-border/70 pb-1.5 transition-colors focus-within:border-ring">
           <Search aria-hidden className="pointer-events-none absolute top-1.5 left-0 size-4 text-muted-foreground/55" />
           <input
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
             autoFocus
             role="combobox"
             aria-expanded
