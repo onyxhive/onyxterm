@@ -9,7 +9,7 @@ import type { AgentChoice } from "./components/ComposerControls";
 import { NewChat, type ChatStart } from "./components/NewChat";
 import { NotificationCenter } from "./components/NotificationCenter";
 import { UsageCenter } from "./components/UsageCenter";
-import { prAuthorFilterFrom, PullRequestsPage } from "./components/PullRequestsPage";
+import { prAuthorFilterFrom, PullRequestsPage, type PullRequestSelection } from "./components/PullRequestsPage";
 import { SettingsPage } from "./components/SettingsPage";
 import { SidePanel } from "./components/SidePanel";
 import { SubagentsPanel } from "./components/SubagentsPanel";
@@ -31,6 +31,7 @@ import { commandsByRecentUse } from "./planUsage";
 import { useChats } from "./useChats";
 import { useNotificationHistory } from "./useNotificationHistory";
 import { shortcutCommandFor, type ShortcutCommand } from "./keybindings";
+import { setPullRequestOpener } from "./links";
 import { applyPreferences, areInAppNotificationsOn, isToggleOn } from "./preferences";
 import { useProjectBranches } from "./useProjectBranches";
 import { useSettings } from "./useSettings";
@@ -65,6 +66,10 @@ function lastProjectSettingOf(workspaceId: string): string {
   return `${LAST_PROJECT_SETTING_PREFIX}${workspaceId}`;
 }
 
+interface OpenedPullRequest extends PullRequestSelection {
+  openedAt: number;
+}
+
 function rememberedChoice(saved: string | undefined): AgentChoice {
   if (!saved) return DEFAULT_CHOICE;
   try {
@@ -77,6 +82,7 @@ function rememberedChoice(saved: string | undefined): AgentChoice {
 export default function App() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
   const [view, setView] = useState<View>("chat");
+  const [openedPullRequest, setOpenedPullRequest] = useState<OpenedPullRequest | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const isFullscreen = useIsFullscreen();
   const workbench = useWorkbench();
@@ -202,6 +208,19 @@ export default function App() {
     setView("chat");
   }
 
+  function showPullRequest(projectIds: string[], number: number) {
+    const projectId = projectIds.find((id) => workspace?.projects.some((project) => project.id === id)) ?? projectIds[0];
+    const projectWorkspaceId = projects.find((project) => project.id === projectId)?.workspaceId;
+    if (projectWorkspaceId && projectWorkspaceId !== workspace?.id) workspaceActions.onSelect(projectWorkspaceId);
+    setOpenedPullRequest({ projectId, number, openedAt: Date.now() });
+    setView("prs");
+  }
+
+  useEffect(() => {
+    setPullRequestOpener(showPullRequest);
+    return () => setPullRequestOpener(null);
+  });
+
   function rememberProject(projectId: string) {
     if (lastProjectSetting) remember(lastProjectSetting, projectId);
   }
@@ -287,7 +306,10 @@ export default function App() {
     onNewChat: openNewChat,
     onAddProject: workspaceActions.onAddProject,
     onToggleBoard: () => setView(view === "board" ? "chat" : "board"),
-    onTogglePullRequests: () => setView(view === "prs" ? "chat" : "prs"),
+    onTogglePullRequests: () => {
+      setOpenedPullRequest(null);
+      setView(view === "prs" ? "chat" : "prs");
+    },
     onToggleSettings: () => setView(view === "settings" ? "chat" : "settings"),
   };
 
@@ -339,8 +361,9 @@ export default function App() {
     if (view === "prs") {
       return (
         <PullRequestsPage
-          key={workspace.id}
+          key={`${workspace.id}:${openedPullRequest?.openedAt}`}
           projects={workspace.projects}
+          initialSelection={openedPullRequest}
           author={prAuthorFilterFrom(settings[PR_AUTHOR_FILTER_SETTING])}
           onAuthorChange={(author) => remember(PR_AUTHOR_FILTER_SETTING, author)}
         />

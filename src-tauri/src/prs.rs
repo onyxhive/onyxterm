@@ -14,6 +14,7 @@ use crate::error::{AppError, AppResult};
 use crate::git::{self, Git, GitTarget, project_root, workdir};
 use crate::process::login_shell;
 use crate::subprocess::{self, Limits, Output, in_background};
+use crate::workspaces::workspaces;
 
 pub const PRS_UPDATED: &str = "prs-updated";
 const LIST_LIFETIME: Duration = Duration::from_secs(30);
@@ -29,6 +30,9 @@ const CHECK_FIELDS: &str = "name,state,bucket,link,workflow,description,startedA
 const LIST_LIMIT: &str = "100";
 const NO_CHECKS: &str = "no checks reported";
 const PULL_PATH: &str = "/pull/";
+const GITHUB_HOST: &str = "github.com";
+const ORIGIN_REMOTE: &str = "origin";
+const MAX_REPOSITORY_PART_LENGTH: usize = 100;
 const MAX_TITLE_LENGTH: usize = 256;
 const MAX_BODY_LENGTH: usize = 65_536;
 const GH_ENV: &[(&str, &str)] =
@@ -507,6 +511,33 @@ fn validated_draft(git: &Git, draft: PullRequestDraft) -> AppResult<PullRequestD
     Ok(PullRequestDraft { title, base, ..draft })
 }
 
+fn validated_repository_part(part: &str, what: &str) -> AppResult<String> {
+    let is_plain = !part.is_empty()
+        && part.len() <= MAX_REPOSITORY_PART_LENGTH
+        && part.chars().all(|character| character.is_ascii_alphanumeric() || "-_.".contains(character));
+    if is_plain {
+        return Ok(part.to_ascii_lowercase());
+    }
+    Err(AppError::Invalid(format!(
+        "{what} must be up to {MAX_REPOSITORY_PART_LENGTH} letters, digits, dots, dashes or underscores"
+    )))
+}
+
+fn github_repository_of(remote_url: &str) -> Option<(String, String)> {
+    let lowered = remote_url.trim().to_ascii_lowercase();
+    let (before_host, after_host) = lowered.split_once(GITHUB_HOST)?;
+    let is_host = before_host.is_empty() || before_host.ends_with('@') || before_host.ends_with("//");
+    let path = after_host.strip_prefix(':').or_else(|| after_host.strip_prefix('/')).filter(|_| is_host)?;
+    let path = path.trim_end_matches('/');
+    let (owner, name) = path.strip_suffix(".git").unwrap_or(path).split_once('/')?;
+    let is_repository = !owner.is_empty() && !name.is_empty() && !name.contains('/');
+    is_repository.then(|| (owner.to_string(), name.to_string()))
+}
+
+fn origin_repository(root: &str) -> Option<(String, String)> {
+    github_repository_of(&Git::at(root).output(&["remote", "get-url", ORIGIN_REMOTE]).ok()?)
+}
+
 fn push_if_needed(git: &Git) -> AppResult<String> {
     let status = git::status(git)?;
     let branch =
@@ -625,6 +656,18 @@ pub async fn pr_merge(
     merged
 }
 
+#[tauri::command]
+pub async fn pr_projects_for_repository(db: State<'_, Db>, owner: String, name: String) -> AppResult<Vec<String>> {
+    let wanted = (validated_repository_part(&owner, "owner")?, validated_repository_part(&name, "repository")?);
+    let projects: Vec<_> = workspaces(&db.connection())?.into_iter().flat_map(|workspace| workspace.projects).collect();
+    in_background(move || {
+        let matching =
+            projects.into_iter().filter(|project| origin_repository(&project.path).as_ref() == Some(&wanted));
+        Ok(matching.map(|project| project.id).collect())
+    })
+    .await
+}
+
 #[cfg(test)]
 mod tests {
     use std::os::unix::fs::PermissionsExt;
@@ -731,6 +774,24 @@ mod tests {
         let output = "Warning: 1 uncommitted change\nhttps://github.com/acme/geo/pull/43\n";
         assert_eq!(number_from_url(output).unwrap(), 43);
         assert!(number_from_url("something went wrong").is_err());
+    }
+
+    #[test]
+    fn reads_the_github_repository_of_https_and_ssh_remotes() {
+        let repository = Some(("acme".to_string(), "geo.api".to_string()));
+        for remote in [
+            "https://github.com/acme/geo.api.git",
+            "https://token@GitHub.com/Acme/Geo.Api/",
+            "git@github.com:acme/geo.api.git\n",
+            "ssh://git@github.com/acme/geo.api",
+        ] {
+            assert_eq!(github_repository_of(remote), repository, "{remote}");
+        }
+        assert_eq!(github_repository_of("https://notgithub.com/acme/geo.api"), None);
+        assert_eq!(github_repository_of("https://gitlab.com/acme/geo.api"), None);
+        assert_eq!(github_repository_of("https://github.com/acme"), None);
+        assert!(validated_repository_part("geo.api", "repository").is_ok());
+        assert!(validated_repository_part("../etc", "repository").is_err());
     }
 
     #[test]

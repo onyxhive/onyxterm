@@ -1,15 +1,16 @@
 import { useState, type FormEvent } from "react";
-import { openUrl } from "@tauri-apps/plugin-opener";
 import {
   ArrowUpFromLine,
   ChevronDown,
-  ExternalLink,
+  ChevronRight,
   FileDiff,
   GitCommitHorizontal,
+  GitPullRequest,
   GitPullRequestCreate,
 } from "lucide-react";
 import { gitMenuItems, type GitMenuAction, type GitMenuItem } from "../gitActions";
 import { gitApi, type GitTarget } from "../gitApi";
+import { openLink, type PullRequestLink } from "../links";
 import type { ChatPullRequest, GitStatus } from "../types";
 import {
   DETAILS_ANCHORED_POPUP,
@@ -251,12 +252,24 @@ export function PullRequestRow({ pr }: { pr: ChatPullRequest }) {
   const presentation = PR_STATE_PRESENTATION[prDisplayState(pr.state, pr.isDraft)];
   const checks = checksPresentation(pr.checks);
   return (
-    <button type="button" className={DETAILS_ROW} title="Open on GitHub" onClick={() => void openUrl(pr.url)}>
+    <button type="button" className={DETAILS_ROW} title="Open pull request" onClick={() => void openLink(pr.url)}>
       <presentation.Icon aria-hidden className={cn("size-4", presentation.toneClass)} />
       <span className={DETAILS_LABEL}>Pull request #{pr.number}</span>
       {checks && <ChecksDot dotClass={checks.dotClass} label={checks.label} />}
       <span className="ms-auto text-xs font-normal text-muted-foreground">{presentation.label}</span>
-      <ExternalLink aria-hidden className="size-3.5 text-muted-foreground" />
+      <ChevronRight aria-hidden className="size-3.5 text-muted-foreground" />
+    </button>
+  );
+}
+
+export function PullRequestLinkRow({ link }: { link: PullRequestLink }) {
+  return (
+    <button type="button" className={DETAILS_ROW} title={link.url} onClick={() => void openLink(link.url)}>
+      <GitPullRequest aria-hidden className={DETAILS_ICON} />
+      <span className={DETAILS_LABEL}>
+        {link.owner}/{link.repo}#{link.number}
+      </span>
+      <ChevronRight aria-hidden className="ms-auto size-3.5 text-muted-foreground" />
     </button>
   );
 }

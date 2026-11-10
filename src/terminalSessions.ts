@@ -3,6 +3,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Terminal } from "@xterm/xterm";
 import { useSyncExternalStore } from "react";
+import { openLink } from "./links";
 import { onSchemeChange, terminalTheme } from "./terminalTheme";
 import {
   TERMINAL_EXITED,
@@ -99,7 +100,7 @@ function createTerminal(): { terminal: Terminal; fit: FitAddon } {
   });
   const fit = new FitAddon();
   terminal.loadAddon(fit);
-  terminal.loadAddon(new WebLinksAddon());
+  terminal.loadAddon(new WebLinksAddon((_event, url) => void openLink(url)));
   return { terminal, fit };
 }
 

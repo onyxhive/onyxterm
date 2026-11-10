@@ -1,5 +1,6 @@
 import { Folder, PanelRight, SquareTerminal } from "lucide-react";
 import { gitApi } from "../gitApi";
+import { openLink } from "../links";
 import type { GitChangedFile, Project, Task } from "../types";
 import { useLoaded } from "../useLoaded";
 import { DiffStat, totalOf } from "./DiffStat";
@@ -53,6 +54,7 @@ function ChangesSummary({ files, onOpen }: { files: GitChangedFile[]; onOpen: ()
 export function ChatHeader(props: ChatHeaderProps) {
   const { task, project, isSidePanelOpen, isTerminalOpen, actions, detailsActions } = props;
   const status = useChatStatus(task);
+  const { pr } = task;
   return (
     <>
       <nav aria-label="Chat breadcrumb" data-tauri-drag-region className="min-w-0 flex-1">
@@ -82,7 +84,16 @@ export function ChatHeader(props: ChatHeaderProps) {
             <h2 className="truncate" title={task.title}>
               {task.title}
             </h2>
-            {task.pr && <PrBadge pr={task.pr} />}
+            {pr && (
+              <button
+                type="button"
+                title="Open pull request"
+                onClick={() => void openLink(pr.url)}
+                className={cn("inline-flex shrink-0 cursor-pointer rounded-sm", FOCUS_RING)}
+              >
+                <PrBadge pr={pr} />
+              </button>
+            )}
             {!HIDDEN_HEADER_STATUSES.has(task.status) && <StatusLabel status={task.status} />}
           </li>
         </ol>

@@ -57,7 +57,7 @@ interface ProjectPullRequest extends PullRequest {
   projectId: string;
 }
 
-interface Selection {
+export interface PullRequestSelection {
   projectId: string;
   number: number;
 }
@@ -264,14 +264,15 @@ function EmptyDetail() {
 
 interface PullRequestsPageProps {
   projects: Project[];
+  initialSelection: PullRequestSelection | null;
   author: PrAuthorFilter;
   onAuthorChange: (author: PrAuthorFilter) => void;
 }
 
-export function PullRequestsPage({ projects, author, onAuthorChange }: PullRequestsPageProps) {
+export function PullRequestsPage({ projects, initialSelection, author, onAuthorChange }: PullRequestsPageProps) {
   const [state, setState] = useState<ListState>("open");
   const [projectFilter, setProjectFilter] = useState(ALL_PROJECTS);
-  const [selection, setSelection] = useState<Selection | null>(null);
+  const [selection, setSelection] = useState(initialSelection);
   const scoped = projects.filter((project) => projectFilter === ALL_PROJECTS || project.id === projectFilter);
   const pullRequests = useWorkspacePullRequests(scoped, { state, author });
   const problem = pullRequests.error ? ghProblemOf(pullRequests.error) : null;

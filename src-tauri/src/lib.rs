@@ -94,6 +94,7 @@ pub fn run() {
             prs::pr_diff,
             prs::pr_create,
             prs::pr_merge,
+            prs::pr_projects_for_repository,
             subagents::list_subagents,
             session_worktrees::list_session_worktrees,
             session_worktrees::session_worktree_diff,

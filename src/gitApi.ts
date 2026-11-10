@@ -70,6 +70,8 @@ export const prApi = {
   create: (target: GitTarget, draft: PullRequestDraft) => invoke<PullRequestDetail>("pr_create", { target, draft }),
   merge: (projectId: string, number: number, method: MergeMethod) =>
     invoke<void>("pr_merge", { projectId, number, method }),
+  projectsForRepository: (owner: string, name: string) =>
+    invoke<string[]>("pr_projects_for_repository", { owner, name }),
 };
 
 export const agentApi = {

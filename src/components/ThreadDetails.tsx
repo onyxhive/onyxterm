@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { CheckCheck, Ellipsis, RotateCcw } from "lucide-react";
 import type { GitTarget } from "../gitApi";
-import type { Chat, GitStatus, Project, Task } from "../types";
+import { pullRequestLinksIn } from "../links";
+import type { Chat, FeedItem, GitStatus, Project, Task } from "../types";
 import type { Loaded } from "../useLoaded";
 import { useScriptRun } from "../useProjectTools";
 import { BranchRow } from "./BranchRow";
-import { CommitRows, PullRequestRow } from "./CommitRows";
+import { CommitRows, PullRequestLinkRow, PullRequestRow } from "./CommitRows";
 import { CreatePrDialog } from "./CreatePrDialog";
 import { DETAILS_ICON, DETAILS_LABEL, DETAILS_ROW, DETAILS_SECTION } from "./detailsStyles";
 import { cn, ICON_BUTTON } from "./ui";
@@ -38,6 +39,17 @@ function DoneRow({ isDone, onClick }: { isDone: boolean; onClick: () => void }) 
       <span className={DETAILS_LABEL}>{isDone ? "Reopen" : "Mark done"}</span>
     </button>
   );
+}
+
+function textOf(item: FeedItem): string {
+  if (item.kind === "user") return item.text;
+  if (item.kind === "agent") return item.markdown;
+  return "";
+}
+
+function MentionedPullRequestRows({ task }: { task: Task }) {
+  const links = pullRequestLinksIn(task.feed.map(textOf)).filter((link) => link.url !== task.pr?.url);
+  return links.map((link) => <PullRequestLinkRow key={link.url} link={link} />);
 }
 
 function useScriptRunner(runInTerminal: (command: string) => void): ScriptRunner {
@@ -133,6 +145,7 @@ export function ThreadDetails({ task, project, status, actions }: ThreadDetailsP
               <section aria-label="Version control" className={DETAILS_SECTION}>
                 <BranchRow target={target} branch={status.data?.branch ?? task.branch} onChanged={branchChanged} />
                 {task.pr && <PullRequestRow pr={task.pr} />}
+                <MentionedPullRequestRows task={task} />
                 <CommitRows
                   target={target}
                   status={status.data}
