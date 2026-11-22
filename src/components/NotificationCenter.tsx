@@ -1,12 +1,14 @@
 import { Bell } from "lucide-react";
 import { elapsedSince } from "../tasks";
-import type { NotificationEntry } from "../types";
+import type { Chat, NotificationEntry, Project } from "../types";
 import { SIDEBAR_HEADER_ICON_BUTTON } from "./Sidebar";
 import { NotificationIcon } from "./Toasts";
 import { cn, FOCUS_RING, GHOST_BUTTON, MENU_POPUP, MenuLabel, MenuSeparator } from "./ui";
 import { usePopup } from "./usePopup";
 
 const BADGE_LIMIT = 9;
+const UNGROUPED_KEY = "onyx";
+const UNGROUPED_TITLE = "Onyx";
 
 export interface NotificationCenterActions {
   onOpen: (entry: NotificationEntry) => void;
@@ -17,38 +19,67 @@ export interface NotificationCenterActions {
 interface NotificationCenterProps {
   entries: NotificationEntry[];
   unreadCount: number;
+  projects: Project[];
+  chats: Chat[];
   actions: NotificationCenterActions;
 }
 
-interface NotificationGroup {
+interface ProjectLookup {
+  projects: Project[];
+  chats: Chat[];
+}
+
+interface GroupIdentity {
+  key: string;
   title: string;
+}
+
+interface NotificationGroup extends GroupIdentity {
   entries: NotificationEntry[];
 }
 
 const HEADER_BUTTON = cn(GHOST_BUTTON, "h-6 px-2 text-xs");
 
-function isToday(timestamp: number): boolean {
-  return new Date(timestamp).toDateString() === new Date().toDateString();
+function groupIdentityOf(entry: NotificationEntry, lookup: ProjectLookup): GroupIdentity {
+  const projectId = entry.projectId ?? lookup.chats.find((chat) => chat.id === entry.taskId)?.projectId;
+  const project = lookup.projects.find((candidate) => candidate.id === projectId);
+  if (project) return { key: project.id, title: project.name };
+  if (entry.taskId && entry.detail) return { key: `detail:${entry.detail}`, title: entry.detail };
+  return { key: UNGROUPED_KEY, title: UNGROUPED_TITLE };
 }
 
-function groupsOf(entries: NotificationEntry[]): NotificationGroup[] {
-  const groups = [
-    { title: "Today", entries: entries.filter((entry) => isToday(entry.createdAt)) },
-    { title: "Earlier", entries: entries.filter((entry) => !isToday(entry.createdAt)) },
-  ];
-  return groups.filter((group) => group.entries.length > 0);
+function groupsOf(entries: NotificationEntry[], lookup: ProjectLookup): NotificationGroup[] {
+  const groups = new Map<string, NotificationGroup>();
+  const newestFirst = [...entries].sort((first, second) => second.createdAt - first.createdAt);
+  for (const entry of newestFirst) {
+    const identity = groupIdentityOf(entry, lookup);
+    const group = groups.get(identity.key) ?? { ...identity, entries: [] };
+    group.entries.push(entry);
+    groups.set(identity.key, group);
+  }
+  return [...groups.values()];
+}
+
+function detailWithin(entry: NotificationEntry, group: NotificationGroup): string {
+  return entry.detail === group.title ? "" : entry.detail;
 }
 
 function badgeOf(unreadCount: number): string {
   return unreadCount > BADGE_LIMIT ? `${BADGE_LIMIT}+` : String(unreadCount);
 }
 
-function NotificationRow({ entry, onOpen }: { entry: NotificationEntry; onOpen: (entry: NotificationEntry) => void }) {
+interface NotificationRowProps {
+  entry: NotificationEntry;
+  detail: string;
+  onOpen: (entry: NotificationEntry) => void;
+}
+
+function NotificationRow({ entry, detail, onOpen }: NotificationRowProps) {
   return (
     <li className="list-none">
       <button
         type="button"
-        title={entry.detail}
+        title={detail || undefined}
         onClick={() => onOpen(entry)}
         className={cn(
           "flex w-full cursor-pointer items-start gap-2 rounded-md px-2 py-1.5 text-left hover:bg-accent",
@@ -77,10 +108,8 @@ function NotificationRow({ entry, onOpen }: { entry: NotificationEntry; onOpen: 
               )}
             </span>
           </span>
-          {entry.detail && (
-            <span className="line-clamp-2 text-xs text-muted-foreground [overflow-wrap:anywhere]">
-              {entry.detail}
-            </span>
+          {detail && (
+            <span className="line-clamp-2 text-xs text-muted-foreground [overflow-wrap:anywhere]">{detail}</span>
           )}
         </span>
       </button>
@@ -88,7 +117,7 @@ function NotificationRow({ entry, onOpen }: { entry: NotificationEntry; onOpen: 
   );
 }
 
-export function NotificationCenter({ entries, unreadCount, actions }: NotificationCenterProps) {
+export function NotificationCenter({ entries, unreadCount, projects, chats, actions }: NotificationCenterProps) {
   const popup = usePopup();
   const label = unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications";
 
@@ -158,12 +187,18 @@ export function NotificationCenter({ entries, unreadCount, actions }: Notificati
             <p className="px-3 py-8 text-center text-xs text-muted-foreground">No notifications yet</p>
           ) : (
             <div className="min-h-0 flex-1 overflow-y-auto">
-              {groupsOf(entries).map((group) => (
-                <section key={group.title} aria-label={group.title}>
+              {groupsOf(entries, { projects, chats }).map((group, index) => (
+                <section key={group.key} aria-label={group.title}>
+                  {index > 0 && <MenuSeparator />}
                   <MenuLabel>{group.title}</MenuLabel>
                   <ul className="flex flex-col gap-0.5">
                     {group.entries.map((entry) => (
-                      <NotificationRow key={entry.id} entry={entry} onOpen={open} />
+                      <NotificationRow
+                        key={entry.id}
+                        entry={entry}
+                        detail={detailWithin(entry, group)}
+                        onOpen={open}
+                      />
                     ))}
                   </ul>
                 </section>

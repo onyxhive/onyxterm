@@ -137,6 +137,7 @@ export default function App() {
     const toast: Toast = {
       id: `${chat.id}-${chat.state}-${Date.now()}`,
       taskId: chat.id,
+      projectId: chat.projectId,
       headline: `${displayTitle(chat.title)} ${headline}`,
       detail: projectName(chat.projectId),
       tone: chat.state,
@@ -487,6 +488,8 @@ export default function App() {
             <NotificationCenter
               entries={notificationHistory.entries}
               unreadCount={notificationHistory.unreadCount}
+              projects={projects}
+              chats={chats}
               actions={{
                 onOpen: openNotification,
                 onMarkAllRead: notificationHistory.markAllRead,

@@ -170,6 +170,7 @@ export type NotificationTone = TaskStatus | "error";
 export interface Toast {
   id: string;
   taskId: string;
+  projectId?: string;
   headline: string;
   detail: string;
   tone: NotificationTone;

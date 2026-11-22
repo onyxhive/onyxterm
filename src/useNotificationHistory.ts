@@ -8,11 +8,12 @@ const HISTORY_LIMIT = 100;
 
 function isNotificationEntry(value: unknown): value is NotificationEntry {
   if (typeof value !== "object" || value === null) return false;
-  const { id, taskId, headline, detail, tone, createdAt, isRead } = value as Record<string, unknown>;
+  const { id, taskId, projectId, headline, detail, tone, createdAt, isRead } = value as Record<string, unknown>;
   const hasKnownTone = tone === "error" || (typeof tone === "string" && Object.hasOwn(STATUS_LABEL, tone));
   return (
     hasKnownTone &&
     [id, taskId, headline, detail].every((field) => typeof field === "string") &&
+    (projectId === undefined || typeof projectId === "string") &&
     typeof createdAt === "number" &&
     typeof isRead === "boolean"
   );
