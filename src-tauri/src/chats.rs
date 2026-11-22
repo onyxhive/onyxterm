@@ -5,7 +5,6 @@ use rusqlite::{Connection, OptionalExtension, Row, params};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State};
 
-use crate::branches::ProjectBranches;
 use crate::db::{Db, new_id, now_millis};
 use crate::error::{AppError, AppResult};
 use crate::git;
@@ -489,12 +488,7 @@ pub async fn create_chat(app: AppHandle, db: State<'_, Db>, draft: NewChat) -> A
 }
 
 #[tauri::command]
-pub async fn remove_chat_worktree(
-    app: AppHandle,
-    db: State<'_, Db>,
-    project_branches: State<'_, ProjectBranches>,
-    chat_id: String,
-) -> AppResult<Chat> {
+pub async fn remove_chat_worktree(app: AppHandle, db: State<'_, Db>, chat_id: String) -> AppResult<Chat> {
     git::validated_id(&chat_id, "chat")?;
     let (chat, project_root) = {
         let connection = db.connection();
@@ -508,7 +502,6 @@ pub async fn remove_chat_worktree(
     }
     let worktrees_root = worktrees_root(&app)?;
     in_background(move || worktrees::remove(&project_root, &worktrees_root, Path::new(&worktree))).await?;
-    project_branches.forget(&chat.project_id);
     let connection = db.connection();
     update_state(&connection, &chat_id, ChatState::Done)?;
     self::chat(&connection, &chat_id)

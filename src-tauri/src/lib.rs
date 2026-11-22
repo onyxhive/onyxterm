@@ -1,5 +1,4 @@
 mod attachments;
-mod branches;
 mod chats;
 mod db;
 mod desktop;
@@ -48,7 +47,6 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(AgentRuntime::default())
         .manage(project_files::ProjectFiles::default())
-        .manage(branches::ProjectBranches::default())
         .manage(prs::GitHub::default())
         .manage(scripts::ScriptRuns::default())
         .manage(terminals::Terminals::default())
@@ -88,7 +86,6 @@ pub fn run() {
             runtime::refresh_plan_usage,
             transcripts::load_chat_history,
             project_files::list_project_files,
-            branches::project_branch,
             git::git_status,
             git::git_branches,
             git::git_checkout,

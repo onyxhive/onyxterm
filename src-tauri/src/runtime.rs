@@ -11,7 +11,6 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::attachments::{self, Attachment};
-use crate::branches::ProjectBranches;
 use crate::chats::{self, AgentCommand, Chat, ChatOptions, ChatState, PermissionMode, Provider};
 use crate::db::{Db, new_id, now_millis};
 use crate::error::{AppError, AppResult};
@@ -362,12 +361,6 @@ fn refresh_rate_limits(app: &AppHandle, chat_id: &str, windows: RateLimitWindows
     }
 }
 
-fn forget_branch(app: &AppHandle, chat_id: &str) {
-    if let Ok(chat) = chats::chat(&app.state::<Db>().connection(), chat_id) {
-        app.state::<ProjectBranches>().forget(&chat.project_id);
-    }
-}
-
 pub fn sync_chat_branches(app: &AppHandle, project_id: &str, root: &Path) {
     let branch = git::head_label_at(root);
     let db = app.state::<Db>();
@@ -445,7 +438,6 @@ fn apply_event(app: &AppHandle, chat_id: &str, process: &AgentProcess, event: &A
             change_state(app, chat_id, ChatState::Running);
         }
         AgentEvent::TurnEnded { .. } => {
-            forget_branch(app, chat_id);
             sync_branch_of(app, chat_id);
             apply_activity(app, chat_id, process, event);
         }

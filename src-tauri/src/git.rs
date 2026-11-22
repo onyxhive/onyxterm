@@ -6,7 +6,6 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, State};
 
-use crate::branches::ProjectBranches;
 use crate::chats;
 use crate::db::Db;
 use crate::error::{AppError, AppResult};
@@ -679,7 +678,6 @@ async fn sync_chat_branches(app: &AppHandle, workdir: &Workdir) {
 pub async fn git_checkout(
     app: AppHandle,
     db: State<'_, Db>,
-    project_branches: State<'_, ProjectBranches>,
     target: GitTarget,
     branch: String,
     force: Option<bool>,
@@ -695,7 +693,6 @@ pub async fn git_checkout(
         status(&git)
     })
     .await;
-    project_branches.forget(&workdir.project_id);
     sync_chat_branches(&app, &workdir).await;
     switched
 }
@@ -704,7 +701,6 @@ pub async fn git_checkout(
 pub async fn git_create_branch(
     app: AppHandle,
     db: State<'_, Db>,
-    project_branches: State<'_, ProjectBranches>,
     target: GitTarget,
     name: String,
     from: Option<String>,
@@ -722,7 +718,6 @@ pub async fn git_create_branch(
         status(&git)
     })
     .await;
-    project_branches.forget(&workdir.project_id);
     sync_chat_branches(&app, &workdir).await;
     created
 }
