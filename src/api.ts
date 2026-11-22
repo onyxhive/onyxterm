@@ -14,6 +14,7 @@ import type {
   Tag,
   TaskStatus,
   Workspace,
+  WorkspaceLogo,
 } from "./types";
 
 export interface ChatDraft {
@@ -44,6 +45,8 @@ export const api = {
   createWorkspace: (name: string) => invoke<Workspace>("create_workspace", { name }),
   renameWorkspace: (workspaceId: string, name: string) => invoke<void>("rename_workspace", { workspaceId, name }),
   reorderWorkspaces: (workspaceIds: string[]) => invoke<void>("reorder_workspaces", { workspaceIds }),
+  setWorkspaceLogo: (workspaceId: string, logo: WorkspaceLogo | null) =>
+    invoke<void>("set_workspace_logo", { workspaceId, logo }),
   addProject: (workspaceId: string) => invoke<Project | null>("add_project", { workspaceId }),
   removeProject: (projectId: string) => invoke<void>("remove_project", { projectId }),
   listTags: () => invoke<Tag[]>("list_tags"),

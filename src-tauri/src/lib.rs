@@ -64,6 +64,7 @@ pub fn run() {
             workspaces::create_workspace,
             workspaces::rename_workspace,
             workspaces::reorder_workspaces,
+            workspaces::set_workspace_logo,
             workspaces::add_project,
             workspaces::remove_project,
             tags::list_tags,

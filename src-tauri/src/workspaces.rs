@@ -2,16 +2,18 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection, OptionalExtension, params};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, State};
 use tauri_plugin_dialog::DialogExt;
 
+use crate::attachments::{ImageMediaType, decoded_size};
 use crate::db::{Db, new_id};
 use crate::error::{AppError, AppResult};
 use crate::tags::{Tag, tags_of};
 
 const DEFAULT_WORKSPACE_NAME: &str = "Personal";
 const MAX_NAME_LENGTH: usize = 80;
+const MAX_LOGO_BYTES: usize = 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -22,6 +24,13 @@ pub struct Project {
     pub name: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct WorkspaceLogo {
+    pub media_type: ImageMediaType,
+    pub data_base64: String,
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Workspace {
@@ -30,6 +39,7 @@ pub struct Workspace {
     pub position: i64,
     pub projects: Vec<Project>,
     pub tags: Vec<Tag>,
+    pub logo: Option<WorkspaceLogo>,
 }
 
 pub fn ensure_default_workspace(connection: &Connection) -> AppResult<()> {
@@ -52,8 +62,14 @@ fn validated_name(name: &str) -> AppResult<String> {
 fn insert_workspace(connection: &Connection, name: &str) -> AppResult<Workspace> {
     let position: i64 =
         connection.query_row("SELECT COALESCE(MAX(position), -1) + 1 FROM workspaces", [], |row| row.get(0))?;
-    let workspace =
-        Workspace { id: new_id(), name: name.to_string(), position, projects: Vec::new(), tags: Vec::new() };
+    let workspace = Workspace {
+        id: new_id(),
+        name: name.to_string(),
+        position,
+        projects: Vec::new(),
+        tags: Vec::new(),
+        logo: None,
+    };
     connection.execute(
         "INSERT INTO workspaces (id, name, position) VALUES (?1, ?2, ?3)",
         params![workspace.id, workspace.name, workspace.position],
@@ -72,16 +88,24 @@ fn projects_of(connection: &Connection, workspace_id: &str) -> AppResult<Vec<Pro
     Ok(projects)
 }
 
+fn logo_from(media_type: Option<String>, data_base64: Option<String>) -> Option<WorkspaceLogo> {
+    Some(WorkspaceLogo { media_type: ImageMediaType::parse(&media_type?)?, data_base64: data_base64? })
+}
+
 pub fn workspaces(connection: &Connection) -> AppResult<Vec<Workspace>> {
-    let mut statement = connection.prepare("SELECT id, name, position FROM workspaces ORDER BY position")?;
+    let mut statement = connection
+        .prepare("SELECT id, name, position, logo_media_type, logo_data_base64 FROM workspaces ORDER BY position")?;
     let rows = statement
-        .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, i64>(2)?)))?
+        .query_map([], |row| {
+            let logo = logo_from(row.get(3)?, row.get(4)?);
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, i64>(2)?, logo))
+        })?
         .collect::<Result<Vec<_>, _>>()?;
     rows.into_iter()
-        .map(|(id, name, position)| {
+        .map(|(id, name, position, logo)| {
             let projects = projects_of(connection, &id)?;
             let tags = tags_of(connection, &id)?;
-            Ok(Workspace { id, name, position, projects, tags })
+            Ok(Workspace { id, name, position, projects, tags, logo })
         })
         .collect()
 }
@@ -97,6 +121,28 @@ pub fn project(connection: &Connection, project_id: &str) -> AppResult<Project> 
 
 fn rename(connection: &Connection, workspace_id: &str, name: &str) -> AppResult<()> {
     let changed = connection.execute("UPDATE workspaces SET name = ?2 WHERE id = ?1", params![workspace_id, name])?;
+    if changed == 0 {
+        return Err(AppError::NotFound("workspace"));
+    }
+    Ok(())
+}
+
+fn validated_logo(logo: &WorkspaceLogo) -> AppResult<()> {
+    let size = decoded_size(&logo.data_base64)?;
+    if size == 0 || size > MAX_LOGO_BYTES {
+        return Err(AppError::Invalid("a workspace logo must be between 1 byte and 1 MB".into()));
+    }
+    Ok(())
+}
+
+fn set_logo(connection: &Connection, workspace_id: &str, logo: Option<&WorkspaceLogo>) -> AppResult<()> {
+    if let Some(logo) = logo {
+        validated_logo(logo)?;
+    }
+    let changed = connection.execute(
+        "UPDATE workspaces SET logo_media_type = ?2, logo_data_base64 = ?3 WHERE id = ?1",
+        params![workspace_id, logo.map(|logo| logo.media_type.as_str()), logo.map(|logo| &logo.data_base64)],
+    )?;
     if changed == 0 {
         return Err(AppError::NotFound("workspace"));
     }
@@ -163,6 +209,11 @@ pub fn create_workspace(db: State<'_, Db>, name: String) -> AppResult<Workspace>
 #[tauri::command]
 pub fn rename_workspace(db: State<'_, Db>, workspace_id: String, name: String) -> AppResult<()> {
     rename(&db.connection(), &workspace_id, &validated_name(&name)?)
+}
+
+#[tauri::command]
+pub fn set_workspace_logo(db: State<'_, Db>, workspace_id: String, logo: Option<WorkspaceLogo>) -> AppResult<()> {
+    set_logo(&db.connection(), &workspace_id, logo.as_ref())
 }
 
 #[tauri::command]
@@ -243,6 +294,39 @@ mod tests {
         assert!(reorder(&connection, &[second.id.clone(), first.id.clone(), "ghost".into()]).is_err());
         assert!(reorder(&connection, &[second.id.clone(), "ghost".into()]).is_err());
         assert_eq!(workspace_names(&connection), ["Personal", "Work"]);
+    }
+
+    fn png_logo(byte_count: usize) -> WorkspaceLogo {
+        use base64::Engine;
+        let data_base64 = base64::engine::general_purpose::STANDARD.encode(vec![0u8; byte_count]);
+        WorkspaceLogo { media_type: ImageMediaType::Png, data_base64 }
+    }
+
+    #[test]
+    fn stores_and_removes_a_workspace_logo() {
+        let db = Db::open_in_memory().unwrap();
+        let connection = db.connection();
+        let workspace = insert_workspace(&connection, "Work").unwrap();
+        let logo = png_logo(16);
+        set_logo(&connection, &workspace.id, Some(&logo)).unwrap();
+        assert_eq!(workspaces(&connection).unwrap()[0].logo, Some(logo));
+        set_logo(&connection, &workspace.id, None).unwrap();
+        assert_eq!(workspaces(&connection).unwrap()[0].logo, None);
+        assert!(set_logo(&connection, "ghost", None).is_err());
+    }
+
+    #[test]
+    fn rejects_logos_that_are_empty_oversized_not_base64_or_not_an_image_type() {
+        let db = Db::open_in_memory().unwrap();
+        let connection = db.connection();
+        let workspace = insert_workspace(&connection, "Work").unwrap();
+        assert!(set_logo(&connection, &workspace.id, Some(&png_logo(MAX_LOGO_BYTES))).is_ok());
+        assert!(set_logo(&connection, &workspace.id, Some(&png_logo(MAX_LOGO_BYTES + 1))).is_err());
+        assert!(set_logo(&connection, &workspace.id, Some(&png_logo(0))).is_err());
+        let garbled = WorkspaceLogo { data_base64: "not base64!".into(), ..png_logo(1) };
+        assert!(set_logo(&connection, &workspace.id, Some(&garbled)).is_err());
+        let svg = serde_json::json!({"mediaType": "image/svg+xml", "dataBase64": "aGk="});
+        assert!(serde_json::from_value::<WorkspaceLogo>(svg).is_err());
     }
 
     #[test]

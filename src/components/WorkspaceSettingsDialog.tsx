@@ -1,18 +1,23 @@
-import { useState, type FormEvent, type KeyboardEvent } from "react";
-import { Plus } from "lucide-react";
+import { useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent } from "react";
+import { ImagePlus, Plus } from "lucide-react";
 import { COLOR_TONES, type ColorTone } from "../colorTones";
-import type { Tag, Workspace } from "../types";
+import { ACCEPTED_IMAGE_TYPES, imageProblemOf, readImage } from "../imageAttachments";
+import type { Tag, Workspace, WorkspaceLogo } from "../types";
 import { Dialog } from "./Dialog";
 import { TagChip } from "./TagChip";
 import { TonePicker } from "./TonePicker";
 import { cn, GHOST_BUTTON, OUTLINE_BUTTON, TEXT_INPUT } from "./ui";
+import { WorkspaceMark } from "./WorkspaceMark";
 
-const FIELD_LABEL = "flex flex-col gap-1 text-xs font-medium text-muted-foreground";
+const SECTION_LABEL = "text-xs font-medium text-muted-foreground";
+const FIELD_LABEL = cn("flex flex-col gap-1", SECTION_LABEL);
 const MAX_WORKSPACE_NAME_LENGTH = 80;
 const MAX_TAG_NAME_LENGTH = 32;
+const MAX_LOGO_BYTES = 1024 * 1024;
 
 export interface WorkspaceSettingsActions {
   onRename: (workspaceId: string, name: string) => void;
+  onSetLogo: (workspaceId: string, logo: WorkspaceLogo | null) => void;
   onCreateTag: (workspaceId: string, name: string, color: ColorTone) => void;
   onAttachTag: (workspaceId: string, tagId: string) => void;
   onDetachTag: (workspaceId: string, tagId: string) => void;
@@ -57,6 +62,64 @@ function WorkspaceNameField({ workspace, onRename }: { workspace: Workspace; onR
         onKeyDown={commitOnEnter}
       />
     </label>
+  );
+}
+
+function logoProblemOf(file: File): string | null {
+  return imageProblemOf(file) ?? (file.size > MAX_LOGO_BYTES ? `${file.name} is larger than 1 MB` : null);
+}
+
+interface WorkspaceLogoFieldProps {
+  workspace: Workspace;
+  onChange: (logo: WorkspaceLogo | null) => void;
+}
+
+function WorkspaceLogoField({ workspace, onChange }: WorkspaceLogoFieldProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  function pick(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    const fileProblem = logoProblemOf(file);
+    setProblem(fileProblem);
+    if (fileProblem) return;
+    readImage(file).then(
+      ({ mediaType, dataBase64 }) => onChange({ mediaType, dataBase64 }),
+      () => setProblem(`${file.name} could not be read`),
+    );
+  }
+
+  function remove() {
+    setProblem(null);
+    onChange(null);
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className={SECTION_LABEL}>Logo</span>
+      <div className="flex items-center gap-3">
+        <WorkspaceMark workspace={workspace} size="large" />
+        <button type="button" className={OUTLINE_BUTTON} onClick={() => fileInputRef.current?.click()}>
+          <ImagePlus />
+          {workspace.logo ? "Replace" : "Choose image"}
+        </button>
+        {workspace.logo && (
+          <button type="button" className={GHOST_BUTTON} onClick={remove}>
+            Remove
+          </button>
+        )}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept={ACCEPTED_IMAGE_TYPES.join(",")}
+          className="hidden"
+          onChange={pick}
+        />
+      </div>
+      {problem && <p role="alert" className="text-xs text-error-foreground">{problem}</p>}
+    </div>
   );
 }
 
@@ -127,8 +190,9 @@ export function WorkspaceSettingsDialog({ workspace, tags, actions, onClose }: W
     <Dialog title="Workspace settings" description={workspace.name} onClose={onClose}>
       <div className="flex flex-col gap-4 px-5 pb-5">
         <WorkspaceNameField workspace={workspace} onRename={(name) => actions.onRename(workspace.id, name)} />
+        <WorkspaceLogoField workspace={workspace} onChange={(logo) => actions.onSetLogo(workspace.id, logo)} />
         <section aria-label="Tags" className="flex flex-col gap-1.5">
-          <span className="text-xs font-medium text-muted-foreground">Tags</span>
+          <span className={SECTION_LABEL}>Tags</span>
           {tags.length > 0 && (
             <ul className="flex max-h-48 flex-col gap-0.5 overflow-y-auto">
               {tags.map((tag) => (

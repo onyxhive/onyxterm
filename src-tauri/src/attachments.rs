@@ -23,12 +23,22 @@ pub enum ImageMediaType {
 }
 
 impl ImageMediaType {
-    fn as_str(self) -> &'static str {
+    pub fn as_str(self) -> &'static str {
         match self {
             ImageMediaType::Png => "image/png",
             ImageMediaType::Jpeg => "image/jpeg",
             ImageMediaType::Gif => "image/gif",
             ImageMediaType::Webp => "image/webp",
+        }
+    }
+
+    pub fn parse(text: &str) -> Option<ImageMediaType> {
+        match text {
+            "image/png" => Some(ImageMediaType::Png),
+            "image/jpeg" => Some(ImageMediaType::Jpeg),
+            "image/gif" => Some(ImageMediaType::Gif),
+            "image/webp" => Some(ImageMediaType::Webp),
+            _ => None,
         }
     }
 }
@@ -51,7 +61,7 @@ impl Attachment {
     }
 }
 
-fn decoded_size(data_base64: &str) -> AppResult<usize> {
+pub fn decoded_size(data_base64: &str) -> AppResult<usize> {
     STANDARD
         .decode(data_base64)
         .map(|bytes| bytes.len())

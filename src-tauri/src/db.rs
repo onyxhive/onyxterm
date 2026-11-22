@@ -67,6 +67,8 @@ CREATE TABLE workspace_tags (
     PRIMARY KEY (workspace_id, tag_id)
 );
 "#,
+    "ALTER TABLE workspaces ADD COLUMN logo_media_type TEXT; \
+     ALTER TABLE workspaces ADD COLUMN logo_data_base64 TEXT;",
 ];
 
 pub struct Db(Mutex<Connection>);

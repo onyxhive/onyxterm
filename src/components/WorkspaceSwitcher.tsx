@@ -7,6 +7,7 @@ import { TagChip } from "./TagChip";
 import { cn, FOCUS_RING, ICON_BUTTON, Kbd, MENU_ITEM, MENU_POPUP, MenuLabel, MenuSeparator } from "./ui";
 import { useDismiss } from "./useDismiss";
 import { useWorkspaceDrag } from "./useWorkspaceDrag";
+import { WorkspaceMark } from "./WorkspaceMark";
 import { WorkspaceSettingsDialog, type WorkspaceSettingsActions } from "./WorkspaceSettingsDialog";
 
 export interface WorkspaceActions extends WorkspaceSettingsActions {
@@ -39,20 +40,6 @@ function describeWorkspace(workspace: Workspace, tasks: Task[]): string {
   const projectCount = `${workspace.projects.length} project${workspace.projects.length === 1 ? "" : "s"}`;
   const activity = waiting > 0 ? `${waiting} waiting` : running > 0 ? `${running} running` : "idle";
   return `${projectCount}, ${activity}`;
-}
-
-function WorkspaceMark({ name }: { name: string }) {
-  return (
-    <span
-      aria-hidden="true"
-      className={cn(
-        "flex size-5 shrink-0 items-center justify-center rounded-md bg-foreground text-[11px] font-semibold",
-        "text-background uppercase",
-      )}
-    >
-      {name.charAt(0)}
-    </span>
-  );
 }
 
 export function WorkspaceSwitcher({ workspaces, current, tags, tasks, actions }: WorkspaceSwitcherProps) {
@@ -106,7 +93,7 @@ export function WorkspaceSwitcher({ workspaces, current, tags, tasks, actions }:
     if (editing.kind === "rename" && editing.workspaceId === workspace.id) {
       return (
         <div className={MENU_ITEM}>
-          <WorkspaceMark name={workspace.name} />
+          <WorkspaceMark workspace={workspace} />
           <NameField
             initialValue={workspace.name}
             label="Workspace name"
@@ -132,7 +119,7 @@ export function WorkspaceSwitcher({ workspaces, current, tags, tasks, actions }:
           onClick={() => choose(workspace.id)}
           onDoubleClick={() => setEditing({ kind: "rename", workspaceId: workspace.id })}
         >
-          <WorkspaceMark name={workspace.name} />
+          <WorkspaceMark workspace={workspace} />
           <span className="flex min-w-0 flex-1 flex-col">
             <span className="flex min-w-0 items-center gap-1">
               <span className="truncate font-medium">{workspace.name}</span>
@@ -177,7 +164,7 @@ export function WorkspaceSwitcher({ workspaces, current, tags, tasks, actions }:
           FOCUS_RING,
         )}
       >
-        <WorkspaceMark name={current.name} />
+        <WorkspaceMark workspace={current} />
         <span className="truncate">{current.name}</span>
         <ChevronsUpDown className="size-3 shrink-0 text-muted-foreground" />
       </button>

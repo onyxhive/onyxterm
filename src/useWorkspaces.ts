@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, type Settings } from "./api";
 import type { ColorTone } from "./colorTones";
-import type { Tag, Workspace } from "./types";
+import type { Tag, Workspace, WorkspaceLogo } from "./types";
 
 const WORKSPACE_SETTING = "workspaceId";
 
@@ -79,6 +79,8 @@ export function useWorkspaces({ settings, remember, onError }: WorkspacesInput) 
         }),
       );
     },
+    onSetLogo: (workspaceId: string, logo: WorkspaceLogo | null) =>
+      guarded(() => api.setWorkspaceLogo(workspaceId, logo)),
     onCreateTag: (workspaceId: string, name: string, color: ColorTone) =>
       guarded(async () => {
         const created = await api.createTag(name, color);

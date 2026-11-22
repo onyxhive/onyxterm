@@ -18,12 +18,18 @@ export interface Tag {
   color: ColorTone;
 }
 
+export interface WorkspaceLogo {
+  mediaType: string;
+  dataBase64: string;
+}
+
 export interface Workspace {
   id: string;
   name: string;
   position: number;
   projects: Project[];
   tags: Tag[];
+  logo: WorkspaceLogo | null;
 }
 
 export interface Chat {
