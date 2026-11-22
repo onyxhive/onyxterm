@@ -735,6 +735,7 @@ pub async fn send_message(
         return Err(AppError::Agent(CODEX_UNSUPPORTED.into()));
     }
     let process = runtime.process_for(&app, &chat, Path::new(&cwd))?;
+    chats::stamp_user_message(&db.connection(), &chat_id)?;
     let is_first_message = {
         let mut activity = locked(&process.activity);
         activity.is_turn_active = true;
@@ -938,6 +939,7 @@ mod tests {
             state: ChatState::Review,
             created_at: 0,
             updated_at: 0,
+            last_user_message_at: 0,
             branch: None,
             worktree_path: None,
             is_worktree_removed: false,

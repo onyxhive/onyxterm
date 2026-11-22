@@ -79,6 +79,7 @@ export function toTask(chat: Chat, feed: ChatFeed, now: number): Task {
     ultracode: chat.ultracode,
     elapsed: elapsedSince(chat.updatedAt, now),
     workingSince: feed.turnStartedAt ?? chat.updatedAt,
+    lastUserMessageAt: chat.lastUserMessageAt,
     feed: feed.items,
     work: { runningNow: runningActivity(feed), shells: Object.values(feed.shells) },
     branch: chat.branch,

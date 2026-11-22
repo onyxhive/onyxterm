@@ -48,6 +48,7 @@ export interface Chat {
   state: TaskStatus;
   createdAt: number;
   updatedAt: number;
+  lastUserMessageAt: number;
   branch: string | null;
   worktreePath: string | null;
   isWorktreeRemoved: boolean;
@@ -148,6 +149,7 @@ export interface Task {
   ultracode: boolean;
   elapsed: string;
   workingSince: number;
+  lastUserMessageAt: number;
   feed: FeedItem[];
   work: Work;
   branch: string | null;

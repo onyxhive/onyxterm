@@ -69,6 +69,8 @@ CREATE TABLE workspace_tags (
 "#,
     "ALTER TABLE workspaces ADD COLUMN logo_media_type TEXT; \
      ALTER TABLE workspaces ADD COLUMN logo_data_base64 TEXT;",
+    "ALTER TABLE chats ADD COLUMN last_user_message_at INTEGER NOT NULL DEFAULT 0; \
+     UPDATE chats SET last_user_message_at = updated_at;",
 ];
 
 pub struct Db(Mutex<Connection>);

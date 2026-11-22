@@ -23,13 +23,19 @@ export const STATUS_LABEL: Record<TaskStatus, string> = {
 };
 
 const WAITING_STATUSES = STATUS_GROUPS[0].statuses;
+const LATEST_MESSAGE_FIRST_GROUP_IDS = new Set(["waiting", "running"]);
 
 export function isWaiting(status: TaskStatus): boolean {
   return WAITING_STATUSES.includes(status);
 }
 
+function byLatestUserMessage(first: Task, second: Task): number {
+  return second.lastUserMessageAt - first.lastUserMessageAt;
+}
+
 export function tasksInGroup(tasks: Task[], group: StatusGroup): Task[] {
-  return tasks.filter((task) => group.statuses.includes(task.status));
+  const members = tasks.filter((task) => group.statuses.includes(task.status));
+  return LATEST_MESSAGE_FIRST_GROUP_IDS.has(group.id) ? members.sort(byLatestUserMessage) : members;
 }
 
 export function statusSectionsOf(tasks: Task[]): { group: StatusGroup; tasks: Task[] }[] {

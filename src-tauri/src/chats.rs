@@ -166,6 +166,7 @@ pub struct Chat {
     pub state: ChatState,
     pub created_at: i64,
     pub updated_at: i64,
+    pub last_user_message_at: i64,
     pub branch: Option<String>,
     pub worktree_path: Option<String>,
     pub is_worktree_removed: bool,
@@ -224,7 +225,7 @@ pub struct ChatOptions {
 }
 
 const CHAT_COLUMNS: &str = "id, workspace_id, project_id, provider, command, model, effort, session_id, title, \
-    state, created_at, updated_at, branch, worktree_path, permission_mode, fast_mode, ultracode";
+    state, created_at, updated_at, branch, worktree_path, permission_mode, fast_mode, ultracode, last_user_message_at";
 
 fn chat_from_row(row: &Row<'_>) -> rusqlite::Result<Chat> {
     let worktree_path: Option<String> = row.get(13)?;
@@ -241,6 +242,7 @@ fn chat_from_row(row: &Row<'_>) -> rusqlite::Result<Chat> {
         state: ChatState::parse(&row.get::<_, String>(9)?),
         created_at: row.get(10)?,
         updated_at: row.get(11)?,
+        last_user_message_at: row.get(17)?,
         branch: row.get(12)?,
         is_worktree_removed: worktree_path.as_deref().is_some_and(|path| !Path::new(path).is_dir()),
         worktree_path,
@@ -309,6 +311,7 @@ pub fn insert_chat(connection: &Connection, draft: NewChat, checkout: ChatChecko
         state: ChatState::Review,
         created_at: now,
         updated_at: now,
+        last_user_message_at: now,
         branch: checkout.branch,
         worktree_path: checkout.worktree_path,
         is_worktree_removed: false,
@@ -316,7 +319,7 @@ pub fn insert_chat(connection: &Connection, draft: NewChat, checkout: ChatChecko
     connection.execute(
         &format!(
             "INSERT INTO chats ({CHAT_COLUMNS}) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)"
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)"
         ),
         params![
             created.id,
@@ -335,7 +338,8 @@ pub fn insert_chat(connection: &Connection, draft: NewChat, checkout: ChatChecko
             created.worktree_path,
             created.permission_mode.as_str(),
             created.is_fast_mode,
-            created.is_ultracode
+            created.is_ultracode,
+            created.last_user_message_at
         ],
     )?;
     Ok(created)
@@ -372,6 +376,15 @@ pub fn update_state(connection: &Connection, chat_id: &str, state: ChatState) ->
         "UPDATE chats SET state = ?2, updated_at = ?3 WHERE id = ?1",
         params![chat_id, state.as_str(), now_millis()],
     )?;
+    if changed == 0 {
+        return Err(AppError::NotFound("chat"));
+    }
+    Ok(())
+}
+
+pub fn stamp_user_message(connection: &Connection, chat_id: &str) -> AppResult<()> {
+    let changed = connection
+        .execute("UPDATE chats SET last_user_message_at = ?2 WHERE id = ?1", params![chat_id, now_millis()])?;
     if changed == 0 {
         return Err(AppError::NotFound("chat"));
     }
@@ -600,6 +613,22 @@ mod tests {
         for unknown in ["dontAsk", "Auto", "manual", "BYPASS", "default; rm -rf /"] {
             assert!(serde_json::from_value::<PermissionMode>(unknown.into()).is_err(), "{unknown}");
         }
+    }
+
+    #[test]
+    fn stamps_the_last_user_message_without_touching_state_changes() {
+        let db = Db::open_in_memory().unwrap();
+        let connection = db.connection();
+        let created = insert_chat(&connection, draft(project_id(&connection)), ChatCheckout::default()).unwrap();
+        assert_eq!(created.last_user_message_at, created.created_at);
+        connection.execute("UPDATE chats SET last_user_message_at = 5 WHERE id = ?1", [&created.id]).unwrap();
+        update_state(&connection, &created.id, ChatState::Running).unwrap();
+        assert_eq!(chat(&connection, &created.id).unwrap().last_user_message_at, 5);
+        stamp_user_message(&connection, &created.id).unwrap();
+        assert!(chat(&connection, &created.id).unwrap().last_user_message_at >= created.created_at);
+        assert!(stamp_user_message(&connection, "ghost").is_err());
+        let listed = serde_json::to_value(chat(&connection, &created.id).unwrap()).unwrap();
+        assert!(listed["lastUserMessageAt"].is_i64());
     }
 
     #[test]
