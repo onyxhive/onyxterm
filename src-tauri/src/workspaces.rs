@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection, OptionalExtension, params};
@@ -98,6 +99,28 @@ fn rename(connection: &Connection, workspace_id: &str, name: &str) -> AppResult<
     Ok(())
 }
 
+fn is_every_workspace_once(connection: &Connection, workspace_ids: &[String]) -> AppResult<bool> {
+    let mut statement = connection.prepare("SELECT id FROM workspaces")?;
+    let current = statement.query_map([], |row| row.get::<_, String>(0))?.collect::<Result<HashSet<_>, _>>()?;
+    let requested: HashSet<&String> = workspace_ids.iter().collect();
+    Ok(requested.len() == workspace_ids.len()
+        && requested.len() == current.len()
+        && requested.iter().all(|workspace_id| current.contains(*workspace_id)))
+}
+
+fn reorder(connection: &Connection, workspace_ids: &[String]) -> AppResult<()> {
+    let transaction = connection.unchecked_transaction()?;
+    if !is_every_workspace_once(&transaction, workspace_ids)? {
+        return Err(AppError::Invalid("the new order must list every workspace exactly once".into()));
+    }
+    for (position, workspace_id) in workspace_ids.iter().enumerate() {
+        transaction
+            .execute("UPDATE workspaces SET position = ?2 WHERE id = ?1", params![workspace_id, position as i64])?;
+    }
+    transaction.commit()?;
+    Ok(())
+}
+
 fn folder_name(path: &Path) -> String {
     path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_else(|| path.display().to_string())
 }
@@ -136,6 +159,11 @@ pub fn create_workspace(db: State<'_, Db>, name: String) -> AppResult<Workspace>
 #[tauri::command]
 pub fn rename_workspace(db: State<'_, Db>, workspace_id: String, name: String) -> AppResult<()> {
     rename(&db.connection(), &workspace_id, &validated_name(&name)?)
+}
+
+#[tauri::command]
+pub fn reorder_workspaces(db: State<'_, Db>, workspace_ids: Vec<String>) -> AppResult<()> {
+    reorder(&db.connection(), &workspace_ids)
 }
 
 #[tauri::command]
@@ -183,6 +211,34 @@ mod tests {
         assert_eq!(first, second);
         assert_eq!(first.name, "geo-svc");
         assert_eq!(workspaces(&connection).unwrap()[0].projects.len(), 1);
+    }
+
+    fn workspace_names(connection: &Connection) -> Vec<String> {
+        workspaces(connection).unwrap().into_iter().map(|workspace| workspace.name).collect()
+    }
+
+    #[test]
+    fn reorders_workspaces_by_the_given_ids() {
+        let db = Db::open_in_memory().unwrap();
+        let connection = db.connection();
+        let first = insert_workspace(&connection, "Personal").unwrap();
+        let second = insert_workspace(&connection, "Work").unwrap();
+        let third = insert_workspace(&connection, "Lab").unwrap();
+        reorder(&connection, &[third.id, first.id, second.id]).unwrap();
+        assert_eq!(workspace_names(&connection), ["Lab", "Personal", "Work"]);
+    }
+
+    #[test]
+    fn rejects_an_order_that_is_not_exactly_the_current_workspaces() {
+        let db = Db::open_in_memory().unwrap();
+        let connection = db.connection();
+        let first = insert_workspace(&connection, "Personal").unwrap();
+        let second = insert_workspace(&connection, "Work").unwrap();
+        assert!(reorder(&connection, std::slice::from_ref(&second.id)).is_err());
+        assert!(reorder(&connection, &[second.id.clone(), second.id.clone()]).is_err());
+        assert!(reorder(&connection, &[second.id.clone(), first.id.clone(), "ghost".into()]).is_err());
+        assert!(reorder(&connection, &[second.id.clone(), "ghost".into()]).is_err());
+        assert_eq!(workspace_names(&connection), ["Personal", "Work"]);
     }
 
     #[test]

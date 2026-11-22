@@ -41,6 +41,7 @@ export const api = {
   listWorkspaces: () => invoke<Workspace[]>("list_workspaces"),
   createWorkspace: (name: string) => invoke<Workspace>("create_workspace", { name }),
   renameWorkspace: (workspaceId: string, name: string) => invoke<void>("rename_workspace", { workspaceId, name }),
+  reorderWorkspaces: (workspaceIds: string[]) => invoke<void>("reorder_workspaces", { workspaceIds }),
   addProject: (workspaceId: string) => invoke<Project | null>("add_project", { workspaceId }),
   removeProject: (projectId: string) => invoke<void>("remove_project", { projectId }),
   listChats: () => invoke<Chat[]>("list_chats"),

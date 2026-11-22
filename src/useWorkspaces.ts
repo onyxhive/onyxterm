@@ -4,6 +4,10 @@ import type { Workspace } from "./types";
 
 const WORKSPACE_SETTING = "workspaceId";
 
+function inOrder(workspaces: Workspace[], workspaceIds: string[]): Workspace[] {
+  return workspaceIds.flatMap((workspaceId) => workspaces.find((workspace) => workspace.id === workspaceId) ?? []);
+}
+
 interface WorkspacesInput {
   settings: Settings | null;
   remember: (key: string, value: string) => void;
@@ -60,6 +64,16 @@ export function useWorkspaces({ settings, remember, onError }: WorkspacesInput) 
         select(created.id);
       }),
     onRename: (id: string, name: string) => guarded(() => api.renameWorkspace(id, name)),
+    onReorder: (workspaceIds: string[]) => {
+      const previous = workspaces;
+      setWorkspaces(inOrder(workspaces, workspaceIds));
+      return guarded(() =>
+        api.reorderWorkspaces(workspaceIds).catch((error: unknown) => {
+          setWorkspaces(previous);
+          throw error;
+        }),
+      );
+    },
     onAddProject: () =>
       guarded(async () => {
         if (!workspace) return;

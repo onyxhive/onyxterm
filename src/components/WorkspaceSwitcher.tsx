@@ -5,11 +5,13 @@ import { isWaiting } from "../status";
 import { NameField } from "./NameField";
 import { cn, FOCUS_RING, ICON_BUTTON, Kbd, MENU_ITEM, MENU_POPUP, MenuLabel, MenuSeparator } from "./ui";
 import { useDismiss } from "./useDismiss";
+import { useWorkspaceDrag } from "./useWorkspaceDrag";
 
 export interface WorkspaceActions {
   onSelect: (workspaceId: string) => void;
   onCreate: (name: string) => void;
   onRename: (workspaceId: string, name: string) => void;
+  onReorder: (workspaceIds: string[]) => void;
   onAddProject: () => void;
   onRemoveProject: (projectId: string) => void;
 }
@@ -24,6 +26,8 @@ interface WorkspaceSwitcherProps {
 type Editing = { kind: "none" } | { kind: "create" } | { kind: "rename"; workspaceId: string };
 
 const NOT_EDITING: Editing = { kind: "none" };
+
+const DROP_INDICATOR = "pointer-events-none absolute inset-x-2 h-0.5 rounded-full bg-primary";
 
 function describeWorkspace(workspace: Workspace, tasks: Task[]): string {
   const projectIds = new Set(workspace.projects.map((project) => project.id));
@@ -54,6 +58,10 @@ export function WorkspaceSwitcher({ workspaces, current, tasks, actions }: Works
   const [editing, setEditing] = useState<Editing>(NOT_EDITING);
   const rootRef = useRef<HTMLDivElement>(null);
   const { onSelect } = actions;
+  const drag = useWorkspaceDrag({
+    workspaceIds: workspaces.map((workspace) => workspace.id),
+    onReorder: actions.onReorder,
+  });
 
   const close = useCallback(() => {
     setIsOpen(false);
@@ -103,21 +111,23 @@ export function WorkspaceSwitcher({ workspaces, current, tasks, actions }: Works
       );
     }
     return (
-      <button
-        type="button"
-        role="menuitemradio"
-        aria-checked={isCurrent}
-        className={cn(MENU_ITEM, "py-1.5")}
-        onClick={() => choose(workspace.id)}
-        onDoubleClick={() => setEditing({ kind: "rename", workspaceId: workspace.id })}
-      >
-        <WorkspaceMark name={workspace.name} />
-        <span className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate font-medium">{workspace.name}</span>
-          <span className="truncate text-xs text-muted-foreground">{describeWorkspace(workspace, tasks)}</span>
-        </span>
-        {isCurrent ? <Check className="size-3.5" /> : <Kbd>⌘{index + 1}</Kbd>}
-      </button>
+      <div {...drag.sourceProps(workspace.id)} className={cn(drag.draggedId === workspace.id && "opacity-50")}>
+        <button
+          type="button"
+          role="menuitemradio"
+          aria-checked={isCurrent}
+          className={cn(MENU_ITEM, "py-1.5")}
+          onClick={() => choose(workspace.id)}
+          onDoubleClick={() => setEditing({ kind: "rename", workspaceId: workspace.id })}
+        >
+          <WorkspaceMark name={workspace.name} />
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="truncate font-medium">{workspace.name}</span>
+            <span className="truncate text-xs text-muted-foreground">{describeWorkspace(workspace, tasks)}</span>
+          </span>
+          {isCurrent ? <Check className="size-3.5" /> : <Kbd>⌘{index + 1}</Kbd>}
+        </button>
+      </div>
     );
   }
 
@@ -145,7 +155,10 @@ export function WorkspaceSwitcher({ workspaces, current, tasks, actions }: Works
           )}>
           <MenuLabel>Workspaces</MenuLabel>
           {workspaces.map((workspace, index) => (
-            <div key={workspace.id}>
+            <div key={workspace.id} className="relative" {...drag.targetProps(index)}>
+              {drag.indicatorAt(index) === "before" && (
+                <span aria-hidden="true" className={cn(DROP_INDICATOR, "-top-px")} />
+              )}
               {renderWorkspaceRow(workspace, index)}
               {workspace.id === current.id && workspace.projects.length > 0 && (
                 <ul className="mb-1 ms-4 flex flex-col border-l border-border ps-2">
@@ -171,6 +184,9 @@ export function WorkspaceSwitcher({ workspaces, current, tasks, actions }: Works
                     </li>
                   ))}
                 </ul>
+              )}
+              {drag.indicatorAt(index) === "after" && (
+                <span aria-hidden="true" className={cn(DROP_INDICATOR, "-bottom-px")} />
               )}
             </div>
           ))}
