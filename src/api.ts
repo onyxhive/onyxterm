@@ -72,7 +72,6 @@ export const api = {
   discoverCapabilities: (command: string, projectId: string, model?: string) =>
     invoke<Capabilities>("discover_capabilities", { command, projectId, model }),
   listProjectFiles: (target: GitTarget) => invoke<string[]>("list_project_files", { target }),
-  projectBranch: (projectId: string) => invoke<string | null>("project_branch", { projectId }),
   planUsage: (command: string) => invoke<UsageReport>("plan_usage", { command }),
   refreshPlanUsage: (command: string) => invoke<UsageReport>("refresh_plan_usage", { command }),
 };

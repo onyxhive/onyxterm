@@ -8,7 +8,6 @@ import { cn, FOCUS_RING } from "./ui";
 interface BoardProps {
   tasks: Task[];
   projectName: (projectId: string) => string;
-  projectBranch: (projectId: string) => string | null;
   onOpen: (taskId: string) => void;
 }
 
@@ -55,7 +54,7 @@ function BoardCard({ task, projectName, branch, onOpen }: BoardCardProps) {
   );
 }
 
-export function Board({ tasks, projectName, projectBranch, onOpen }: BoardProps) {
+export function Board({ tasks, projectName, onOpen }: BoardProps) {
   return (
     <div className="min-h-0 flex-1 overflow-auto px-5 pb-5">
       <div className="grid min-w-[44rem] grid-cols-4 gap-3">
@@ -73,7 +72,7 @@ export function Board({ tasks, projectName, projectBranch, onOpen }: BoardProps)
                     <BoardCard
                       task={task}
                       projectName={projectName(task.projectId)}
-                      branch={task.branch ?? projectBranch(task.projectId)}
+                      branch={task.branch}
                       onOpen={() => onOpen(task.id)}
                     />
                   </li>

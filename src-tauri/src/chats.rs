@@ -414,6 +414,21 @@ pub fn settle_orphaned_turns(connection: &Connection) -> AppResult<()> {
     Ok(())
 }
 
+pub fn update_branch(connection: &Connection, chat_id: &str, branch: Option<&str>) -> AppResult<bool> {
+    let changed = connection
+        .execute("UPDATE chats SET branch = ?2 WHERE id = ?1 AND branch IS NOT ?2", params![chat_id, branch])?;
+    Ok(changed > 0)
+}
+
+pub fn open_chats_at(connection: &Connection, project_id: &str, root: &Path) -> AppResult<Vec<Chat>> {
+    let mut statement =
+        connection.prepare(&format!("SELECT {CHAT_COLUMNS} FROM chats WHERE project_id = ?1 AND state <> ?2"))?;
+    let open = statement
+        .query_map(params![project_id, ChatState::Done.as_str()], chat_from_row)?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(open.into_iter().filter(|chat| chat_root(connection, chat).is_ok_and(|chat_root| chat_root == root)).collect())
+}
+
 pub fn update_session_id(connection: &Connection, chat_id: &str, session_id: &str) -> AppResult<()> {
     connection.execute("UPDATE chats SET session_id = ?2 WHERE id = ?1", params![chat_id, session_id])?;
     Ok(())
@@ -454,7 +469,7 @@ fn worktrees_root(app: &AppHandle) -> AppResult<PathBuf> {
 
 async fn checkout_for(app: &AppHandle, root: PathBuf, request: Option<WorktreeRequest>) -> AppResult<ChatCheckout> {
     let Some(request) = request else {
-        let branch = in_background(move || Ok(git::branch_at(&root))).await?;
+        let branch = in_background(move || Ok(git::head_label_at(&root))).await?;
         return Ok(ChatCheckout { branch, worktree_path: None });
     };
     let worktrees_root = worktrees_root(app)?;
@@ -662,6 +677,32 @@ mod tests {
         let wire = serde_json::to_value(&listed).unwrap();
         assert_eq!(wire["branch"], "onyx/fix-the-sort");
         assert!(wire["pr"].is_null());
+    }
+
+    #[test]
+    fn updates_the_branch_of_open_chats_that_share_a_checkout() {
+        let db = Db::open_in_memory().unwrap();
+        let connection = db.connection();
+        let project = project_id(&connection);
+        let on_main = ChatCheckout { branch: Some("main".into()), worktree_path: None };
+        let local = insert_chat(&connection, draft(project.clone()), on_main).unwrap();
+        let worktree = std::env::temp_dir().join(format!("onyx-hive-open-chat-{}", new_id()));
+        std::fs::create_dir_all(&worktree).unwrap();
+        let isolated = ChatCheckout {
+            branch: Some("onyx/x".into()),
+            worktree_path: Some(worktree.to_string_lossy().into_owned()),
+        };
+        insert_chat(&connection, draft(project.clone()), isolated).unwrap();
+        let finished = insert_chat(&connection, draft(project.clone()), ChatCheckout::default()).unwrap();
+        update_state(&connection, &finished.id, ChatState::Done).unwrap();
+        let open = open_chats_at(&connection, &project, Path::new("/tmp/p1")).unwrap();
+        assert_eq!(open.into_iter().map(|chat| chat.id).collect::<Vec<_>>(), vec![local.id.clone()]);
+        assert!(update_branch(&connection, &local.id, Some("feature/y")).unwrap());
+        assert!(!update_branch(&connection, &local.id, Some("feature/y")).unwrap());
+        assert_eq!(chat(&connection, &local.id).unwrap().branch.as_deref(), Some("feature/y"));
+        assert!(update_branch(&connection, &local.id, None).unwrap());
+        assert!(!update_branch(&connection, &local.id, None).unwrap());
+        std::fs::remove_dir(&worktree).unwrap();
     }
 
     #[test]

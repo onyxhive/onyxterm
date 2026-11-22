@@ -4,12 +4,13 @@ use std::process::Command;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
-use tauri::State;
+use tauri::{AppHandle, State};
 
 use crate::branches::ProjectBranches;
 use crate::chats;
 use crate::db::Db;
 use crate::error::{AppError, AppResult};
+use crate::runtime;
 use crate::subprocess::{self, Limits, Output, in_background};
 use crate::workspaces::project;
 
@@ -592,8 +593,20 @@ pub fn fresh_remote_base(git: &Git) -> AppResult<Option<String>> {
     Ok(None)
 }
 
-pub fn branch_at(root: &Path) -> Option<String> {
-    current_branch(&Git::at(root)).ok().flatten()
+fn short_head(git: &Git) -> AppResult<Option<String>> {
+    let output = git.run(&["rev-parse", "--short", "HEAD"], READ_LIMITS)?;
+    Ok(output.is_success.then(|| output.stdout.trim().to_string()).filter(|sha| !sha.is_empty()))
+}
+
+pub fn head_label(git: &Git) -> AppResult<Option<String>> {
+    match current_branch(git)? {
+        Some(branch) => Ok(Some(branch)),
+        None => short_head(git),
+    }
+}
+
+pub fn head_label_at(root: &Path) -> Option<String> {
+    head_label(&Git::at(root)).ok().flatten()
 }
 
 pub fn project_root(db: &Db, project_id: &str) -> AppResult<PathBuf> {
@@ -653,8 +666,18 @@ pub async fn git_branches(db: State<'_, Db>, target: GitTarget) -> AppResult<Bra
     in_background(move || branches(&git)).await
 }
 
+async fn sync_chat_branches(app: &AppHandle, workdir: &Workdir) {
+    let (app, project_id, root) = (app.clone(), workdir.project_id.clone(), workdir.root.clone());
+    let _ = in_background(move || {
+        runtime::sync_chat_branches(&app, &project_id, &root);
+        Ok(())
+    })
+    .await;
+}
+
 #[tauri::command]
 pub async fn git_checkout(
+    app: AppHandle,
     db: State<'_, Db>,
     project_branches: State<'_, ProjectBranches>,
     target: GitTarget,
@@ -673,11 +696,13 @@ pub async fn git_checkout(
     })
     .await;
     project_branches.forget(&workdir.project_id);
+    sync_chat_branches(&app, &workdir).await;
     switched
 }
 
 #[tauri::command]
 pub async fn git_create_branch(
+    app: AppHandle,
     db: State<'_, Db>,
     project_branches: State<'_, ProjectBranches>,
     target: GitTarget,
@@ -698,6 +723,7 @@ pub async fn git_create_branch(
     })
     .await;
     project_branches.forget(&workdir.project_id);
+    sync_chat_branches(&app, &workdir).await;
     created
 }
 
@@ -854,6 +880,18 @@ mod tests {
         for bad in ["-x", "a..b", "a b", "bad~name", "", "x\u{1b}"] {
             assert!(validated_branch(&git, bad).is_err(), "{bad:?}");
         }
+    }
+
+    #[test]
+    fn labels_the_head_by_its_branch_or_its_short_sha_when_detached() {
+        let Some((root, git)) = scratch_repo("label") else { return };
+        write(&root, "a.txt", "one\n");
+        git.output(&["add", "a.txt"]).unwrap();
+        git.output(&["commit", "-q", "-m", "start"]).unwrap();
+        assert_eq!(head_label(&git).unwrap().as_deref(), Some("main"));
+        git.output(&["checkout", "-q", "--detach"]).unwrap();
+        let sha = git.output(&["rev-parse", "--short", "HEAD"]).unwrap();
+        assert_eq!(head_label(&git).unwrap(), Some(sha.trim().to_string()));
     }
 
     #[test]

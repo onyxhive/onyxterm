@@ -22,7 +22,6 @@ import {
 import type { CollapsedSections } from "../collapsedSections";
 import { statusSectionsOf, type StatusGroup } from "../status";
 import type { ChatPullRequest, Task, TaskStatus, Workspace } from "../types";
-import type { ProjectBranches } from "../useProjectBranches";
 import { PrBadge } from "./PrBadge";
 import { cn, FOCUS_RING, ICON_BUTTON } from "./ui";
 
@@ -40,7 +39,6 @@ export interface SidebarActions {
 interface SidebarProps {
   workspace: Workspace;
   tasks: Task[];
-  branches: ProjectBranches;
   sections: CollapsedSections;
   selectedTaskId: string | null;
   isOpen: boolean;
@@ -336,7 +334,7 @@ function EmptyProjects({ onAddProject }: { onAddProject: () => void }) {
 }
 
 export function Sidebar(props: SidebarProps) {
-  const { workspace, tasks, branches, sections, selectedTaskId, isOpen, header, actions } = props;
+  const { workspace, tasks, sections, selectedTaskId, isOpen, header, actions } = props;
   const [query, setQuery] = useState("");
   const isSearching = query.trim().length > 0;
   const visibleTasks = isSearching ? tasks.filter((task) => matchesQuery(task, query)) : tasks;
@@ -347,7 +345,7 @@ export function Sidebar(props: SidebarProps) {
       <ThreadRow
         key={task.id}
         task={task}
-        branch={task.branch ?? branches[task.projectId] ?? null}
+        branch={task.branch}
         isActive={task.id === selectedTaskId}
         actions={actions}
       />

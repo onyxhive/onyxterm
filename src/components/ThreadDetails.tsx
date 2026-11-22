@@ -18,7 +18,6 @@ export interface ThreadDetailsActions {
   onMarkDone: () => void;
   onReopen: () => void;
   onOpenDiff: () => void;
-  onBranchChanged: () => void;
   onWorktreeRemoved: (chat: Chat) => void;
   onRunInTerminal: (command: string) => void;
   onError: (message: string) => void;
@@ -108,11 +107,6 @@ export function ThreadDetails({ task, project, status, actions }: ThreadDetailsP
     change();
   }
 
-  function branchChanged() {
-    refresh();
-    actions.onBranchChanged();
-  }
-
   return (
     <div className="relative" ref={popup.rootRef}>
       <button
@@ -143,7 +137,7 @@ export function ThreadDetails({ task, project, status, actions }: ThreadDetailsP
                 <ScriptRows projectId={project.id} runner={runner} onError={actions.onError} />
               </section>
               <section aria-label="Version control" className={DETAILS_SECTION}>
-                <BranchRow target={target} branch={status.data?.branch ?? task.branch} onChanged={branchChanged} />
+                <BranchRow target={target} branch={status.data?.branch ?? task.branch} onChanged={refresh} />
                 {task.pr && <PullRequestRow pr={task.pr} />}
                 <MentionedPullRequestRows task={task} />
                 <CommitRows

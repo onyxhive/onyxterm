@@ -34,7 +34,6 @@ import { shortcutCommandFor, type ShortcutCommand } from "./keybindings";
 import { statusSectionsOf } from "./status";
 import { setPullRequestOpener } from "./links";
 import { applyPreferences, areInAppNotificationsOn, isToggleOn } from "./preferences";
-import { useProjectBranches } from "./useProjectBranches";
 import { useSettings } from "./useSettings";
 import { useWorkbench, type SidePanelTab } from "./useWorkbench";
 import { useWorkspaces } from "./useWorkspaces";
@@ -56,7 +55,6 @@ const LAST_PROJECT_SETTING_PREFIX = "lastProject:";
 
 const CHAT_SWITCH_COMMANDS = new Set<ShortcutCommand>(["nextChat", "previousChat"]);
 
-const TURN_END_STATES = new Set<TaskStatus>(["review", "failed"]);
 
 const ATTENTION_HEADLINES: Partial<Record<TaskStatus, string>> = {
   permission: "needs your permission",
@@ -120,7 +118,6 @@ export default function App() {
   const workspaceState = useWorkspaces({ settings, remember, onError: showError });
   const { workspaces, workspace, actions: workspaceActions } = workspaceState;
   const projects = workspaces.flatMap((candidate) => candidate.projects);
-  const { branches, refresh: refreshBranch } = useProjectBranches(projects.map((project) => project.id));
   const sidebarSections = collapsedSectionsFrom(settings, remember);
   const { lastAddedProjectId } = workspaceState;
   const lastProjectSetting = workspace ? lastProjectSettingOf(workspace.id) : null;
@@ -146,12 +143,7 @@ export default function App() {
     notificationHistory.record(toast);
   }
 
-  function onStateChange(chat: Chat) {
-    announce(chat);
-    if (TURN_END_STATES.has(chat.state)) refreshBranch(chat.projectId);
-  }
-
-  const chatState = useChats({ onError: showError, onStateChange });
+  const chatState = useChats({ onError: showError, onStateChange: announce });
   const { chats, feeds, startChat } = chatState;
 
   const now = Date.now();
@@ -317,7 +309,6 @@ export default function App() {
     onMarkDone: () => withSelectedChat((chatId) => chatState.setState(chatId, "done")),
     onReopen: () => withSelectedChat((chatId) => chatState.setState(chatId, "review")),
     onOpenDiff: () => openSidePanelTab("changes"),
-    onBranchChanged: () => selectedTask && refreshBranch(selectedTask.projectId),
     onWorktreeRemoved: chatState.upsertChat,
     onRunInTerminal: (command) =>
       withSelectedChat((chatId) => {
@@ -413,7 +404,6 @@ export default function App() {
         <Board
           tasks={workspaceTasks}
           projectName={projectName}
-          projectBranch={(projectId) => branches[projectId] ?? null}
           onOpen={openTask}
         />
       );
@@ -461,7 +451,6 @@ export default function App() {
       <Sidebar
         workspace={workspace}
         tasks={workspaceTasks}
-        branches={branches}
         sections={sidebarSections}
         selectedTaskId={view === "chat" ? (selectedTask?.id ?? null) : null}
         isOpen={isSidebarOpen}

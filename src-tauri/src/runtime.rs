@@ -15,6 +15,7 @@ use crate::branches::ProjectBranches;
 use crate::chats::{self, AgentCommand, Chat, ChatOptions, ChatState, PermissionMode, Provider};
 use crate::db::{Db, new_id, now_millis};
 use crate::error::{AppError, AppResult};
+use crate::git;
 use crate::process::{self, Launch, SessionFlag};
 use crate::project_rules;
 use crate::protocol::{
@@ -367,6 +368,26 @@ fn forget_branch(app: &AppHandle, chat_id: &str) {
     }
 }
 
+pub fn sync_chat_branches(app: &AppHandle, project_id: &str, root: &Path) {
+    let branch = git::head_label_at(root);
+    let db = app.state::<Db>();
+    let connection = db.connection();
+    let Ok(open_chats) = chats::open_chats_at(&connection, project_id, root) else { return };
+    for open_chat in open_chats {
+        if !matches!(chats::update_branch(&connection, &open_chat.id, branch.as_deref()), Ok(true)) {
+            continue;
+        }
+        if let Ok(updated) = chats::chat(&connection, &open_chat.id) {
+            let _ = app.emit(CHAT_UPDATED, updated);
+        }
+    }
+}
+
+fn sync_branch_of(app: &AppHandle, chat_id: &str) {
+    let Ok((chat, cwd)) = chat_and_cwd(&app.state::<Db>(), chat_id) else { return };
+    sync_chat_branches(app, &chat.project_id, Path::new(&cwd));
+}
+
 fn remember_session(app: &AppHandle, chat_id: &str, session_id: &str) {
     let _ = chats::update_session_id(&app.state::<Db>().connection(), chat_id, session_id);
 }
@@ -425,6 +446,7 @@ fn apply_event(app: &AppHandle, chat_id: &str, process: &AgentProcess, event: &A
         }
         AgentEvent::TurnEnded { .. } => {
             forget_branch(app, chat_id);
+            sync_branch_of(app, chat_id);
             apply_activity(app, chat_id, process, event);
         }
         _ => apply_activity(app, chat_id, process, event),
