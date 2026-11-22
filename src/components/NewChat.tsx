@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Check, ChevronDown, Folder, FolderGit2, FolderPlus, TriangleAlert } from "lucide-react";
 import { effortOptionsFor, modelChoices, pickOption } from "../agentChoices";
 import { CODEX_COMMAND, DEFAULT_EFFORT, DEFAULT_MODEL } from "../agentOptions";
+import { newChatDraftKey } from "../composerDrafts";
 import type { PermissionMode } from "../permissionModes";
 import type { ImageAttachment, Project, Workspace } from "../types";
 import { suggestionSources, useCapabilities, useUltracodeAvailability } from "../useCapabilities";
@@ -215,6 +216,8 @@ export function NewChat(props: NewChatProps) {
           )}
         </div>
         <Composer
+          key={workspace.id}
+          draftKey={newChatDraftKey(workspace.id)}
           variant="hero"
           placeholder={COMPOSER_PLACEHOLDER}
           suggestionSources={sources}

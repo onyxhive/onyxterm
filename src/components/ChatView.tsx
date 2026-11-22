@@ -274,6 +274,7 @@ export function ChatView({ task, projectPath, isSubagentTrayCollapsed, actions }
               />
               <Composer
                 key={task.id}
+                draftKey={task.id}
                 variant="reply"
                 placeholder={question ? QUESTION_PLACEHOLDER : COMPOSER_PLACEHOLDER}
                 suggestionSources={sources}

@@ -22,8 +22,8 @@ function admit(current: ImageAttachment[], candidates: ImageAttachment[]): Admis
   return { admitted, problem: null };
 }
 
-export function useImageAttachments() {
-  const [images, setImages] = useState<ImageAttachment[]>([]);
+export function useImageAttachments(initialImages: ImageAttachment[]) {
+  const [images, setImages] = useState<ImageAttachment[]>(initialImages);
   const [problem, setProblem] = useState<string | null>(null);
 
   async function add(files: File[]) {

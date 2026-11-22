@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useId,
   useLayoutEffect,
   useMemo,
@@ -10,6 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { Paperclip } from "lucide-react";
+import { draftFor, EMPTY_DRAFT, saveDraft } from "../composerDrafts";
 import { useComposerInsertions, withInsertion } from "../composerInsertions";
 import { mentionTargetsOf } from "../mentions";
 import { sendNeedsModifier } from "../preferences";
@@ -23,6 +25,7 @@ import { cn, ICON_BUTTON } from "./ui";
 import { useImageAttachments } from "./useImageAttachments";
 
 interface ComposerProps {
+  draftKey: string;
   placeholder: string;
   variant: "hero" | "reply";
   suggestionSources: SuggestionSources;
@@ -100,9 +103,10 @@ function AttachedDrawer({ children }: { children: ReactNode }) {
 }
 
 export function Composer(props: ComposerProps) {
-  const { placeholder, variant, suggestionSources, onSubmit, controls, agentControls, drawer, footnote } = props;
-  const { sendBlockedReason, canSubmitEmpty = false, submitLabel = DEFAULT_SUBMIT_LABEL, onStop } = props;
-  const [text, setText] = useState("");
+  const { draftKey, placeholder, variant, suggestionSources, onSubmit, controls, agentControls, drawer } = props;
+  const { footnote, sendBlockedReason, canSubmitEmpty = false, submitLabel = DEFAULT_SUBMIT_LABEL, onStop } = props;
+  const [initialDraft] = useState(() => draftFor(draftKey));
+  const [text, setText] = useState(initialDraft.text);
   const [caret, setCaret] = useState(0);
   const [activeIndex, setActiveIndex] = useState(0);
   const [dismissedStart, setDismissedStart] = useState<number | null>(null);
@@ -110,8 +114,12 @@ export function Composer(props: ComposerProps) {
   const pendingCaret = useRef<number | null>(null);
   const listId = useId();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const attachments = useImageAttachments();
+  const attachments = useImageAttachments(initialDraft.images);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+
+  useEffect(() => {
+    saveDraft(draftKey, { text, images: attachments.images });
+  }, [draftKey, text, attachments.images]);
 
   useComposerInsertions((inserted) => {
     const next = withInsertion(text, inserted);
@@ -189,6 +197,7 @@ export function Composer(props: ComposerProps) {
   function submit() {
     if (!canSubmit) return;
     onSubmit(text.trim(), attachments.images);
+    saveDraft(draftKey, EMPTY_DRAFT);
     attachments.clear();
     setText("");
     setCaret(0);
