@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, type WheelEvent } from "react";
 import { effortOptionsFor, modelChoices } from "../agentChoices";
 import { CODEX_COMMAND } from "../agentOptions";
 import { needsRespawn, RESPAWN_LOCKED, type OptionLock } from "../liveOptions";
@@ -54,19 +54,25 @@ interface ChatViewProps {
 type PermissionRequest = Extract<FeedItem, { kind: "permission" }>;
 
 type FeedBlock =
-  | { kind: "item"; item: FeedItem; index: number }
-  | { kind: "approvals"; index: number; requests: PermissionRequest[] }
-  | { kind: "launches"; index: number; agentIds: string[] };
+  | { kind: "item"; key: string; item: FeedItem; index: number }
+  | { kind: "approvals"; key: string; index: number; requests: PermissionRequest[] }
+  | { kind: "launches"; key: string; index: number; agentIds: string[] };
 
 const TURN_ACTIVITY_KINDS = new Set<FeedItem["kind"]>(["steps", "subagent", "permission"]);
 const LAUNCH_PASSTHROUGH_KINDS = new Set<FeedItem["kind"]>(["subagent", "permission"]);
 
 const CODEX_COMING = "Codex support coming next";
 const TIMELINE_END_GAP = 16;
-const FOLLOW_DISTANCE = 64;
+const BOTTOM_TOLERANCE = 2;
 
-function isNearBottom(element: HTMLElement): boolean {
-  return element.scrollHeight - element.scrollTop - element.clientHeight <= FOLLOW_DISTANCE;
+function isAtBottom(element: HTMLElement): boolean {
+  return element.scrollHeight - element.scrollTop - element.clientHeight <= BOTTOM_TOLERANCE;
+}
+
+function hasSelectionIn(element: HTMLElement | null): boolean {
+  const selection = window.getSelection();
+  if (!element || !selection || selection.isCollapsed) return false;
+  return element.contains(selection.anchorNode) || element.contains(selection.focusNode);
 }
 
 function pendingQuestionIn(feed: FeedItem[]): QuestionRequest | null {
@@ -100,15 +106,15 @@ function feedBlocks(feed: FeedItem[]): FeedBlock[] {
     if (!LAUNCH_PASSTHROUGH_KINDS.has(item.kind)) openLaunches = null;
     if (item.kind === "subagent") {
       if (openLaunches) openLaunches.agentIds.push(item.toolUseId);
-      else blocks.push((openLaunches = { kind: "launches", index, agentIds: [item.toolUseId] }));
+      else blocks.push((openLaunches = { kind: "launches", key: item.id, index, agentIds: [item.toolUseId] }));
       return;
     }
     if (item.kind === "permission") {
       if (openApprovals) openApprovals.requests.push(item);
-      else blocks.push((openApprovals = { kind: "approvals", index, requests: [item] }));
+      else blocks.push((openApprovals = { kind: "approvals", key: item.id, index, requests: [item] }));
       return;
     }
-    blocks.push({ kind: "item", item, index });
+    blocks.push({ kind: "item", key: item.id, item, index });
   });
   return blocks;
 }
@@ -139,12 +145,14 @@ function liveStepIdIn(task: Task): string | null {
 export function ChatView({ task, projectPath, isSubagentTrayCollapsed, actions }: ChatViewProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const isFollowingRef = useRef(true);
+  const lastScrollTopRef = useRef(0);
   const dockRef = useRef<HTMLDivElement>(null);
   const dockHeight = useDockHeight(dockRef);
   const { capabilities } = useCapabilities(task.command, task.projectId);
   const files = useProjectFiles({ chat: task.id });
   const sources = useMemo(() => suggestionSources(capabilities, files), [capabilities, files]);
   const mentionTargets = useMemo(() => mentionTargetsOf(sources.mentions), [sources]);
+  const projectRoots = useMemo(() => projectRootsOf(task, projectPath), [task.worktreePath, projectPath]);
   const question = pendingQuestionIn(task.feed);
   const answers = useQuestionAnswers(question);
   const liveStepId = liveStepIdIn(task);
@@ -175,8 +183,19 @@ export function ChatView({ task, projectPath, isSubagentTrayCollapsed, actions }
   }, [task.id]);
 
   useEffect(() => {
-    if (isFollowingRef.current) scrollToBottom();
+    if (!isFollowingRef.current || hasSelectionIn(scrollRef.current)) return;
+    scrollToBottom();
   }, [task.feed.length, scrollKey, isRunning, dockHeight]);
+
+  function stopFollowingOnWheelUp(event: WheelEvent<HTMLDivElement>) {
+    if (event.deltaY < 0 && event.currentTarget.scrollTop > 0) isFollowingRef.current = false;
+  }
+
+  function followScrollIntent(element: HTMLDivElement) {
+    const hasScrolledUp = element.scrollTop < lastScrollTopRef.current;
+    lastScrollTopRef.current = element.scrollTop;
+    isFollowingRef.current = isAtBottom(element) || (isFollowingRef.current && !hasScrolledUp);
+  }
 
   function submit(text: string, images: ImageAttachment[]) {
     isFollowingRef.current = true;
@@ -209,14 +228,13 @@ export function ChatView({ task, projectPath, isSubagentTrayCollapsed, actions }
   const controls = <ChatWorkspaceControls worktreePath={task.worktreePath} />;
 
   return (
-    <ProjectRootsContext value={projectRootsOf(task, projectPath)}>
+    <ProjectRootsContext value={projectRoots}>
       <MentionTargetsContext value={mentionTargets}>
         <div className="relative flex min-h-0 flex-1 flex-col">
           <div
             ref={scrollRef}
-            onScroll={(event) => {
-              isFollowingRef.current = isNearBottom(event.currentTarget);
-            }}
+            onWheel={stopFollowingOnWheelUp}
+            onScroll={(event) => followScrollIntent(event.currentTarget)}
             style={{ paddingBottom: dockHeight + TIMELINE_END_GAP }}
             className="scroll-fade-top min-h-0 flex-1 overflow-y-auto px-5 [overflow-anchor:none]"
           >
@@ -230,7 +248,7 @@ export function ChatView({ task, projectPath, isSubagentTrayCollapsed, actions }
                 if (block.kind === "approvals") {
                   return (
                     <ApprovalGroup
-                      key={block.index}
+                      key={block.key}
                       requests={block.requests}
                       shortcutRequestId={shortcutRequestId}
                       onDecide={actions.onDecide}
@@ -240,7 +258,7 @@ export function ChatView({ task, projectPath, isSubagentTrayCollapsed, actions }
                 if (block.kind === "launches") {
                   return (
                     <SubagentLaunchLine
-                      key={block.index}
+                      key={block.key}
                       agents={agents.filter((agent) => block.agentIds.includes(agent.toolUseId))}
                       onOpen={() => actions.onOpenSubagents(null)}
                     />
@@ -248,7 +266,7 @@ export function ChatView({ task, projectPath, isSubagentTrayCollapsed, actions }
                 }
                 return (
                   <FeedItemView
-                    key={block.index}
+                    key={block.key}
                     item={block.item}
                     liveStepId={liveStepId}
                     isTurnReply={turnReplies.has(block.index)}

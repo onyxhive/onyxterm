@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { memo, useMemo, useState, type ReactNode } from "react";
 import { CircleStop } from "lucide-react";
 import remarkGfm from "remark-gfm";
 import { remarkMentions } from "../remarkMentions";
@@ -159,7 +159,7 @@ function InterruptedDivider() {
   );
 }
 
-export function FeedItemView({ item, liveStepId, isTurnReply }: FeedItemViewProps) {
+export const FeedItemView = memo(function FeedItemView({ item, liveStepId, isTurnReply }: FeedItemViewProps) {
   switch (item.kind) {
     case "user":
       return <UserMessage text={item.text} time={item.time} images={item.images ?? []} />;
@@ -181,4 +181,4 @@ export function FeedItemView({ item, liveStepId, isTurnReply }: FeedItemViewProp
     case "subagent":
       return null;
   }
-}
+});

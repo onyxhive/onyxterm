@@ -92,7 +92,7 @@ export interface Question {
   multiSelect: boolean;
 }
 
-export type FeedItem =
+export type FeedItem = { id: string } & (
   | { kind: "user"; text: string; time: string; images?: ImageAttachment[] }
   | { kind: "agent"; messageId: string; blockIndex: number; markdown: string; isFinal: boolean; time: string }
   | { kind: "steps"; files: number; steps: Step[]; time: string }
@@ -120,7 +120,8 @@ export type FeedItem =
       lastTool: string | null;
       summary: string | null;
       steps: Step[];
-    };
+    }
+);
 
 export interface RunningShell {
   toolUseId: string;

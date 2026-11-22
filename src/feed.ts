@@ -40,6 +40,13 @@ type AgentItem = Extract<FeedItem, { kind: "agent" }>;
 type StepsItem = Extract<FeedItem, { kind: "steps" }>;
 type SubagentItem = Extract<FeedItem, { kind: "subagent" }>;
 
+let createdItemCount = 0;
+
+function newItemId(): string {
+  createdItemCount += 1;
+  return `feed-item-${createdItemCount}`;
+}
+
 function isAgentItem(item: FeedItem): item is AgentItem {
   return item.kind === "agent";
 }
@@ -54,6 +61,7 @@ function appendDelta(feed: ChatFeed, messageId: string, index: number, text: str
   );
   if (position === -1) {
     const created: AgentItem = {
+      id: newItemId(),
       kind: "agent",
       messageId,
       blockIndex: index,
@@ -72,7 +80,15 @@ function appendDelta(feed: ChatFeed, messageId: string, index: number, text: str
 function finalizeText(feed: ChatFeed, messageId: string, text: string): ChatFeed {
   const position = feed.items.findIndex((item) => isAgentItem(item) && item.messageId === messageId && !item.isFinal);
   if (position === -1) {
-    const created: AgentItem = { kind: "agent", messageId, blockIndex: -1, markdown: text, isFinal: true, time: "" };
+    const created: AgentItem = {
+      id: newItemId(),
+      kind: "agent",
+      messageId,
+      blockIndex: -1,
+      markdown: text,
+      isFinal: true,
+      time: "",
+    };
     return withItems(feed, [...feed.items, created]);
   }
   const items = feed.items.map((item, at) =>
@@ -101,7 +117,9 @@ function groupWith(group: StepsItem, step: Step): StepsItem {
 
 function withGroupedStep(items: FeedItem[], step: Step): FeedItem[] {
   const at = openGroupIndex(items);
-  if (at === -1) return [...items, { kind: "steps", steps: [step], files: changedFileCount([step]), time: "" }];
+  if (at === -1) {
+    return [...items, { id: newItemId(), kind: "steps", steps: [step], files: changedFileCount([step]), time: "" }];
+  }
   return items.map((item, index) => (index === at && item.kind === "steps" ? groupWith(item, step) : item));
 }
 
@@ -196,6 +214,7 @@ function requesterOf(feed: ChatFeed, toolUseId: string | null): string {
 function permissionItem(event: Extract<AgentEvent, { kind: "permissionRequested" }>, feed: ChatFeed): FeedItem {
   const { summary } = event;
   return {
+    id: newItemId(),
     kind: "permission",
     requestId: event.requestId,
     toolUseId: event.toolUseId,
@@ -212,6 +231,7 @@ function permissionItem(event: Extract<AgentEvent, { kind: "permissionRequested"
 function startSubagent(feed: ChatFeed, event: Extract<AgentEvent, { kind: "subagentStarted" }>): ChatFeed {
   if (feed.items.some((item) => item.kind === "subagent" && item.toolUseId === event.toolUseId)) return feed;
   const created: SubagentItem = {
+    id: newItemId(),
     kind: "subagent",
     toolUseId: event.toolUseId,
     agentType: event.agentType,
@@ -247,13 +267,16 @@ function endTurn(feed: ChatFeed, isError: boolean, message: string | null): Chat
   const shells = withoutShells(feed.shells, (shell) => !shell.isBackground);
   const settled = { ...feed, runningTools: {}, shells, turnStartedAt: null };
   if (!isError || !message) return settled;
-  return withItems(settled, [...settled.items, { kind: "note", text: `The turn failed: ${message}` }]);
+  return withItems(settled, [...settled.items, { id: newItemId(), kind: "note", text: `The turn failed: ${message}` }]);
 }
 
 export function reduceFeed(feed: ChatFeed, event: AgentEvent): ChatFeed {
   switch (event.kind) {
     case "userText":
-      return withItems(feed, [...feed.items, { kind: "user", text: event.text, time: "", images: event.images }]);
+      return withItems(feed, [
+        ...feed.items,
+        { id: newItemId(), kind: "user", text: event.text, time: "", images: event.images },
+      ]);
     case "textDelta":
       return appendDelta(feed, event.messageId, event.index, event.text);
     case "text":
@@ -267,7 +290,13 @@ export function reduceFeed(feed: ChatFeed, event: AgentEvent): ChatFeed {
     case "questionAsked":
       return withItems(feed, [
         ...feed.items,
-        { kind: "question", requestId: event.requestId, questions: event.questions, since: Date.now() },
+        {
+          id: newItemId(),
+          kind: "question",
+          requestId: event.requestId,
+          questions: event.questions,
+          since: Date.now(),
+        },
       ]);
     case "permissionCancelled":
       return withoutRequest(feed, event.requestId);
@@ -276,7 +305,7 @@ export function reduceFeed(feed: ChatFeed, event: AgentEvent): ChatFeed {
     case "processExited":
       return withItems({ ...feed, runningTools: {}, shells: {}, turnStartedAt: null }, [
         ...feed.items,
-        { kind: "note", text: event.message },
+        { id: newItemId(), kind: "note", text: event.message },
       ]);
     case "subagentStarted":
       return startSubagent(feed, event);
@@ -322,7 +351,7 @@ export function withSentMessage(feed: ChatFeed, text: string, images: ImageAttac
   return {
     ...feed,
     turnStartedAt: feed.turnStartedAt ?? Date.now(),
-    items: [...feed.items, { kind: "user", text, time: clockTime(), images }],
+    items: [...feed.items, { id: newItemId(), kind: "user", text, time: clockTime(), images }],
   };
 }
 
@@ -342,11 +371,11 @@ export function withAnswers(feed: ChatFeed, requestId: string, answers: Record<s
   const text = Object.entries(answers)
     .map(([question, answer]) => `${question}\n→ ${answer}`)
     .join("\n\n");
-  return replaceRequest(feed, requestId, { kind: "user", text, time: clockTime() });
+  return replaceRequest(feed, requestId, { id: newItemId(), kind: "user", text, time: clockTime() });
 }
 
 export function withStop(feed: ChatFeed): ChatFeed {
-  return withItems(feed, [...feed.items, { kind: "interrupted" }]);
+  return withItems(feed, [...feed.items, { id: newItemId(), kind: "interrupted" }]);
 }
 
 export function feedFromHistory(events: AgentEvent[]): ChatFeed {
