@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, type Settings } from "./api";
-import type { Workspace } from "./types";
+import type { ColorTone } from "./colorTones";
+import type { Tag, Workspace } from "./types";
 
 const WORKSPACE_SETTING = "workspaceId";
 
@@ -16,11 +17,14 @@ interface WorkspacesInput {
 
 export function useWorkspaces({ settings, remember, onError }: WorkspacesInput) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [tags, setTags] = useState<Tag[]>([]);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [lastAddedProjectId, setLastAddedProjectId] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
-    setWorkspaces(await api.listWorkspaces());
+    const [loadedWorkspaces, loadedTags] = await Promise.all([api.listWorkspaces(), api.listTags()]);
+    setWorkspaces(loadedWorkspaces);
+    setTags(loadedTags);
   }, []);
 
   const isSettingsLoaded = settings !== null;
@@ -35,6 +39,7 @@ export function useWorkspaces({ settings, remember, onError }: WorkspacesInput) 
       },
       (error) => onError(String(error)),
     );
+    api.listTags().then(setTags, (error) => onError(String(error)));
   }, [isSettingsLoaded]);
 
   const workspace = workspaces.find((candidate) => candidate.id === workspaceId) ?? workspaces[0] ?? null;
@@ -74,6 +79,14 @@ export function useWorkspaces({ settings, remember, onError }: WorkspacesInput) 
         }),
       );
     },
+    onCreateTag: (workspaceId: string, name: string, color: ColorTone) =>
+      guarded(async () => {
+        const created = await api.createTag(name, color);
+        await api.attachTag(workspaceId, created.id);
+      }),
+    onAttachTag: (workspaceId: string, tagId: string) => guarded(() => api.attachTag(workspaceId, tagId)),
+    onDetachTag: (workspaceId: string, tagId: string) => guarded(() => api.detachTag(workspaceId, tagId)),
+    onSetTagColor: (tagId: string, color: ColorTone) => guarded(() => api.setTagColor(tagId, color)),
     onAddProject: () =>
       guarded(async () => {
         if (!workspace) return;
@@ -83,5 +96,5 @@ export function useWorkspaces({ settings, remember, onError }: WorkspacesInput) 
     onRemoveProject: (projectId: string) => guarded(() => api.removeProject(projectId)),
   };
 
-  return { workspaces, workspace, actions, lastAddedProjectId };
+  return { workspaces, workspace, tags, actions, lastAddedProjectId };
 }

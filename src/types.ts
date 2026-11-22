@@ -1,3 +1,4 @@
+import type { ColorTone } from "./colorTones";
 import type { PermissionMode } from "./permissionModes";
 
 export type TaskStatus = "permission" | "question" | "review" | "running" | "failed" | "done";
@@ -11,11 +12,18 @@ export interface Project {
   path: string;
 }
 
+export interface Tag {
+  id: string;
+  name: string;
+  color: ColorTone;
+}
+
 export interface Workspace {
   id: string;
   name: string;
   position: number;
   projects: Project[];
+  tags: Tag[];
 }
 
 export interface Chat {

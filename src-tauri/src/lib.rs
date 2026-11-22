@@ -18,6 +18,7 @@ mod session_worktrees;
 mod settings;
 mod subagents;
 mod subprocess;
+mod tags;
 mod terminals;
 mod transcripts;
 mod usage;
@@ -65,6 +66,11 @@ pub fn run() {
             workspaces::reorder_workspaces,
             workspaces::add_project,
             workspaces::remove_project,
+            tags::list_tags,
+            tags::create_tag,
+            tags::set_tag_color,
+            tags::attach_tag,
+            tags::detach_tag,
             chats::list_chats,
             chats::create_chat,
             chats::set_chat_state,

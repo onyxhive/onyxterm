@@ -474,6 +474,7 @@ export default function App() {
             <WorkspaceSwitcher
               workspaces={workspaces}
               current={workspace}
+              tags={workspaceState.tags}
               tasks={tasks}
               actions={{
                 ...workspaceActions,

@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { AgentEvent, Capabilities } from "./agentEvents";
+import type { ColorTone } from "./colorTones";
 import type { GitTarget } from "./gitApi";
 import type { PermissionMode } from "./permissionModes";
 import type { UsageReport } from "./planUsage";
@@ -10,6 +11,7 @@ import type {
   Project,
   Provider,
   RuleScope,
+  Tag,
   TaskStatus,
   Workspace,
 } from "./types";
@@ -44,6 +46,11 @@ export const api = {
   reorderWorkspaces: (workspaceIds: string[]) => invoke<void>("reorder_workspaces", { workspaceIds }),
   addProject: (workspaceId: string) => invoke<Project | null>("add_project", { workspaceId }),
   removeProject: (projectId: string) => invoke<void>("remove_project", { projectId }),
+  listTags: () => invoke<Tag[]>("list_tags"),
+  createTag: (name: string, color: ColorTone) => invoke<Tag>("create_tag", { name, color }),
+  setTagColor: (tagId: string, color: ColorTone) => invoke<void>("set_tag_color", { tagId, color }),
+  attachTag: (workspaceId: string, tagId: string) => invoke<void>("attach_tag", { workspaceId, tagId }),
+  detachTag: (workspaceId: string, tagId: string) => invoke<void>("detach_tag", { workspaceId, tagId }),
   listChats: () => invoke<Chat[]>("list_chats"),
   createChat: (draft: ChatDraft) => invoke<Chat>("create_chat", { draft }),
   setChatState: (chatId: string, state: TaskStatus) => invoke<Chat>("set_chat_state", { chatId, state }),

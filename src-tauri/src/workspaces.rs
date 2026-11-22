@@ -8,6 +8,7 @@ use tauri_plugin_dialog::DialogExt;
 
 use crate::db::{Db, new_id};
 use crate::error::{AppError, AppResult};
+use crate::tags::{Tag, tags_of};
 
 const DEFAULT_WORKSPACE_NAME: &str = "Personal";
 const MAX_NAME_LENGTH: usize = 80;
@@ -28,6 +29,7 @@ pub struct Workspace {
     pub name: String,
     pub position: i64,
     pub projects: Vec<Project>,
+    pub tags: Vec<Tag>,
 }
 
 pub fn ensure_default_workspace(connection: &Connection) -> AppResult<()> {
@@ -50,7 +52,8 @@ fn validated_name(name: &str) -> AppResult<String> {
 fn insert_workspace(connection: &Connection, name: &str) -> AppResult<Workspace> {
     let position: i64 =
         connection.query_row("SELECT COALESCE(MAX(position), -1) + 1 FROM workspaces", [], |row| row.get(0))?;
-    let workspace = Workspace { id: new_id(), name: name.to_string(), position, projects: Vec::new() };
+    let workspace =
+        Workspace { id: new_id(), name: name.to_string(), position, projects: Vec::new(), tags: Vec::new() };
     connection.execute(
         "INSERT INTO workspaces (id, name, position) VALUES (?1, ?2, ?3)",
         params![workspace.id, workspace.name, workspace.position],
@@ -77,7 +80,8 @@ pub fn workspaces(connection: &Connection) -> AppResult<Vec<Workspace>> {
     rows.into_iter()
         .map(|(id, name, position)| {
             let projects = projects_of(connection, &id)?;
-            Ok(Workspace { id, name, position, projects })
+            let tags = tags_of(connection, &id)?;
+            Ok(Workspace { id, name, position, projects, tags })
         })
         .collect()
 }

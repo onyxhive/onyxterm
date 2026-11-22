@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, ChevronsUpDown, Folder, FolderPlus, Pencil, Plus, X } from "lucide-react";
-import type { Task, Workspace } from "../types";
+import { Check, ChevronsUpDown, Ellipsis, Folder, FolderPlus, Pencil, Plus, X } from "lucide-react";
+import type { Tag, Task, Workspace } from "../types";
 import { isWaiting } from "../status";
 import { NameField } from "./NameField";
+import { TagChip } from "./TagChip";
 import { cn, FOCUS_RING, ICON_BUTTON, Kbd, MENU_ITEM, MENU_POPUP, MenuLabel, MenuSeparator } from "./ui";
 import { useDismiss } from "./useDismiss";
 import { useWorkspaceDrag } from "./useWorkspaceDrag";
+import { WorkspaceSettingsDialog, type WorkspaceSettingsActions } from "./WorkspaceSettingsDialog";
 
-export interface WorkspaceActions {
+export interface WorkspaceActions extends WorkspaceSettingsActions {
   onSelect: (workspaceId: string) => void;
   onCreate: (name: string) => void;
-  onRename: (workspaceId: string, name: string) => void;
   onReorder: (workspaceIds: string[]) => void;
   onAddProject: () => void;
   onRemoveProject: (projectId: string) => void;
@@ -19,6 +20,7 @@ export interface WorkspaceActions {
 interface WorkspaceSwitcherProps {
   workspaces: Workspace[];
   current: Workspace;
+  tags: Tag[];
   tasks: Task[];
   actions: WorkspaceActions;
 }
@@ -53,9 +55,11 @@ function WorkspaceMark({ name }: { name: string }) {
   );
 }
 
-export function WorkspaceSwitcher({ workspaces, current, tasks, actions }: WorkspaceSwitcherProps) {
+export function WorkspaceSwitcher({ workspaces, current, tags, tasks, actions }: WorkspaceSwitcherProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [editing, setEditing] = useState<Editing>(NOT_EDITING);
+  const [settingsWorkspaceId, setSettingsWorkspaceId] = useState<string | null>(null);
+  const settingsWorkspace = workspaces.find((workspace) => workspace.id === settingsWorkspaceId) ?? null;
   const rootRef = useRef<HTMLDivElement>(null);
   const { onSelect } = actions;
   const drag = useWorkspaceDrag({
@@ -87,6 +91,11 @@ export function WorkspaceSwitcher({ workspaces, current, tasks, actions }: Works
     close();
   }
 
+  function openSettings(workspaceId: string) {
+    setSettingsWorkspaceId(workspaceId);
+    close();
+  }
+
   function addProject() {
     actions.onAddProject();
     close();
@@ -111,7 +120,10 @@ export function WorkspaceSwitcher({ workspaces, current, tasks, actions }: Works
       );
     }
     return (
-      <div {...drag.sourceProps(workspace.id)} className={cn(drag.draggedId === workspace.id && "opacity-50")}>
+      <div
+        {...drag.sourceProps(workspace.id)}
+        className={cn("group/workspace relative", drag.draggedId === workspace.id && "opacity-50")}
+      >
         <button
           type="button"
           role="menuitemradio"
@@ -122,10 +134,31 @@ export function WorkspaceSwitcher({ workspaces, current, tasks, actions }: Works
         >
           <WorkspaceMark name={workspace.name} />
           <span className="flex min-w-0 flex-1 flex-col">
-            <span className="truncate font-medium">{workspace.name}</span>
+            <span className="flex min-w-0 items-center gap-1">
+              <span className="truncate font-medium">{workspace.name}</span>
+              {workspace.tags.map((tag) => (
+                <TagChip key={tag.id} tag={tag} />
+              ))}
+            </span>
             <span className="truncate text-xs text-muted-foreground">{describeWorkspace(workspace, tasks)}</span>
           </span>
-          {isCurrent ? <Check className="size-3.5" /> : <Kbd>⌘{index + 1}</Kbd>}
+          <span className="flex shrink-0 group-hover/workspace:invisible group-focus-within/workspace:invisible">
+            {isCurrent ? <Check className="size-3.5" /> : <Kbd>⌘{index + 1}</Kbd>}
+          </span>
+        </button>
+        <button
+          type="button"
+          className={cn(
+            ICON_BUTTON,
+            "absolute top-1/2 right-1.5 size-6 -translate-y-1/2 opacity-0 group-hover/workspace:opacity-100",
+            "group-focus-within/workspace:opacity-100",
+            "hover:bg-foreground/[0.08] [&_svg]:size-3.5",
+          )}
+          aria-label={`${workspace.name} settings`}
+          title="Workspace settings"
+          onClick={() => openSettings(workspace.id)}
+        >
+          <Ellipsis />
         </button>
       </div>
     );
@@ -223,6 +256,15 @@ export function WorkspaceSwitcher({ workspaces, current, tasks, actions }: Works
             </button>
           )}
         </div>
+      )}
+      {settingsWorkspace && (
+        <WorkspaceSettingsDialog
+          key={settingsWorkspace.id}
+          workspace={settingsWorkspace}
+          tags={tags}
+          actions={actions}
+          onClose={() => setSettingsWorkspaceId(null)}
+        />
       )}
     </div>
   );

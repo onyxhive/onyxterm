@@ -55,6 +55,18 @@ CREATE INDEX project_scripts_by_project ON project_scripts (project_id, position
     "ALTER TABLE chats ADD COLUMN permission_mode TEXT NOT NULL DEFAULT 'default';",
     "ALTER TABLE chats ADD COLUMN fast_mode INTEGER NOT NULL DEFAULT 0; \
      ALTER TABLE chats ADD COLUMN ultracode INTEGER NOT NULL DEFAULT 0;",
+    r#"
+CREATE TABLE tags (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    color TEXT NOT NULL
+);
+CREATE TABLE workspace_tags (
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+    tag_id TEXT NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+    PRIMARY KEY (workspace_id, tag_id)
+);
+"#,
 ];
 
 pub struct Db(Mutex<Connection>);
