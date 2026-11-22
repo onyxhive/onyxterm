@@ -487,6 +487,12 @@
   justify-content: center;
   overflow-x: auto;
   padding: 0.8rem 0.9rem;
+  line-height: normal;
+  overflow-wrap: normal;
+}
+
+.chat-markdown .chat-markdown-diagram p {
+  margin: 0;
 }
 
 .chat-markdown .chat-markdown-diagram svg {

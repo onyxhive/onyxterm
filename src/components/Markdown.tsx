@@ -1,7 +1,7 @@
 import type { ComponentProps } from "react";
 import ReactMarkdown, { type Components, type Options } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { MarkdownCodeBlock, MarkdownStreamingContext } from "./MarkdownCodeBlock";
+import { MarkdownCodeBlock, StreamingMarkdownContext } from "./MarkdownCodeBlock";
 import { cn } from "./ui";
 
 const REMARK_PLUGINS = [remarkGfm];
@@ -31,11 +31,11 @@ export function Markdown({ source, isStreaming = false, className, remarkPlugins
         className,
       )}
     >
-      <MarkdownStreamingContext value={isStreaming}>
+      <StreamingMarkdownContext value={isStreaming ? source : null}>
         <ReactMarkdown remarkPlugins={remarkPlugins} components={COMPONENTS}>
           {source}
         </ReactMarkdown>
-      </MarkdownStreamingContext>
+      </StreamingMarkdownContext>
     </div>
   );
 }

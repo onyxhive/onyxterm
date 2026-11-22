@@ -7,14 +7,17 @@ import {
   type ComponentProps,
   type ReactElement,
 } from "react";
-import { Code, Workflow } from "lucide-react";
+import { Code, TriangleAlert, Workflow } from "lucide-react";
+import type { ExtraProps } from "react-markdown";
 import { CopyButton } from "./CopyButton";
 import { cn, FOCUS_RING } from "./ui";
-import { useMermaidSvg } from "./useMermaidSvg";
+import { useMermaidDiagram } from "./useMermaidDiagram";
 
 const LANGUAGE_CLASS_PREFIX = "language-";
 const PLAIN_LANGUAGE = "text";
 const MERMAID_LANGUAGE = "mermaid";
+const FENCE_OPENING = /^ {0,3}(`{3,}|~{3,})/;
+const CONTAINER_PREFIX = /^[\s>]*/;
 
 const VIEW_TOGGLE_BUTTON = cn(
   "inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-(--control-radius)",
@@ -22,7 +25,7 @@ const VIEW_TOGGLE_BUTTON = cn(
   FOCUS_RING,
 );
 
-export const MarkdownStreamingContext = createContext(false);
+export const StreamingMarkdownContext = createContext<string | null>(null);
 
 interface CodeElementProps {
   className?: string;
@@ -46,6 +49,32 @@ function textOf(children: unknown): string {
     .replace(/\n$/, "");
 }
 
+function rawBlockOf(source: string, node: ExtraProps["node"]): string {
+  return source.slice(node?.position?.start.offset ?? 0, node?.position?.end.offset);
+}
+
+function isClosedFence(rawBlock: string): boolean {
+  const lines = rawBlock.trimEnd().split("\n");
+  const opening = FENCE_OPENING.exec(lines[0])?.[1];
+  if (!opening) return true;
+  if (lines.length < 2) return false;
+  const closing = lines[lines.length - 1].replace(CONTAINER_PREFIX, "").trimEnd();
+  return closing.length >= opening.length && [...closing].every((character) => character === opening[0]);
+}
+
+function DiagramFailure({ message }: { message: string }) {
+  return (
+    <div
+      role="note"
+      title={message}
+      className="flex min-w-0 items-center gap-1.5 px-3 pb-2 text-2xs text-warning-foreground select-none"
+    >
+      <TriangleAlert aria-hidden className="size-3 shrink-0" />
+      <span className="truncate">Diagram failed to render: {message}</span>
+    </div>
+  );
+}
+
 interface ViewToggleProps {
   isShowingSource: boolean;
   onToggle: () => void;
@@ -61,12 +90,15 @@ function ViewToggle({ isShowingSource, onToggle }: ViewToggleProps) {
   );
 }
 
-export function MarkdownCodeBlock({ children }: ComponentProps<"pre">) {
+export function MarkdownCodeBlock({ children, node }: ComponentProps<"pre"> & ExtraProps) {
   const code = codeElementOf(children);
   const language = languageOf(code?.props.className);
   const text = textOf(code?.props.children);
-  const isStreaming = useContext(MarkdownStreamingContext);
-  const diagramSvg = useMermaidSvg(language === MERMAID_LANGUAGE && !isStreaming ? text : null);
+  const streamingSource = useContext(StreamingMarkdownContext);
+  const isOpenFence = streamingSource !== null && !isClosedFence(rawBlockOf(streamingSource, node));
+  const isMermaid = language.toLowerCase() === MERMAID_LANGUAGE;
+  const diagram = useMermaidDiagram(isMermaid && !isOpenFence ? text : null);
+  const diagramSvg = diagram.svg;
   const [isShowingSource, setIsShowingSource] = useState(false);
   const isShowingDiagram = diagramSvg !== null && !isShowingSource;
   return (
@@ -99,6 +131,7 @@ export function MarkdownCodeBlock({ children }: ComponentProps<"pre">) {
       ) : (
         <pre>{children}</pre>
       )}
+      {diagram.error !== null && <DiagramFailure message={diagram.error} />}
     </div>
   );
 }
